@@ -1,0 +1,91 @@
+{
+  "name": "aws-connect-contact-tracer",
+  "version": "1.0.0",
+  "description": "AWS Connect Contact Flow Tracer - React Version",
+  "private": true,
+  "dependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.450.0",
+    "@aws-sdk/client-connect": "^3.450.0",
+    "@aws-sdk/client-s3": "^3.450.0",
+    "@aws-sdk/client-xray": "^3.450.0",
+    "@aws-sdk/credential-provider-node": "^3.931.0",
+    "@aws-sdk/credential-provider-sso": "^3.931.0",
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.14.19",
+    "@mui/material": "^5.14.20",
+    "@mui/x-data-grid": "^6.18.5",
+    "@mui/x-date-pickers": "^6.18.5",
+    "@tanstack/react-query": "^5.12.2",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "axios": "^1.6.2",
+    "cytoscape": "^3.27.0",
+    "cytoscape-dagre": "^2.5.0",
+    "cytoscape-elk": "^2.2.0",
+    "date-fns": "^2.30.0",
+    "dayjs": "^1.11.10",
+    "pako": "^2.1.0",
+    "react": "^18.2.0",
+    "react-cytoscapejs": "^2.0.0",
+    "react-dom": "^18.2.0",
+    "react-flow-renderer": "^10.3.17",
+    "react-router-dom": "^6.20.1",
+    "react-scripts": "5.0.1",
+    "recharts": "^2.10.3",
+    "typescript": "^4.9.5",
+    "uuid": "^9.0.1",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "craco start",
+    "build": "craco build",
+    "test": "craco test",
+    "eject": "react-scripts eject",
+    "lint": "eslint src/**/*.{js,jsx,ts,tsx}",
+    "format": "prettier --write src/**/*.{js,jsx,ts,tsx,json,css,md}"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@craco/craco": "^7.1.0",
+    "@types/jest": "^27.5.2",
+    "@types/node": "^16.18.68",
+    "@types/pako": "^2.0.3",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.17",
+    "@types/uuid": "^9.0.7",
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
+    "@typescript-eslint/parser": "^5.62.0",
+    "buffer": "^6.0.3",
+    "craco-alias": "^3.0.1",
+    "crypto-browserify": "^3.12.1",
+    "eslint": "^8.55.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.33.2",
+    "path-browserify": "^1.0.1",
+    "prettier": "^3.1.1",
+    "process": "^0.11.10",
+    "stream-browserify": "^3.0.0",
+    "url": "^0.11.4",
+    "util": "^0.12.5"
+  },
+  "proxy": "http://localhost:8080"
+}

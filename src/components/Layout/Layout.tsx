@@ -18,6 +18,7 @@ import {
   MenuItem,
   Badge,
   Tooltip,
+  useTheme,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -31,11 +32,14 @@ import {
   AccountTree as FlowIcon,
   Description as LogsIcon,
   Help as HelpIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
 const drawerWidth = 240;
+const collapsedDrawerWidth = 60;
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -44,8 +48,10 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isNavCollapsed, setIsNavCollapsed] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [notificationAnchor, setNotificationAnchor] = useState<null | HTMLElement>(null);
 
@@ -83,41 +89,58 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const drawer = (
     <div>
-      <Toolbar>
-        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-          <CloudIcon sx={{ mr: 1, color: 'primary.main' }} />
-          <Typography variant="h6" noWrap component="div">
-            AWS Tracer
-          </Typography>
-        </Box>
+      <Toolbar sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {!isNavCollapsed && (
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <CloudIcon sx={{ mr: 1, color: 'primary.main' }} />
+            <Typography variant="h6" noWrap component="div">
+              AWS Tracer
+            </Typography>
+          </Box>
+        )}
+        <IconButton onClick={() => setIsNavCollapsed(!isNavCollapsed)} sx={{ display: { xs: 'none', sm: 'block' } }}>
+          {isNavCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+        </IconButton>
       </Toolbar>
       <Divider />
       <List>
         {menuItems.map((item) => (
           <ListItem key={item.text} disablePadding>
-            <ListItemButton
-              selected={location.pathname === item.path}
-              onClick={() => navigate(item.path)}
-            >
-              <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
+            <Tooltip title={isNavCollapsed ? item.text : ''} placement="right">
+              <ListItemButton
+                selected={location.pathname === item.path}
+                onClick={() => navigate(item.path)}
+                sx={{ justifyContent: isNavCollapsed ? 'center' : 'initial' }}
+              >
+                <ListItemIcon sx={{ minWidth: 0, mr: isNavCollapsed ? 0 : 3, justifyContent: 'center' }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText primary={item.text} sx={{ opacity: isNavCollapsed ? 0 : 1 }} />
+              </ListItemButton>
+            </Tooltip>
           </ListItem>
         ))}
       </List>
       <Divider />
       <List>
         <ListItem disablePadding>
-          <ListItemButton onClick={() => window.open('https://docs.aws.amazon.com/connect/', '_blank')}>
-            <ListItemIcon>
-              <HelpIcon />
-            </ListItemIcon>
-            <ListItemText primary="Help & Docs" />
-          </ListItemButton>
+          <Tooltip title={isNavCollapsed ? "Help & Docs" : ''} placement="right">
+            <ListItemButton
+              onClick={() => window.open('https://docs.aws.amazon.com/connect/', '_blank')}
+              sx={{ justifyContent: isNavCollapsed ? 'center' : 'initial' }}
+            >
+              <ListItemIcon sx={{ minWidth: 0, mr: isNavCollapsed ? 0 : 3, justifyContent: 'center' }}>
+                <HelpIcon />
+              </ListItemIcon>
+              <ListItemText primary="Help & Docs" sx={{ opacity: isNavCollapsed ? 0 : 1 }} />
+            </ListItemButton>
+          </Tooltip>
         </ListItem>
       </List>
     </div>
   );
+
+  const currentDrawerWidth = isNavCollapsed ? collapsedDrawerWidth : drawerWidth;
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -125,8 +148,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <AppBar
         position="fixed"
         sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
+          width: { sm: `calc(100% - ${currentDrawerWidth}px)` },
+          ml: { sm: `${currentDrawerWidth}px` },
+          transition: theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
         }}
       >
         <Toolbar>
@@ -143,7 +170,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             Contact Tracer
           </Typography>
           
-          {/* Notifications */}
           <Tooltip title="Notifications">
             <IconButton color="inherit" onClick={handleNotificationOpen}>
               <Badge badgeContent={3} color="error">
@@ -152,7 +178,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </IconButton>
           </Tooltip>
           
-          {/* User Profile */}
           <Tooltip title="Account">
             <IconButton
               onClick={handleProfileMenuOpen}
@@ -167,7 +192,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </Toolbar>
       </AppBar>
       
-      {/* Profile Menu */}
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
@@ -196,7 +220,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </MenuItem>
       </Menu>
       
-      {/* Notification Menu */}
       <Menu
         anchorEl={notificationAnchor}
         open={Boolean(notificationAnchor)}
@@ -215,10 +238,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </MenuItem>
       </Menu>
       
-      {/* Drawer */}
       <Box
         component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+        sx={{ width: { sm: currentDrawerWidth }, flexShrink: { sm: 0 } }}
       >
         <Drawer
           variant="temporary"
@@ -243,7 +265,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             display: { xs: 'none', sm: 'block' },
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
-              width: drawerWidth,
+              width: currentDrawerWidth,
+              transition: theme.transitions.create('width', {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.enteringScreen,
+              }),
+              overflowX: 'hidden',
             },
           }}
           open
@@ -252,13 +279,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </Drawer>
       </Box>
       
-      {/* Main Content */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
           p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          width: { sm: `calc(100% - ${currentDrawerWidth}px)` },
+          transition: theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
         }}
       >
         <Toolbar />

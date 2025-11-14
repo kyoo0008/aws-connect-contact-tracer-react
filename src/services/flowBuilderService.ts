@@ -1,3 +1,4 @@
+import { Position } from 'react-flow-renderer';
 import { 
   ContactLog, 
   ContactFlowNode, 
@@ -253,13 +254,15 @@ export class FlowBuilderService {
       logsByNodeId.get(nodeId)!.push(log);
     }
 
-    // Create one node per group
+    // Create one node per group with sequence number
+    let sequenceNumber = 1;
     for (const [nodeId, logs] of logsByNodeId.entries()) {
       // Use first log for node metadata, but store all logs
       const firstLog = logs[0];
       const hasError = logs.some(log => this.detectError(log));
-      const node = this.createNodeFromLogs(firstLog, logs, hasError);
+      const node = this.createNodeFromLogs(firstLog, logs, hasError, sequenceNumber);
       this.nodes.set(node.id, node);
+      sequenceNumber++;
     }
   }
 
@@ -318,7 +321,7 @@ export class FlowBuilderService {
    * In main flow view, use ContactFlowName as label
    * Stores all chunked logs in the node data
    */
-  private createNodeFromLogs(firstLog: ContactLog, allLogs: ContactLog[], isError: boolean): ContactFlowNode {
+  private createNodeFromLogs(firstLog: ContactLog, allLogs: ContactLog[], isError: boolean, sequenceNumber: number): ContactFlowNode {
     const moduleType = this.defineModuleType(firstLog);
 
     // Use ContactFlowName as label for main flow nodes
@@ -346,7 +349,7 @@ export class FlowBuilderService {
           start: minTimestamp.toISOString(),
           end: maxTimestamp.toISOString(),
         },
-        logCount: allLogs.length,
+        logCount: sequenceNumber, // Use sequence number instead of log count for display
       },
       position: { x: 0, y: 0 }, // Will be calculated later
       style: {
@@ -459,7 +462,7 @@ export class FlowBuilderService {
   }
 
   /**
-   * Create edges between nodes
+   * Create edges between nodes with proper handle IDs
    * Sequential flow from left to right, wrapping to next row
    */
   private createEdges(): void {
@@ -469,10 +472,16 @@ export class FlowBuilderService {
       const source = nodeArray[i];
       const target = nodeArray[i + 1];
 
+      // Get source and target handle IDs based on positions
+      const sourceHandleId = this.getHandleId('source', source.data.sourcePosition || Position.Right);
+      const targetHandleId = this.getHandleId('target', target.data.targetPosition || Position.Left);
+
       this.edges.push({
         id: `${source.id}_${target.id}`,
         source: source.id,
         target: target.id,
+        sourceHandle: sourceHandleId,
+        targetHandle: targetHandleId,
         type: 'smoothstep',
         animated: false,
         style: {
@@ -485,29 +494,92 @@ export class FlowBuilderService {
   }
 
   /**
-   * Calculate layout positions
-   * Arranges nodes in a grid with 5 columns for better visibility
+   * Get handle ID based on type and position
+   */
+  private getHandleId(type: 'source' | 'target', position: Position): string {
+    const positionMap: Record<Position, string> = {
+      [Position.Top]: 'top',
+      [Position.Bottom]: 'bottom',
+      [Position.Left]: 'left',
+      [Position.Right]: 'right',
+    };
+    return `${type}-${positionMap[position]}`;
+  }
+
+  /**
+   * Calculate layout positions in a "ㄹ" (rieul) pattern
+   * - Row 0: left to right
+   * - Row 1: right to left
+   * - Row 2: left to right
+   * - And so on...
    */
   private calculateLayout(): void {
     const nodeArray = Array.from(this.nodes.values());
-    const { nodeWidth, nodeHeight, horizontalSpacing, verticalSpacing } = this.layoutOptions;
 
-    // Grid layout with 5 columns (matching dot_builder.py style)
+    // Grid layout with 5 columns
     const columns = 5;
-    const actualNodeWidth = 250;  // Wider nodes for better readability
-    const actualNodeHeight = 150; // Taller nodes
-    const horizontalGap = 80;     // More horizontal spacing
-    const verticalGap = 100;      // More vertical spacing
+    const nodeWidth = 280;
+    const nodeHeight = 180;
+    const horizontalGap = 40;
+    const verticalGap = 80;
 
     for (let i = 0; i < nodeArray.length; i++) {
       const node = nodeArray[i];
-      const column = i % columns;
       const row = Math.floor(i / columns);
+      const isEvenRow = row % 2 === 0;
 
-      const x = column * (actualNodeWidth + horizontalGap);
-      const y = row * (actualNodeHeight + verticalGap);
+      // For even rows (0, 2, 4...): normal left-to-right
+      // For odd rows (1, 3, 5...): reversed right-to-left
+      let column: number;
+      if (isEvenRow) {
+        column = i % columns;
+      } else {
+        column = columns - 1 - (i % columns);
+      }
+
+      const x = column * (nodeWidth + horizontalGap);
+      const y = row * (nodeHeight + verticalGap);
 
       this.nodePositions.set(node.id, { x, y });
+
+      // Determine handle positions based on flow direction
+      const hasNextNode = i < nodeArray.length - 1;
+      const isLastInRow = (i + 1) % columns === 0;
+      const isFirstInRow = i % columns === 0;
+
+      if (hasNextNode) {
+        if (isLastInRow) {
+          // Transition to next row
+          node.data.sourcePosition = Position.Bottom;
+        } else {
+          // Continue in same row
+          if (isEvenRow) {
+            // Even row: flow left to right
+            node.data.sourcePosition = Position.Right;
+          } else {
+            // Odd row: flow right to left
+            node.data.sourcePosition = Position.Left;
+          }
+        }
+      }
+
+      // Target position (where this node receives from)
+      if (i === 0) {
+        // First node
+        node.data.targetPosition = Position.Left;
+      } else if (isFirstInRow && row > 0) {
+        // First node in row (receiving from previous row)
+        node.data.targetPosition = Position.Top;
+      } else {
+        // Receiving from same row
+        if (isEvenRow) {
+          // Even row: receive from left
+          node.data.targetPosition = Position.Left;
+        } else {
+          // Odd row: receive from right
+          node.data.targetPosition = Position.Right;
+        }
+      }
     }
   }
 

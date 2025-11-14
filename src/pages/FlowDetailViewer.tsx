@@ -25,6 +25,7 @@ import {
   CheckCircle as SuccessIcon,
   Error as ErrorIcon,
   AccessTime as TimeIcon,
+  VerticalSplit as VerticalSplitIcon,
 } from '@mui/icons-material';
 import ReactFlow, {
   Node,
@@ -36,6 +37,7 @@ import ReactFlow, {
   useEdgesState,
   MarkerType,
   ReactFlowProvider,
+  Position,
 } from 'react-flow-renderer';
 import { ContactLog } from '@/types/contact.types';
 import CustomNode from '@/components/FlowNodes/CustomNode';
@@ -60,6 +62,7 @@ const FlowDetailViewer: React.FC = () => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [logs, setLogs] = useState<ContactLog[]>([]);
   const [selectedLog, setSelectedLog] = useState<ContactLog | null>(null);
+  const [isTimelineVisible, setIsTimelineVisible] = useState(true);
 
   // Initialize logs from location state
   useEffect(() => {
@@ -69,11 +72,17 @@ const FlowDetailViewer: React.FC = () => {
     }
   }, [state]);
 
-  // Build flow visualization from chunked logs
+  // Build flow visualization from chunked logs with "ㄹ" pattern layout
   const buildFlowVisualization = (chunkedLogs: ContactLog[]) => {
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
-    const nodeSpacing = 280;
+
+    // Grid layout configuration
+    const columns = 5;
+    const nodeWidth = 280;
+    const nodeHeight = 180;
+    const horizontalGap = 40;
+    const verticalGap = 80;
 
     chunkedLogs.forEach((log, index) => {
       const hasError =
@@ -81,10 +90,53 @@ const FlowDetailViewer: React.FC = () => {
         log.Results?.includes('Failed') ||
         log.ExternalResults?.isSuccess === 'false';
 
+      // Calculate position in "ㄹ" pattern
+      const row = Math.floor(index / columns);
+      const isEvenRow = row % 2 === 0;
+
+      // For even rows: left-to-right
+      // For odd rows: right-to-left (reversed)
+      let column: number;
+      if (isEvenRow) {
+        column = index % columns;
+      } else {
+        column = columns - 1 - (index % columns);
+      }
+
+      const x = column * (nodeWidth + horizontalGap);
+      const y = row * (nodeHeight + verticalGap);
+
+      // Determine handle positions
+      const hasNextNode = index < chunkedLogs.length - 1;
+      const isLastInRow = (index + 1) % columns === 0;
+      const isFirstInRow = index % columns === 0;
+
+      let sourcePosition: Position | undefined = undefined;
+      let targetPosition: Position | undefined = undefined;
+
+      if (hasNextNode) {
+        if (isLastInRow) {
+          // Transition to next row
+          sourcePosition = Position.Bottom;
+        } else {
+          // Continue in same row
+          sourcePosition = isEvenRow ? Position.Right : Position.Left;
+        }
+      }
+
+      // Target position (where this node receives from)
+      if (index === 0) {
+        targetPosition = Position.Left;
+      } else if (isFirstInRow && row > 0) {
+        targetPosition = Position.Top;
+      } else {
+        targetPosition = isEvenRow ? Position.Left : Position.Right;
+      }
+
       const node: Node = {
         id: `${log.Timestamp}_${index}`,
         type: 'custom',
-        position: { x: index * nodeSpacing, y: 0 },
+        position: { x, y },
         data: {
           label: log.ContactFlowModuleType,
           moduleType: log.ContactFlowModuleType,
@@ -92,27 +144,57 @@ const FlowDetailViewer: React.FC = () => {
           results: log.Results,
           error: hasError,
           timestamp: log.Timestamp,
+          sourcePosition,
+          targetPosition,
         },
         style: {
           background: hasError ? '#FFEBEE' : '#F5F5F5',
           border: hasError ? '2px solid #F44336' : '1px solid #E0E0E0',
           borderRadius: '8px',
           padding: '10px',
+          width: nodeWidth,
         },
       };
 
       flowNodes.push(node);
 
-      // Create edge to next node
+      // Create edge to next node with proper handle connections
       if (index > 0) {
+        const prevNode = flowNodes[index - 1];
+
+        // Convert Position enum to handle ID string
+        const getHandleId = (pos: Position | undefined): string | undefined => {
+          if (!pos) return undefined;
+          const posMap: Record<Position, string> = {
+            [Position.Top]: 'top',
+            [Position.Bottom]: 'bottom',
+            [Position.Left]: 'left',
+            [Position.Right]: 'right',
+          };
+          return posMap[pos];
+        };
+
+        const sourceHandleId = prevNode.data.sourcePosition
+          ? `source-${getHandleId(prevNode.data.sourcePosition)}`
+          : undefined;
+        const targetHandleId = targetPosition
+          ? `target-${getHandleId(targetPosition)}`
+          : undefined;
+
         flowEdges.push({
           id: `edge_${index - 1}_${index}`,
           source: `${chunkedLogs[index - 1].Timestamp}_${index - 1}`,
           target: `${log.Timestamp}_${index}`,
+          sourceHandle: sourceHandleId,
+          targetHandle: targetHandleId,
           type: 'smoothstep',
           animated: false,
           markerEnd: {
             type: MarkerType.ArrowClosed,
+          },
+          style: {
+            stroke: hasError ? '#F44336' : '#B0B0B0',
+            strokeWidth: 2,
           },
         });
       }
@@ -200,6 +282,11 @@ const FlowDetailViewer: React.FC = () => {
                 <DownloadIcon />
               </IconButton>
             </Tooltip>
+            <Tooltip title={isTimelineVisible ? "Hide Timeline" : "Show Timeline"}>
+              <IconButton onClick={() => setIsTimelineVisible(!isTimelineVisible)}>
+                <VerticalSplitIcon />
+              </IconButton>
+            </Tooltip>
           </Stack>
         </Toolbar>
       </Paper>
@@ -261,106 +348,108 @@ const FlowDetailViewer: React.FC = () => {
         </Box>
 
         {/* Right: Timeline View */}
-        <Box
-          sx={{
-            width: 450,
-            borderLeft: 1,
-            borderColor: 'divider',
-            overflowY: 'auto',
-            bgcolor: 'background.paper',
-          }}
-        >
-          <Box sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Time-Ordered Logs
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
+        {isTimelineVisible && (
+          <Box
+            sx={{
+              width: 450,
+              borderLeft: 1,
+              borderColor: 'divider',
+              overflowY: 'auto',
+              bgcolor: 'background.paper',
+            }}
+          >
+            <Box sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Time-Ordered Logs
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
 
-            <List sx={{ width: '100%', p: 0 }}>
-              {logs.map((log, index) => {
-                const hasError =
-                  log.Results?.includes('Error') ||
-                  log.Results?.includes('Failed') ||
-                  log.ExternalResults?.isSuccess === 'false';
+              <List sx={{ width: '100%', p: 0 }}>
+                {logs.map((log, index) => {
+                  const hasError =
+                    log.Results?.includes('Error') ||
+                    log.Results?.includes('Failed') ||
+                    log.ExternalResults?.isSuccess === 'false';
 
-                return (
-                  <ListItem key={index} sx={{ p: 0, mb: 1, display: 'block' }}>
-                    <Card
-                      variant="outlined"
-                      sx={{
-                        cursor: 'pointer',
-                        '&:hover': { boxShadow: 2 },
-                        borderLeft: `4px solid ${hasError ? '#F44336' : '#2196F3'}`,
-                        backgroundColor: selectedLog === log ? '#F5F5F5' : 'white',
-                      }}
-                      onClick={() => setSelectedLog(log)}
-                    >
-                      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                          {hasError ? (
-                            <ErrorIcon fontSize="small" color="error" />
-                          ) : (
-                            <SuccessIcon fontSize="small" color="success" />
+                  return (
+                    <ListItem key={index} sx={{ p: 0, mb: 1, display: 'block' }}>
+                      <Card
+                        variant="outlined"
+                        sx={{
+                          cursor: 'pointer',
+                          '&:hover': { boxShadow: 2 },
+                          borderLeft: `4px solid ${hasError ? '#F44336' : '#2196F3'}`,
+                          backgroundColor: selectedLog === log ? '#F5F5F5' : 'white',
+                        }}
+                        onClick={() => setSelectedLog(log)}
+                      >
+                        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                            {hasError ? (
+                              <ErrorIcon fontSize="small" color="error" />
+                            ) : (
+                              <SuccessIcon fontSize="small" color="success" />
+                            )}
+                            <Typography variant="subtitle2" fontWeight="bold">
+                              {log.ContactFlowModuleType}
+                            </Typography>
+                          </Stack>
+
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                            <TimeIcon fontSize="small" color="disabled" />
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(log.Timestamp).toLocaleTimeString()}
+                            </Typography>
+                          </Stack>
+
+                          {log.Identifier && (
+                            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                              ID: {log.Identifier}
+                            </Typography>
                           )}
-                          <Typography variant="subtitle2" fontWeight="bold">
-                            {log.ContactFlowModuleType}
-                          </Typography>
-                        </Stack>
 
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                          <TimeIcon fontSize="small" color="disabled" />
-                          <Typography variant="caption" color="text.secondary">
-                            {new Date(log.Timestamp).toLocaleTimeString()}
-                          </Typography>
-                        </Stack>
+                          {log.Results && (
+                            <Chip
+                              label={log.Results}
+                              size="small"
+                              color={hasError ? 'error' : 'success'}
+                              sx={{ mt: 0.5 }}
+                            />
+                          )}
 
-                        {log.Identifier && (
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                            ID: {log.Identifier}
-                          </Typography>
-                        )}
-
-                        {log.Results && (
-                          <Chip
-                            label={log.Results}
-                            size="small"
-                            color={hasError ? 'error' : 'success'}
-                            sx={{ mt: 0.5 }}
-                          />
-                        )}
-
-                        {selectedLog === log && (
-                          <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
-                            {log.Parameters && (
-                              <Box sx={{ mb: 1 }}>
-                                <Typography variant="caption" fontWeight="bold">
-                                  Parameters:
-                                </Typography>
-                                <Box sx={{ mt: 0.5 }}>
-                                  {renderValue(log.Parameters)}
+                          {selectedLog === log && (
+                            <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                              {log.Parameters && (
+                                <Box sx={{ mb: 1 }}>
+                                  <Typography variant="caption" fontWeight="bold">
+                                    Parameters:
+                                  </Typography>
+                                  <Box sx={{ mt: 0.5 }}>
+                                    {renderValue(log.Parameters)}
+                                  </Box>
                                 </Box>
-                              </Box>
-                            )}
-                            {log.ExternalResults && (
-                              <Box>
-                                <Typography variant="caption" fontWeight="bold">
-                                  External Results:
-                                </Typography>
-                                <Box sx={{ mt: 0.5 }}>
-                                  {renderValue(log.ExternalResults)}
+                              )}
+                              {log.ExternalResults && (
+                                <Box>
+                                  <Typography variant="caption" fontWeight="bold">
+                                    External Results:
+                                  </Typography>
+                                  <Box sx={{ mt: 0.5 }}>
+                                    {renderValue(log.ExternalResults)}
+                                  </Box>
                                 </Box>
-                              </Box>
-                            )}
-                          </Box>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </ListItem>
-                );
-              })}
-            </List>
+                              )}
+                            </Box>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Box>
           </Box>
-        </Box>
+        )}
       </Box>
     </Box>
   );

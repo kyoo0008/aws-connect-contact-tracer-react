@@ -3,6 +3,7 @@ import {
   DescribeContactCommand,
   SearchContactsCommand,
   GetContactAttributesCommand,
+  ListInstancesCommand,
 } from '@aws-sdk/client-connect';
 import {
   CloudWatchLogsClient,
@@ -56,6 +57,25 @@ export class AWSConnectService {
     this.logsClient = new CloudWatchLogsClient(clientConfig);
     this.s3Client = new S3Client(clientConfig);
     this.xrayClient = new XRayClient(clientConfig);
+  }
+
+  /**
+   * Connect 인스턴스 목록 조회
+   */
+  async listInstances(): Promise<Array<{ id: string; alias: string; arn: string }>> {
+    try {
+      const command = new ListInstancesCommand({});
+      const response = await this.connectClient.send(command);
+
+      return (response.InstanceSummaryList || []).map(instance => ({
+        id: instance.Id!,
+        alias: instance.InstanceAlias || instance.Id!,
+        arn: instance.Arn!,
+      }));
+    } catch (error) {
+      console.error('Error listing Connect instances:', error);
+      throw error;
+    }
   }
 
   /**

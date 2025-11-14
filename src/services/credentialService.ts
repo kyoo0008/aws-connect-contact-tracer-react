@@ -66,3 +66,57 @@ export function getCredentialsFromEnv(): AWSCredentials | null {
     sessionToken,
   };
 }
+
+/**
+ * 백엔드 API를 통해 현재 AWS SSO 프로필에서 자격 증명을 자동으로 가져옵니다.
+ * 이 함수는 사용자가 이미 aws sso login을 실행한 상태를 가정합니다.
+ */
+export async function autoFetchSSOCredentials(): Promise<{
+  credentials: AWSCredentials;
+  profile: string;
+  region: string;
+} | null> {
+  try {
+    const response = await fetch('/api/aws/auto-credentials', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error auto-fetching SSO credentials:', error);
+    return null;
+  }
+}
+
+/**
+ * 백엔드 API를 통해 AWS 프로필에서 리전 정보를 가져옵니다.
+ */
+export async function getRegionFromProfile(profile?: string): Promise<string | null> {
+  try {
+    const response = await fetch('/api/aws/region', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ profile }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return data.region;
+  } catch (error) {
+    console.error('Error fetching region from profile:', error);
+    return null;
+  }
+}

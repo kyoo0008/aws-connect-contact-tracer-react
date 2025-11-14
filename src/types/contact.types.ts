@@ -1,3 +1,5 @@
+import { Position } from 'react-flow-renderer';
+
 // AWS Connect Contact Flow Types
 
 export interface ContactLog {
@@ -51,6 +53,8 @@ export interface ContactFlowNode {
       end: string;
     };
     logCount?: number;
+    sourcePosition?: Position;
+    targetPosition?: Position;
   };
   position: {
     x: number;
@@ -63,6 +67,8 @@ export interface ContactFlowEdge {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
   label?: string;
   type?: string;
   animated?: boolean;

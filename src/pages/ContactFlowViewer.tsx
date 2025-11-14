@@ -11,13 +11,6 @@ import {
   Toolbar,
   IconButton,
   Tooltip,
-  Drawer,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
-  Card,
-  CardContent,
   Chip,
   Stack,
   TextField,
@@ -25,13 +18,9 @@ import {
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
-  ZoomIn as ZoomInIcon,
-  ZoomOut as ZoomOutIcon,
   Fullscreen as FullscreenIcon,
   Download as DownloadIcon,
-  Info as InfoIcon,
   Timeline as TimelineIcon,
-  Code as CodeIcon,
   Search as SearchIcon,
   Refresh as RefreshIcon,
   Settings as SettingsIcon,
@@ -44,14 +33,13 @@ import ReactFlow, {
   MiniMap,
   useNodesState,
   useEdgesState,
-  Connection,
   MarkerType,
   ReactFlowProvider,
 } from 'react-flow-renderer';
 import { useQuery } from '@tanstack/react-query';
 import { getAWSConnectService } from '@/services/awsConnectService';
 import { FlowBuilderService } from '@/services/flowBuilderService';
-import { ContactFlowData, ContactLog, LambdaLog } from '@/types/contact.types';
+import { ContactLog } from '@/types/contact.types';
 import CustomNode from '@/components/FlowNodes/CustomNode';
 import TranscriptPanel from '@/components/TranscriptPanel/TranscriptPanel';
 import LogDetailsDrawer from '@/components/LogDetailsDrawer/LogDetailsDrawer';

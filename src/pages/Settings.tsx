@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -9,14 +9,19 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  FormControlLabel,
-  Switch,
   Stack,
   Alert,
   CircularProgress,
+  Autocomplete,
 } from '@mui/material';
 import { useConfig } from '@/contexts/ConfigContext';
-import { fetchSSOCredentials, getCredentialsFromEnv } from '@/services/credentialService';
+import {
+  fetchSSOCredentials,
+  getCredentialsFromEnv,
+  autoFetchSSOCredentials,
+  getRegionFromProfile
+} from '@/services/credentialService';
+import { getAWSConnectService } from '@/services/awsConnectService';
 
 const Settings: React.FC = () => {
   const { config, updateConfig, resetConfig } = useConfig();
@@ -24,6 +29,9 @@ const Settings: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [connectInstances, setConnectInstances] = useState<Array<{ id: string; alias: string }>>([]);
+  const [loadingInstances, setLoadingInstances] = useState(false);
 
   const handleSave = () => {
     updateConfig(localConfig);
@@ -70,6 +78,80 @@ const Settings: React.FC = () => {
     }
   };
 
+  const handleFetchConnectInstances = async () => {
+    if (!localConfig.credentials) {
+      setError('먼저 AWS 자격 증명을 설정해주세요.');
+      return;
+    }
+
+    setLoadingInstances(true);
+    setError(null);
+    try {
+      const service = getAWSConnectService(localConfig);
+      const instances = await service.listInstances();
+      setConnectInstances(instances);
+
+      if (instances.length === 1) {
+        // Auto-select if only one instance
+        setLocalConfig(prev => ({
+          ...prev,
+          instanceId: instances[0].id,
+        }));
+      }
+    } catch (err: any) {
+      setError(err.message || 'Connect 인스턴스를 가져오는데 실패했습니다.');
+    } finally {
+      setLoadingInstances(false);
+    }
+  };
+
+  // Auto-fetch SSO credentials on component mount
+  useEffect(() => {
+    const autoLoad = async () => {
+      setLoading(true);
+      setWarning(null);
+
+      try {
+        const ssoData = await autoFetchSSOCredentials();
+
+        if (ssoData) {
+          setLocalConfig(prev => ({
+            ...prev,
+            credentials: ssoData.credentials,
+            profile: ssoData.profile,
+            region: ssoData.region,
+          }));
+          setSaved(false);
+        } else {
+          setWarning('AWS SSO 로그인 정보를 찾을 수 없습니다. 먼저 터미널에서 "aws sso login --profile your-profile"을 실행하거나 수동으로 자격 증명을 입력하세요.');
+        }
+      } catch (err) {
+        setWarning('AWS SSO 자격 증명을 자동으로 가져오지 못했습니다. 수동으로 입력하세요.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    autoLoad();
+  }, []); // Only run on mount
+
+  // Update region when profile changes
+  useEffect(() => {
+    const updateRegion = async () => {
+      if (localConfig.profile) {
+        const region = await getRegionFromProfile(localConfig.profile);
+        if (region && region !== localConfig.region) {
+          setLocalConfig(prev => ({
+            ...prev,
+            region,
+          }));
+        }
+      }
+    };
+
+    updateRegion();
+  }, [localConfig.profile, localConfig.region]);
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
@@ -88,24 +170,64 @@ const Settings: React.FC = () => {
         </Alert>
       )}
 
+      {warning && (
+        <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setWarning(null)}>
+          {warning}
+        </Alert>
+      )}
+
       <Paper sx={{ p: 3, maxWidth: 800 }}>
         <Stack spacing={3}>
-          {/* AWS Region */}
+          {/* AWS Region - Read Only */}
           <TextField
             label="AWS Region"
             value={localConfig.region}
-            onChange={(e) => setLocalConfig({ ...localConfig, region: e.target.value })}
             fullWidth
+            InputProps={{
+              readOnly: true,
+            }}
+            helperText="리전은 AWS 프로필에서 자동으로 설정됩니다"
           />
 
-          {/* Instance ID */}
-          <TextField
-            label="Connect Instance ID"
-            value={localConfig.instanceId}
-            onChange={(e) => setLocalConfig({ ...localConfig, instanceId: e.target.value })}
-            fullWidth
-            helperText="예: 12345678-1234-1234-1234-123456789012"
-          />
+          {/* Instance ID with Auto-fetch */}
+          <Stack direction="column" spacing={1}>
+            {connectInstances.length > 0 ? (
+              <Autocomplete
+                options={connectInstances}
+                getOptionLabel={(option) => `${option.alias} (${option.id})`}
+                value={connectInstances.find(inst => inst.id === localConfig.instanceId) || null}
+                onChange={(event, newValue) => {
+                  setLocalConfig({
+                    ...localConfig,
+                    instanceId: newValue?.id || '',
+                  });
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Connect Instance ID"
+                    helperText="Connect API에서 가져온 인스턴스를 선택하세요"
+                  />
+                )}
+              />
+            ) : (
+              <TextField
+                label="Connect Instance ID"
+                value={localConfig.instanceId}
+                onChange={(e) => setLocalConfig({ ...localConfig, instanceId: e.target.value })}
+                fullWidth
+                helperText="예: 12345678-1234-1234-1234-123456789012"
+              />
+            )}
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={handleFetchConnectInstances}
+              disabled={loadingInstances || !localConfig.credentials}
+            >
+              {loadingInstances ? <CircularProgress size={20} /> : 'Connect 인스턴스 가져오기'}
+            </Button>
+          </Stack>
 
           {/* Environment */}
           <FormControl fullWidth>
@@ -129,14 +251,6 @@ const Settings: React.FC = () => {
             onChange={(e) => setLocalConfig({ ...localConfig, logGroupName: e.target.value })}
             fullWidth
             helperText="예: /aws/connect/your-instance"
-          />
-
-          {/* S3 Bucket Prefix */}
-          <TextField
-            label="S3 Bucket Prefix"
-            value={localConfig.s3BucketPrefix}
-            onChange={(e) => setLocalConfig({ ...localConfig, s3BucketPrefix: e.target.value })}
-            fullWidth
           />
 
           {/* Credential Options */}

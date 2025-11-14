@@ -13,7 +13,7 @@ const DEFAULT_CONFIG: AWSConfig = {
   instanceId: '',
   environment: 'prd',
   logGroupName: '/aws/connect/kal-servicecenter',
-  s3BucketPrefix: 'aicc',
+  s3BucketPrefix: 'aicc', // Kept for backward compatibility but will be removed from UI
 };
 
 const ConfigContext = createContext<ConfigContextType | undefined>(undefined);

@@ -353,6 +353,7 @@ export class AWSConnectService {
         channel: contact.Channel || 'VOICE',
         agentName: contact.AgentInfo?.Id,
         queueName: contact.QueueInfo?.Id,
+        contactFlowName: contact.Name,
       }));
     } catch (error) {
       console.error('Error searching contacts:', error);

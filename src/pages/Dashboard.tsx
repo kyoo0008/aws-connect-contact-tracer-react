@@ -15,6 +15,7 @@ import {
   Chip,
   Stack,
   Divider,
+  CircularProgress,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -43,6 +44,9 @@ const Dashboard: React.FC = () => {
   const [endTime, setEndTime] = useState<Dayjs | null>(dayjs());
   const [selectedChannel, setSelectedChannel] = useState<string[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [searchResults, setSearchResults] = useState<ContactDetails[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // Statistics query
   const { data: stats } = useQuery({
@@ -75,15 +79,25 @@ const Dashboard: React.FC = () => {
     navigate(`/contact-flow/${contactId}`);
   };
 
-  const handleAdvancedSearch = () => {
+  const handleAdvancedSearch = async () => {
     const criteria: SearchCriteria = {
       startTime: startTime?.toDate(),
       endTime: endTime?.toDate(),
       channel: selectedChannel.length > 0 ? selectedChannel : undefined,
     };
 
-    // Navigate with search criteria
-    navigate('/logs', { state: { searchCriteria: criteria } });
+    setIsSearching(true);
+    setSearchError(null);
+
+    try {
+      const service = getAWSConnectService(config);
+      const results = await service.searchContacts(criteria);
+      setSearchResults(results);
+    } catch (error) {
+      setSearchError((error as Error).message);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleChannelToggle = (channel: string) => {
@@ -293,13 +307,56 @@ const Dashboard: React.FC = () => {
                 fullWidth
                 onClick={handleAdvancedSearch}
                 startIcon={<SearchIcon />}
+                disabled={isSearching}
               >
-                Search Contacts
+                {isSearching ? 'Searching...' : 'Search Contacts'}
               </Button>
             </Grid>
           </Grid>
         </CardContent>
       </Card>
+
+      {/* Search Results */}
+      <Box sx={{ mt: 3 }}>
+        {isSearching && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}>
+            <CircularProgress />
+          </Box>
+        )}
+        {searchError && (
+          <Alert severity="error" sx={{ my: 2 }}>
+            {searchError}
+          </Alert>
+        )}
+        {searchResults.length > 0 && (
+          <Typography variant="h6" gutterBottom>
+            Search Results ({searchResults.length})
+          </Typography>
+        )}
+        <Grid container spacing={2}>
+          {searchResults.map((contact) => (
+            <Grid item xs={12} key={contact.contactId}>
+              <Card 
+                sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 } }}
+                onClick={() => navigate(`/contact-flow/${contact.contactId}`)}
+              >
+                <CardContent>
+                  <Typography variant="body1" component="div">
+                    <strong>Contact ID:</strong> {contact.contactId}
+                  </Typography>
+                  <Typography color="text.secondary">
+                    <strong>Flow Name:</strong> {contact.contactFlowName || 'N/A'}
+                  </Typography>
+                  <Typography color="text.secondary">
+                    <strong>Initiation:</strong> {dayjs(contact.initiationTimestamp).format('YYYY-MM-DD HH:mm:ss')}
+                  </Typography>
+                  <Chip label={contact.channel} size="small" sx={{ mt: 1 }} />
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Box>
 
       {/* Quick Actions */}
       <Box sx={{ mt: 3 }}>

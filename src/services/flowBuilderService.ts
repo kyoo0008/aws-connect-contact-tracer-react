@@ -184,16 +184,37 @@ export class FlowBuilderService {
   }
 
   /**
+   * Check if a log is from a Module (has MOD_ in ContactFlowName and ModuleExecutionStack)
+   */
+  private isModuleFlow(log: ContactLog): boolean {
+    return log.ContactFlowName?.includes('MOD_') &&
+           Array.isArray(log.ModuleExecutionStack) &&
+           log.ModuleExecutionStack.length > 0;
+  }
+
+  /**
    * Preprocess logs (filter, sort, etc.)
+   * Filters out Module flows (MOD_) from main flow view
    */
   private preprocessLogs(logs: ContactLog[]): ContactLog[] {
     return logs
-      .filter(log => !SKIP_MODULE_TYPES.includes(log.ContactFlowModuleType))
+      .filter(log => {
+        // Skip specific module types
+        if (SKIP_MODULE_TYPES.includes(log.ContactFlowModuleType)) {
+          return false;
+        }
+        // Filter out Module flows (MOD_) from main view
+        if (this.isModuleFlow(log)) {
+          return false;
+        }
+        return true;
+      })
       .sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
   }
 
   /**
-   * Generate unique node IDs for logs
+   * Generate unique node IDs for logs based on ContactFlowName
+   * Groups consecutive logs by ContactFlowName for time-based chunking
    */
   private generateNodeIds(): void {
     const flowCounts = new Map<string, number>();
@@ -202,10 +223,10 @@ export class FlowBuilderService {
 
     for (const log of this.logs) {
       const flowName = log.ContactFlowName;
-      
-      // Handle module flows (MOD_)
-      if (lastFlowName && (flowName.startsWith('MOD_') || flowName === lastFlowName)) {
-        log.node_id = lastNodeId!;
+
+      // Group consecutive logs with same ContactFlowName into same node
+      if (flowName === lastFlowName && lastNodeId) {
+        log.node_id = lastNodeId;
       } else {
         const count = (flowCounts.get(flowName) || 0) + 1;
         flowCounts.set(flowName, count);
@@ -218,13 +239,26 @@ export class FlowBuilderService {
 
   /**
    * Create nodes from logs
+   * Groups logs by node_id for time-based chunking
    */
   private createNodes(): void {
-    const consolidatedLogs = this.consolidateLogs();
-    
-    for (const log of consolidatedLogs) {
-      const isError = this.detectError(log);
-      const node = this.createNode(log, isError);
+    // Group logs by node_id
+    const logsByNodeId = new Map<string, ContactLog[]>();
+
+    for (const log of this.logs) {
+      const nodeId = log.node_id!;
+      if (!logsByNodeId.has(nodeId)) {
+        logsByNodeId.set(nodeId, []);
+      }
+      logsByNodeId.get(nodeId)!.push(log);
+    }
+
+    // Create one node per group
+    for (const [nodeId, logs] of logsByNodeId.entries()) {
+      // Use first log for node metadata, but store all logs
+      const firstLog = logs[0];
+      const hasError = logs.some(log => this.detectError(log));
+      const node = this.createNodeFromLogs(firstLog, logs, hasError);
       this.nodes.set(node.id, node);
     }
   }
@@ -280,23 +314,39 @@ export class FlowBuilderService {
   }
 
   /**
-   * Create a single node from a log
+   * Create a single node from grouped logs (time-based chunking)
+   * In main flow view, use ContactFlowName as label
+   * Stores all chunked logs in the node data
    */
-  private createNode(log: ContactLog, isError: boolean): ContactFlowNode {
-    const moduleType = this.defineModuleType(log);
-    const { nodeText, nodeFooter } = this.getNodeContent(log);
-    
+  private createNodeFromLogs(firstLog: ContactLog, allLogs: ContactLog[], isError: boolean): ContactFlowNode {
+    const moduleType = this.defineModuleType(firstLog);
+
+    // Use ContactFlowName as label for main flow nodes
+    const nodeLabel = firstLog.ContactFlowName;
+
+    // Calculate time range for this node
+    const timestamps = allLogs.map(log => new Date(log.Timestamp).getTime());
+    const minTimestamp = new Date(Math.min(...timestamps));
+    const maxTimestamp = new Date(Math.max(...timestamps));
+
     return {
-      id: log.node_id || `node_${Date.now()}_${Math.random()}`,
+      id: firstLog.node_id || `node_${Date.now()}_${Math.random()}`,
       type: 'custom',
       data: {
-        label: MODULE_NAME_MAP[moduleType] || moduleType,
+        label: nodeLabel,
         moduleType,
-        parameters: log.Parameters,
-        results: nodeFooter || log.Results,
+        parameters: firstLog.Parameters,
+        results: firstLog.Results,
         error: isError,
-        timestamp: log.Timestamp,
-        duration: this.calculateDuration(log),
+        timestamp: firstLog.Timestamp,
+        duration: this.calculateDuration(firstLog),
+        // Store all logs for this flow node (time-chunked)
+        chunkedLogs: allLogs,
+        timeRange: {
+          start: minTimestamp.toISOString(),
+          end: maxTimestamp.toISOString(),
+        },
+        logCount: allLogs.length,
       },
       position: { x: 0, y: 0 }, // Will be calculated later
       style: {
@@ -410,53 +460,54 @@ export class FlowBuilderService {
 
   /**
    * Create edges between nodes
+   * Sequential flow from left to right, wrapping to next row
    */
   private createEdges(): void {
     const nodeArray = Array.from(this.nodes.values());
-    
+
     for (let i = 0; i < nodeArray.length - 1; i++) {
       const source = nodeArray[i];
       const target = nodeArray[i + 1];
-      
+
       this.edges.push({
         id: `${source.id}_${target.id}`,
         source: source.id,
         target: target.id,
         type: 'smoothstep',
-        animated: source.data.moduleType === 'CheckAttribute',
-        style: source.data.error ? { stroke: '#F44336' } : {},
+        animated: false,
+        style: {
+          stroke: source.data.error ? '#F44336' : '#B0B0B0',
+          strokeWidth: 2,
+        },
+        label: `${i + 1}`,
       });
     }
   }
 
   /**
    * Calculate layout positions
+   * Arranges nodes in a grid with 5 columns for better visibility
    */
   private calculateLayout(): void {
     const nodeArray = Array.from(this.nodes.values());
-    const { nodeWidth, nodeHeight, horizontalSpacing, verticalSpacing, direction } = this.layoutOptions;
-    
-    // Simple grid layout
+    const { nodeWidth, nodeHeight, horizontalSpacing, verticalSpacing } = this.layoutOptions;
+
+    // Grid layout with 5 columns (matching dot_builder.py style)
     const columns = 5;
-    let currentX = 0;
-    let currentY = 0;
-    let column = 0;
+    const actualNodeWidth = 250;  // Wider nodes for better readability
+    const actualNodeHeight = 150; // Taller nodes
+    const horizontalGap = 80;     // More horizontal spacing
+    const verticalGap = 100;      // More vertical spacing
 
-    for (const node of nodeArray) {
-      if (direction === 'LR') {
-        currentX = column * (nodeWidth + horizontalSpacing);
-        currentY = Math.floor(nodeArray.indexOf(node) / columns) * (nodeHeight + verticalSpacing);
-      } else {
-        currentX = Math.floor(nodeArray.indexOf(node) / columns) * (nodeWidth + horizontalSpacing);
-        currentY = column * (nodeHeight + verticalSpacing);
-      }
+    for (let i = 0; i < nodeArray.length; i++) {
+      const node = nodeArray[i];
+      const column = i % columns;
+      const row = Math.floor(i / columns);
 
-      this.nodePositions.set(node.id, { x: currentX, y: currentY });
-      
-      column++;
-      if (column >= columns) {
-        column = 0;
-      }
+      const x = column * (actualNodeWidth + horizontalGap);
+      const y = row * (actualNodeHeight + verticalGap);
+
+      this.nodePositions.set(node.id, { x, y });
     }
   }
 

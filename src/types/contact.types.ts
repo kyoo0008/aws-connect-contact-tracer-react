@@ -18,6 +18,7 @@ export interface ContactLog {
   AgentName?: string;
   Duration?: number;
   xray_trace_id?: string;
+  ModuleExecutionStack?: string[];
 }
 
 export interface LambdaLog {
@@ -44,6 +45,12 @@ export interface ContactFlowNode {
     error?: boolean;
     timestamp?: string;
     duration?: number;
+    chunkedLogs?: ContactLog[];
+    timeRange?: {
+      start: string;
+      end: string;
+    };
+    logCount?: number;
   };
   position: {
     x: number;
@@ -94,6 +101,7 @@ export interface ContactDetails {
   attributes?: Record<string, any>;
   tags?: Record<string, string>;
   recordings?: Recording[];
+  contactFlowName?: string;
 }
 
 export interface Recording {

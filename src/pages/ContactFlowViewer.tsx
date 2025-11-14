@@ -72,6 +72,32 @@ const ContactFlowViewer: React.FC = () => {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [subFlowLogs, setSubFlowLogs] = useState<ContactLog[]>([]);
+  const [isFetchingSubFlow, setIsFetchingSubFlow] = useState(false);
+
+  const fetchSubFlowLogs = useCallback(async (flowId: string) => {
+    if (!contactId) return;
+
+    setIsFetchingSubFlow(true);
+    try {
+      const service = getAWSConnectService(config);
+      const details = await service.getContactDetails(contactId);
+      const startTime = new Date(details.initiationTimestamp);
+      startTime.setHours(startTime.getHours() - 1);
+      const endTime = details.disconnectTimestamp 
+        ? new Date(details.disconnectTimestamp)
+        : new Date();
+      endTime.setHours(endTime.getHours() + 1);
+      
+      const logs = await service.getContactLogs(flowId, startTime, endTime);
+      setSubFlowLogs(logs);
+    } catch (error) {
+      console.error('Error fetching sub-flow logs:', error);
+      setSubFlowLogs([]);
+    } finally {
+      setIsFetchingSubFlow(false);
+    }
+  }, [contactId, config]);
 
   // Fetch contact flow data
   const { data: flowData, isLoading, error, refetch } = useQuery({
@@ -118,6 +144,7 @@ const ContactFlowViewer: React.FC = () => {
   // Update nodes and edges when flow data changes
   useEffect(() => {
     if (flowData) {
+
       // Convert to React Flow format
       const flowNodes: Node[] = flowData.nodes.map((node) => ({
         id: node.id,
@@ -144,16 +171,37 @@ const ContactFlowViewer: React.FC = () => {
     }
   }, [flowData, setNodes, setEdges]);
 
-  // Handle node click
+  // Handle node click - Navigate to flow detail page
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
-      const log = flowData?.logs.find((l) => l.node_id === node.id);
-      if (log) {
-        setSelectedLog(log);
-        setDrawerOpen(true);
+      // Get chunked logs for this node from node data
+      const chunkedLogs = node.data?.chunkedLogs as ContactLog[] | undefined;
+      const flowName = node.data?.label as string;
+
+      if (chunkedLogs && chunkedLogs.length > 0 && flowName) {
+        // Navigate to flow detail page with chunked logs
+        navigate(`/contact-flow/${contactId}/flow/${encodeURIComponent(flowName)}`, {
+          state: {
+            chunkedLogs,
+            flowName,
+            contactId,
+          },
+        });
+      } else {
+        // Fallback: try to find log by node_id for backward compatibility
+        const log = flowData?.logs.find((l) => l.node_id === node.id);
+        if (log) {
+          setSelectedLog(log);
+          setDrawerOpen(true);
+          setSubFlowLogs([]); // Reset sub-flow logs
+
+          if (log.ContactFlowModuleType === 'InvokeFlowModule' && log.Parameters?.ContactFlowId) {
+            fetchSubFlowLogs(log.Parameters.ContactFlowId);
+          }
+        }
       }
     },
-    [flowData]
+    [flowData, contactId, navigate, fetchSubFlowLogs]
   );
 
   // Handle export
@@ -388,6 +436,9 @@ const ContactFlowViewer: React.FC = () => {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         log={selectedLog}
+        subFlowLogs={subFlowLogs}
+        isFetchingSubFlow={isFetchingSubFlow}
+        fetchSubFlowLogs={fetchSubFlowLogs}
       />
 
       {/* Transcript Panel */}

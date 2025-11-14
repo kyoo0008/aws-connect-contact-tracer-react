@@ -9,6 +9,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 // Pages
 import Dashboard from './pages/Dashboard';
 import ContactFlowViewer from './pages/ContactFlowViewer';
+import FlowDetailViewer from './pages/FlowDetailViewer';
 import LogAnalysis from './pages/LogAnalysis';
 import Settings from './pages/Settings';
 
@@ -107,6 +108,7 @@ function App() {
                     <Routes>
                       <Route path="/" element={<Dashboard />} />
                       <Route path="/contact-flow/:contactId?" element={<ContactFlowViewer />} />
+                      <Route path="/contact-flow/:contactId/flow/:flowName" element={<FlowDetailViewer />} />
                       <Route path="/logs/:contactId?" element={<LogAnalysis />} />
                       <Route path="/settings" element={<Settings />} />
                     </Routes>

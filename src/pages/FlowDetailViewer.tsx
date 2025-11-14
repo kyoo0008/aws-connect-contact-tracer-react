@@ -52,6 +52,68 @@ interface LocationState {
   contactId?: string;
 }
 
+// 헬퍼 함수: 연속되는 SetAttributes 로그를 병합합니다.
+// (수정) 그룹 내 오류를 감지하는 로직 추가
+const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
+  if (!logs || logs.length === 0) {
+    return [];
+  }
+
+  const consolidated: ContactLog[] = [];
+  let group: ContactLog[] = [];
+
+  const mergeGroup = () => {
+    if (group.length === 0) return;
+
+    if (group.length === 1) {
+      // 그룹에 하나만 있으면 그대로 추가
+      consolidated.push(group[0]);
+    } else {
+      // 2개 이상이면 병합
+      const baseLog = { ...group[0] }; // 첫 번째 로그를 복사하여 기준으로 사용
+
+      // Parameters를 배열로 병합
+      baseLog.Parameters = group.map(log => log.Parameters);
+      
+      // (추가) 그룹 내에 에러가 하나라도 있는지 확인
+      const anyError = group.some(log =>
+        log.Results?.includes('Error') ||
+        log.Results?.includes('Failed') ||
+        log.ExternalResults?.isSuccess === 'false'
+      );
+      
+      if (anyError) {
+        (baseLog as any)._isGroupError = true;
+        baseLog.Results = group[group.length - 1].Results || "Error in group";
+      } else {
+        baseLog.Results = group[group.length - 1].Results;
+      }
+      
+      baseLog.Timestamp = group[group.length - 1].Timestamp;
+
+      consolidated.push(baseLog);
+    }
+    group = []; // 그룹 초기화
+  };
+
+  for (const log of logs) {
+    if (log.ContactFlowModuleType === 'SetAttributes') {
+      group.push(log);
+    } else {
+      // 다른 모듈 타입을 만나면, 그동안의 SetAttributes 그룹을 병합
+      mergeGroup();
+      // 그리고 현재 로그를 추가
+      consolidated.push(log);
+    }
+  }
+
+  // 루프가 끝난 후 마지막에 남아있는 그룹이 있다면 병합
+  mergeGroup();
+
+  return consolidated;
+};
+
+
 const FlowDetailViewer: React.FC = () => {
   const { contactId, flowName } = useParams<{ contactId: string; flowName: string }>();
   const navigate = useNavigate();
@@ -60,20 +122,32 @@ const FlowDetailViewer: React.FC = () => {
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [logs, setLogs] = useState<ContactLog[]>([]);
+  
+  // --- (수정) 로그 상태를 '원본'과 '처리됨'으로 분리 ---
+  const [originalLogs, setOriginalLogs] = useState<ContactLog[]>([]); // 원본 (통계, 내보내기용)
+  const [processedLogs, setProcessedLogs] = useState<ContactLog[]>([]); // 병합된 로그 (노드, 사이드바용)
+  // ---
+
   const [selectedLog, setSelectedLog] = useState<ContactLog | null>(null);
   const [isTimelineVisible, setIsTimelineVisible] = useState(true);
 
   // Initialize logs from location state
   useEffect(() => {
     if (state?.chunkedLogs) {
-      setLogs(state.chunkedLogs);
-      buildFlowVisualization(state.chunkedLogs);
+      setOriginalLogs(state.chunkedLogs); // 원본 로그 저장
+      
+      // --- (수정) 병합된 로그를 계산하고 상태에 저장 ---
+      const consolidated = consolidateSetAttributesLogs(state.chunkedLogs);
+      setProcessedLogs(consolidated);
+      // ---
+
+      buildFlowVisualization(consolidated); // 병합된 로그로 시각화 빌드
     }
   }, [state]);
 
   // Build flow visualization from chunked logs with "ㄹ" pattern layout
-  const buildFlowVisualization = (chunkedLogs: ContactLog[]) => {
+  const buildFlowVisualization = (logsToProcess: ContactLog[]) => {
+    // 이제 이 함수는 '병합된' 로그 리스트(logsToProcess)를 받습니다.
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
 
@@ -84,47 +158,40 @@ const FlowDetailViewer: React.FC = () => {
     const horizontalGap = 40;
     const verticalGap = 80;
 
-    chunkedLogs.forEach((log, index) => {
+    logsToProcess.forEach((log, index) => {
+      // (수정) 병합된 에러 플래그 확인
       const hasError =
+        (log as any)._isGroupError ||
         log.Results?.includes('Error') ||
         log.Results?.includes('Failed') ||
         log.ExternalResults?.isSuccess === 'false';
 
-      // Calculate position in "ㄹ" pattern
+      // ... (x, y 좌표 계산 로직은 동일) ...
       const row = Math.floor(index / columns);
       const isEvenRow = row % 2 === 0;
-
-      // For even rows: left-to-right
-      // For odd rows: right-to-left (reversed)
       let column: number;
       if (isEvenRow) {
         column = index % columns;
       } else {
         column = columns - 1 - (index % columns);
       }
-
       const x = column * (nodeWidth + horizontalGap);
       const y = row * (nodeHeight + verticalGap);
 
-      // Determine handle positions
-      const hasNextNode = index < chunkedLogs.length - 1;
+      // ... (Handle Posiion 계산 로직은 동일) ...
+      const hasNextNode = index < logsToProcess.length - 1;
       const isLastInRow = (index + 1) % columns === 0;
       const isFirstInRow = index % columns === 0;
-
       let sourcePosition: Position | undefined = undefined;
       let targetPosition: Position | undefined = undefined;
 
       if (hasNextNode) {
         if (isLastInRow) {
-          // Transition to next row
           sourcePosition = Position.Bottom;
         } else {
-          // Continue in same row
           sourcePosition = isEvenRow ? Position.Right : Position.Left;
         }
       }
-
-      // Target position (where this node receives from)
       if (index === 0) {
         targetPosition = Position.Left;
       } else if (isFirstInRow && row > 0) {
@@ -140,12 +207,13 @@ const FlowDetailViewer: React.FC = () => {
         data: {
           label: log.ContactFlowModuleType,
           moduleType: log.ContactFlowModuleType,
-          parameters: log.Parameters,
+          parameters: log.Parameters, 
           results: log.Results,
           error: hasError,
           timestamp: log.Timestamp,
           sourcePosition,
           targetPosition,
+          logData: log, // 노드 클릭 시 사용할 병합된 로그 데이터
         },
         style: {
           background: hasError ? '#FFEBEE' : '#F5F5F5',
@@ -158,44 +226,32 @@ const FlowDetailViewer: React.FC = () => {
 
       flowNodes.push(node);
 
-      // Create edge to next node with proper handle connections
+      // ... (Edge 생성 로직은 동일) ...
       if (index > 0) {
+        const prevLog = logsToProcess[index - 1];
         const prevNode = flowNodes[index - 1];
 
-        // Convert Position enum to handle ID string
         const getHandleId = (pos: Position | undefined): string | undefined => {
           if (!pos) return undefined;
           const posMap: Record<Position, string> = {
-            [Position.Top]: 'top',
-            [Position.Bottom]: 'bottom',
-            [Position.Left]: 'left',
-            [Position.Right]: 'right',
+            [Position.Top]: 'top', [Position.Bottom]: 'bottom', [Position.Left]: 'left', [Position.Right]: 'right',
           };
           return posMap[pos];
         };
 
-        const sourceHandleId = prevNode.data.sourcePosition
-          ? `source-${getHandleId(prevNode.data.sourcePosition)}`
-          : undefined;
-        const targetHandleId = targetPosition
-          ? `target-${getHandleId(targetPosition)}`
-          : undefined;
+        const sourceHandleId = prevNode.data.sourcePosition ? `source-${getHandleId(prevNode.data.sourcePosition)}` : undefined;
+        const targetHandleId = targetPosition ? `target-${getHandleId(targetPosition)}` : undefined;
 
         flowEdges.push({
           id: `edge_${index - 1}_${index}`,
-          source: `${chunkedLogs[index - 1].Timestamp}_${index - 1}`,
+          source: `${prevLog.Timestamp}_${index - 1}`, // prevLog 사용
           target: `${log.Timestamp}_${index}`,
           sourceHandle: sourceHandleId,
           targetHandle: targetHandleId,
           type: 'smoothstep',
           animated: false,
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-          },
-          style: {
-            stroke: hasError ? '#F44336' : '#B0B0B0',
-            strokeWidth: 2,
-          },
+          markerEnd: { type: MarkerType.ArrowClosed },
+          style: { stroke: hasError ? '#F44336' : '#B0B0B0', strokeWidth: 2 },
         });
       }
     });
@@ -206,15 +262,15 @@ const FlowDetailViewer: React.FC = () => {
 
   // Handle node click
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
-    const logIndex = parseInt(node.id.split('_').pop() || '0');
-    if (logs[logIndex]) {
-      setSelectedLog(logs[logIndex]);
+    if (node.data?.logData) {
+      setSelectedLog(node.data.logData); // 병합된 로그를 선택
     }
-  }, [logs]);
+  }, []); 
 
   // Handle export
   const handleExport = () => {
-    const dataStr = JSON.stringify({ flowName: state?.flowName, logs }, null, 2);
+    // 내보내기는 '원본' 로그를 사용
+    const dataStr = JSON.stringify({ flowName: state?.flowName, logs: originalLogs }, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
     const exportFileDefaultName = `flow-detail-${flowName}.json`;
 
@@ -225,6 +281,7 @@ const FlowDetailViewer: React.FC = () => {
   };
 
   const renderValue = (value: any) => {
+    // 이 함수는 Parameters가 배열이든 객체이든 알아서 잘 처리합니다.
     if (typeof value === 'object' && value !== null) {
       return (
         <pre style={{ fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
@@ -236,6 +293,7 @@ const FlowDetailViewer: React.FC = () => {
   };
 
   if (!state?.chunkedLogs) {
+    // ... (No data Alert) ...
     return (
       <Container sx={{ mt: 4 }}>
         <Alert severity="warning" sx={{ mb: 2 }}>
@@ -252,20 +310,20 @@ const FlowDetailViewer: React.FC = () => {
     );
   }
 
-  const errorCount = logs.filter(log =>
+  // 통계는 '원본' 로그 기준
+  const errorCount = originalLogs.filter(log =>
     log.Results?.includes('Error') ||
     log.Results?.includes('Failed') ||
     log.ExternalResults?.isSuccess === 'false'
   ).length;
 
-  // Get time range safely
-  const timeRangeText = logs.length > 0
-    ? `${new Date(logs[0].Timestamp).toLocaleTimeString()} - ${new Date(logs[logs.length - 1].Timestamp).toLocaleTimeString()}`
+  const timeRangeText = originalLogs.length > 0
+    ? `${new Date(originalLogs[0].Timestamp).toLocaleTimeString()} - ${new Date(originalLogs[originalLogs.length - 1].Timestamp).toLocaleTimeString()}`
     : 'N/A';
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Toolbar */}
+      {/* ... Toolbar (변경 없음) ... */}
       <Paper elevation={1} sx={{ zIndex: 10 }}>
         <Toolbar>
           <IconButton edge="start" onClick={() => navigate(`/contact-flow/${contactId}`)}>
@@ -274,8 +332,6 @@ const FlowDetailViewer: React.FC = () => {
           <Typography variant="h6" sx={{ flexGrow: 1, ml: 2 }}>
             Flow Detail: {state?.flowName || flowName || 'Unknown'}
           </Typography>
-
-          {/* Actions */}
           <Stack direction="row" spacing={1}>
             <Tooltip title="Export JSON">
               <IconButton onClick={handleExport}>
@@ -291,11 +347,11 @@ const FlowDetailViewer: React.FC = () => {
         </Toolbar>
       </Paper>
 
-      {/* Flow Statistics */}
+      {/* Flow Statistics (원본 로그 기준) */}
       <Paper elevation={0} sx={{ p: 1, borderBottom: 1, borderColor: 'divider' }}>
         <Stack direction="row" spacing={2} alignItems="center">
           <Chip
-            label={`Total Logs: ${logs.length}`}
+            label={`Total Logs: ${originalLogs.length}`}
             size="small"
             color="primary"
             variant="outlined"
@@ -317,7 +373,7 @@ const FlowDetailViewer: React.FC = () => {
 
       {/* Main Content: Split View */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
-        {/* Left: Flow Visualization */}
+        {/* Left: Flow Visualization (병합된 노드) */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <ReactFlowProvider>
             <ReactFlow
@@ -333,21 +389,15 @@ const FlowDetailViewer: React.FC = () => {
               <Background gap={12} size={1} />
               <Controls />
               <MiniMap
-                nodeStrokeColor={(node) => {
-                  if (node.data?.error) return '#f44336';
-                  return '#888';
-                }}
-                nodeColor={(node) => {
-                  if (node.data?.error) return '#ffebee';
-                  return '#f5f5f5';
-                }}
+                nodeStrokeColor={(n) => (n.data?.error ? '#f44336' : '#888')}
+                nodeColor={(n) => (n.data?.error ? '#ffebee' : '#f5f5f5')}
                 nodeBorderRadius={4}
               />
             </ReactFlow>
           </ReactFlowProvider>
         </Box>
 
-        {/* Right: Timeline View */}
+        {/* --- (수정) Right: Timeline View (병합된 로그 기준) --- */}
         {isTimelineVisible && (
           <Box
             sx={{
@@ -365,8 +415,10 @@ const FlowDetailViewer: React.FC = () => {
               <Divider sx={{ mb: 2 }} />
 
               <List sx={{ width: '100%', p: 0 }}>
-                {logs.map((log, index) => {
+                {/* --- (수정) processedLogs.map() 사용 --- */}
+                {processedLogs.map((log, index) => { 
                   const hasError =
+                    (log as any)._isGroupError ||
                     log.Results?.includes('Error') ||
                     log.Results?.includes('Failed') ||
                     log.ExternalResults?.isSuccess === 'false';
@@ -381,7 +433,7 @@ const FlowDetailViewer: React.FC = () => {
                           borderLeft: `4px solid ${hasError ? '#F44336' : '#2196F3'}`,
                           backgroundColor: selectedLog === log ? '#F5F5F5' : 'white',
                         }}
-                        onClick={() => setSelectedLog(log)}
+                        onClick={() => setSelectedLog(log)} // 병합된 로그를 선택
                       >
                         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
@@ -417,6 +469,9 @@ const FlowDetailViewer: React.FC = () => {
                             />
                           )}
 
+                          {/* selectedLog === log 비교가 이제 정상적으로 동작합니다.
+                            (둘 다 processedLogs 배열의 객체를 참조하므로)
+                          */}
                           {selectedLog === log && (
                             <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
                               {log.Parameters && (
@@ -425,6 +480,8 @@ const FlowDetailViewer: React.FC = () => {
                                     Parameters:
                                   </Typography>
                                   <Box sx={{ mt: 0.5 }}>
+                                    {/* log.Parameters가 배열이면 요청하신 대로 JSON으로 렌더링됩니다.
+                                    */}
                                     {renderValue(log.Parameters)}
                                   </Box>
                                 </Box>

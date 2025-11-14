@@ -146,9 +146,12 @@ const ContactFlowViewer: React.FC = () => {
         id: edge.id,
         source: edge.source,
         target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
         type: edge.type || 'smoothstep',
         animated: edge.animated || false,
         style: edge.style || {},
+        label: edge.label,
         markerEnd: {
           type: MarkerType.ArrowClosed,
         },

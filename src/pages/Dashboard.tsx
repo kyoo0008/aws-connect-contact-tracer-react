@@ -16,6 +16,11 @@ import {
   Stack,
   Divider,
   CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  SelectChangeEvent,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -25,27 +30,33 @@ import {
   Settings as SettingsIcon,
   Timeline as TimelineIcon,
   Phone as PhoneIcon,
-  Chat as ChatIcon,
-  Email as EmailIcon,
+  Person as PersonIcon,
+  AccountTree as FlowIcon,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { useNavigate } from 'react-router-dom';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
-import { getAWSConnectService } from '@/services/awsConnectService';
-import { ContactDetails, SearchCriteria } from '@/types/contact.types';
+import { ContactDetails } from '@/types/contact.types';
 import { useConfig } from '@/contexts/ConfigContext';
+import {
+  searchCustomer,
+  searchAgent,
+  searchContactFlow,
+  searchDNIS,
+  searchLambdaError,
+  detectSearchType,
+} from '@/services/searchService';
+
+type SearchType = 'ContactId' | 'Customer' | 'Agent' | 'ContactFlow' | 'DNIS' | 'LambdaError' | 'History';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { config, isConfigured } = useConfig();
-  const [contactId, setContactId] = useState('');
-  const [startTime, setStartTime] = useState<Dayjs | null>(dayjs().subtract(1, 'day'));
-  const [endTime, setEndTime] = useState<Dayjs | null>(dayjs());
-  const [selectedChannel, setSelectedChannel] = useState<string[]>([]);
+  const [searchType, setSearchType] = useState<SearchType>('ContactId');
+  const [searchValue, setSearchValue] = useState('');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [searchResults, setSearchResults] = useState<ContactDetails[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
   // Statistics query
@@ -63,54 +74,153 @@ const Dashboard: React.FC = () => {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  const handleSearch = () => {
-    if (!contactId.trim()) {
-      alert('Please enter a Contact ID');
+  const handleSearch = async () => {
+    // Validation
+    if (searchType !== 'LambdaError' && searchType !== 'History') {
+      if (!searchValue.trim()) {
+        setSearchError(`Please enter a ${searchType}`);
+        return;
+      }
+    }
+
+    // Check config
+    if (!config.credentials) {
+      setSearchError('Please configure AWS credentials in Settings first');
       return;
     }
 
     // Add to recent searches
-    setRecentSearches(prev => {
-      const updated = [contactId, ...prev.filter(id => id !== contactId)];
-      return updated.slice(0, 5); // Keep only 5 recent searches
-    });
+    if (searchValue) {
+      setRecentSearches(prev => {
+        const updated = [searchValue, ...prev.filter(val => val !== searchValue)];
+        return updated.slice(0, 5);
+      });
+    }
 
-    // Navigate to contact flow viewer
-    navigate(`/contact-flow/${contactId}`);
-  };
-
-  const handleAdvancedSearch = async () => {
-    const criteria: SearchCriteria = {
-      startTime: startTime?.toDate(),
-      endTime: endTime?.toDate(),
-      channel: selectedChannel.length > 0 ? selectedChannel : undefined,
-    };
-
-    setIsSearching(true);
     setSearchError(null);
 
+    // For ContactId, navigate directly
+    if (searchType === 'ContactId') {
+      navigate(`/contact-flow/${searchValue}`);
+      return;
+    }
+
+    // For History, show placeholder message
+    if (searchType === 'History') {
+      setSearchError('History feature will be implemented to show previously viewed contact flows.');
+      return;
+    }
+
+    // For other types, call backend API
     try {
-      const service = getAWSConnectService(config);
-      const results = await service.searchContacts(criteria);
-      setSearchResults(results);
+      setSearchResults([]);
+
+      let result;
+      // Determine instance alias from config
+      const instanceAlias = config.instanceId ? 'kal-servicecenter' : 'kal-servicecenter'; // TODO: get from actual instance
+
+      switch (searchType) {
+        case 'Customer': {
+          const detectedType = detectSearchType(searchValue, 'Customer');
+          if (detectedType === 'unknown') {
+            setSearchError('Invalid customer search value. Use Phone Number (E.164), 32-char Profile ID, or 12-char Skypass Number');
+            return;
+          }
+          result = await searchCustomer(searchValue, detectedType as 'phone' | 'profileId' | 'skypass', config);
+          break;
+        }
+
+        case 'Agent': {
+          const detectedType = detectSearchType(searchValue, 'Agent') as 'uuid' | 'email' | 'name';
+          result = await searchAgent(searchValue, detectedType, config);
+          break;
+        }
+
+        case 'ContactFlow': {
+          result = await searchContactFlow(searchValue, config, instanceAlias);
+          break;
+        }
+
+        case 'DNIS': {
+          result = await searchDNIS(searchValue, config, instanceAlias);
+          break;
+        }
+
+        case 'LambdaError': {
+          result = await searchLambdaError(config);
+          break;
+        }
+
+        default:
+          setSearchError('Unknown search type');
+          return;
+      }
+
+      // Convert search results to ContactDetails format
+      const contactDetails: ContactDetails[] = result.contacts.map(contact => ({
+        contactId: contact.contactId,
+        instanceId: config.instanceId,
+        initiationTimestamp: contact.initiationTimestamp || contact.timestamp || new Date().toISOString(),
+        channel: contact.channel || 'UNKNOWN',
+        contactFlowName: searchType,
+      }));
+
+      setSearchResults(contactDetails);
+
+      if (contactDetails.length === 0) {
+        setSearchError('No contacts found for the given search criteria');
+      }
     } catch (error) {
-      setSearchError((error as Error).message);
-    } finally {
-      setIsSearching(false);
+      console.error('Search error:', error);
+      setSearchError((error as Error).message || 'Failed to search. Make sure the backend server is running (npm run server)');
     }
   };
 
-  const handleChannelToggle = (channel: string) => {
-    setSelectedChannel(prev =>
-      prev.includes(channel)
-        ? prev.filter(c => c !== channel)
-        : [...prev, channel]
-    );
+  const handleRecentSearch = (id: string) => {
+    setSearchValue(id);
+    navigate(`/contact-flow/${id}`);
   };
 
-  const handleRecentSearch = (id: string) => {
-    setContactId(id);
-    navigate(`/contact-flow/${id}`);
+  const getSearchPlaceholder = (): string => {
+    switch (searchType) {
+      case 'ContactId':
+        return 'Enter Contact ID (UUID)';
+      case 'Customer':
+        return 'Enter Phone Number (+821012341234), Customer Profile ID, or Skypass Number';
+      case 'Agent':
+        return 'Enter Agent ID, Name, or Email';
+      case 'ContactFlow':
+        return 'Enter Contact Flow Name (e.g., 05_CustomerQueue)';
+      case 'DNIS':
+        return 'Enter DNIS (e.g., +82269269240)';
+      case 'LambdaError':
+        return 'Search for Lambda errors in the last 48 hours';
+      case 'History':
+        return 'View saved contact flow history';
+      default:
+        return 'Enter search value';
+    }
+  };
+
+  const getSearchHelperText = (): string => {
+    switch (searchType) {
+      case 'ContactId':
+        return 'UUID format required';
+      case 'Customer':
+        return 'Phone Number (E.164), 32-char Profile ID, or 12-char Skypass Number';
+      case 'Agent':
+        return 'UUID, Full Name (한글/영문), or Email format';
+      case 'ContactFlow':
+        return 'Case-sensitive flow name';
+      case 'DNIS':
+        return 'E.164 format (e.g., +82269269240)';
+      case 'LambdaError':
+        return 'Automatically searches CloudWatch Logs for errors';
+      case 'History':
+        return 'Shows previously searched contact flows';
+      default:
+        return '';
+    }
   };
 
   return (
@@ -123,37 +233,107 @@ const Dashboard: React.FC = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Quick Search
+            Advanced Search
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            <TextField
-              fullWidth
-              variant="outlined"
-              placeholder="Enter Contact ID"
-              value={contactId}
-              onChange={(e) => setContactId(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  handleSearch();
-                }
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <Button
-              variant="contained"
-              size="large"
-              onClick={handleSearch}
-              startIcon={<PlayIcon />}
-            >
-              Trace
-            </Button>
-          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth>
+                <InputLabel>Search Type</InputLabel>
+                <Select
+                  value={searchType}
+                  label="Search Type"
+                  onChange={(e: SelectChangeEvent) => {
+                    setSearchType(e.target.value as SearchType);
+                    setSearchValue('');
+                  }}
+                >
+                  <MenuItem value="ContactId">
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <SearchIcon fontSize="small" />
+                      <span>Contact ID</span>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="Customer">
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <PersonIcon fontSize="small" />
+                      <span>Customer</span>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="Agent">
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <PersonIcon fontSize="small" />
+                      <span>Agent</span>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="ContactFlow">
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <FlowIcon fontSize="small" />
+                      <span>Contact Flow</span>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="DNIS">
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <PhoneIcon fontSize="small" />
+                      <span>DNIS</span>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="LambdaError">
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <ErrorIcon fontSize="small" />
+                      <span>Lambda Error</span>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="History">
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <HistoryIcon fontSize="small" />
+                      <span>History</span>
+                    </Stack>
+                  </MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={8}>
+              <TextField
+                fullWidth
+                variant="outlined"
+                placeholder={getSearchPlaceholder()}
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSearch();
+                  }
+                }}
+                helperText={getSearchHelperText()}
+                disabled={searchType === 'LambdaError' || searchType === 'History'}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Button
+                variant="contained"
+                size="large"
+                fullWidth
+                onClick={handleSearch}
+                startIcon={<PlayIcon />}
+              >
+                Search
+              </Button>
+            </Grid>
+          </Grid>
+
+          {/* Search Error */}
+          {searchError && (
+            <Alert severity="warning" sx={{ mt: 2 }} onClose={() => setSearchError(null)}>
+              {searchError}
+            </Alert>
+          )}
 
           {/* Recent Searches */}
           {recentSearches.length > 0 && (
@@ -242,121 +422,37 @@ const Dashboard: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* Advanced Search */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Advanced Search
-          </Typography>
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <DateTimePicker
-                label="Start Time"
-                value={startTime}
-                onChange={setStartTime}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <DateTimePicker
-                label="End Time"
-                value={endTime}
-                onChange={setEndTime}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" gutterBottom>
-                Channel
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <Chip
-                  icon={<PhoneIcon />}
-                  label="Voice"
-                  onClick={() => handleChannelToggle('VOICE')}
-                  color={selectedChannel.includes('VOICE') ? 'primary' : 'default'}
-                  variant={selectedChannel.includes('VOICE') ? 'filled' : 'outlined'}
-                />
-                <Chip
-                  icon={<ChatIcon />}
-                  label="Chat"
-                  onClick={() => handleChannelToggle('CHAT')}
-                  color={selectedChannel.includes('CHAT') ? 'primary' : 'default'}
-                  variant={selectedChannel.includes('CHAT') ? 'filled' : 'outlined'}
-                />
-                <Chip
-                  icon={<EmailIcon />}
-                  label="Task"
-                  onClick={() => handleChannelToggle('TASK')}
-                  color={selectedChannel.includes('TASK') ? 'primary' : 'default'}
-                  variant={selectedChannel.includes('TASK') ? 'filled' : 'outlined'}
-                />
-              </Stack>
-            </Grid>
-            <Grid item xs={12}>
-              <Button
-                variant="contained"
-                fullWidth
-                onClick={handleAdvancedSearch}
-                startIcon={<SearchIcon />}
-                disabled={isSearching}
-              >
-                {isSearching ? 'Searching...' : 'Search Contacts'}
-              </Button>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
-
       {/* Search Results */}
-      <Box sx={{ mt: 3 }}>
-        {isSearching && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}>
-            <CircularProgress />
-          </Box>
-        )}
-        {searchError && (
-          <Alert severity="error" sx={{ my: 2 }}>
-            {searchError}
-          </Alert>
-        )}
-        {searchResults.length > 0 && (
+      {searchResults.length > 0 && (
+        <Box sx={{ mt: 3 }}>
           <Typography variant="h6" gutterBottom>
             Search Results ({searchResults.length})
           </Typography>
-        )}
-        <Grid container spacing={2}>
-          {searchResults.map((contact) => (
-            <Grid item xs={12} key={contact.contactId}>
-              <Card 
-                sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 } }}
-                onClick={() => navigate(`/contact-flow/${contact.contactId}`)}
-              >
-                <CardContent>
-                  <Typography variant="body1" component="div">
-                    <strong>Contact ID:</strong> {contact.contactId}
-                  </Typography>
-                  <Typography color="text.secondary">
-                    <strong>Flow Name:</strong> {contact.contactFlowName || 'N/A'}
-                  </Typography>
-                  <Typography color="text.secondary">
-                    <strong>Initiation:</strong> {dayjs(contact.initiationTimestamp).format('YYYY-MM-DD HH:mm:ss')}
-                  </Typography>
-                  <Chip label={contact.channel} size="small" sx={{ mt: 1 }} />
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Box>
+          <Grid container spacing={2}>
+            {searchResults.map((contact) => (
+              <Grid item xs={12} key={contact.contactId}>
+                <Card
+                  sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 } }}
+                  onClick={() => navigate(`/contact-flow/${contact.contactId}`)}
+                >
+                  <CardContent>
+                    <Typography variant="body1" component="div">
+                      <strong>Contact ID:</strong> {contact.contactId}
+                    </Typography>
+                    <Typography color="text.secondary">
+                      <strong>Flow Name:</strong> {contact.contactFlowName || 'N/A'}
+                    </Typography>
+                    <Typography color="text.secondary">
+                      <strong>Initiation:</strong> {dayjs(contact.initiationTimestamp).format('YYYY-MM-DD HH:mm:ss')}
+                    </Typography>
+                    <Chip label={contact.channel} size="small" sx={{ mt: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
 
       {/* Quick Actions */}
       <Box sx={{ mt: 3 }}>

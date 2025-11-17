@@ -16,8 +16,6 @@ import {
   Chip,
   Stack,
   Divider,
-  List,
-  ListItem,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -122,20 +120,20 @@ const FlowDetailViewer: React.FC = () => {
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  
+
   // --- (수정) 로그 상태를 '원본'과 '처리됨'으로 분리 ---
   const [originalLogs, setOriginalLogs] = useState<ContactLog[]>([]); // 원본 (통계, 내보내기용)
   const [processedLogs, setProcessedLogs] = useState<ContactLog[]>([]); // 병합된 로그 (노드, 사이드바용)
   // ---
 
   const [selectedLog, setSelectedLog] = useState<ContactLog | null>(null);
-  const [isTimelineVisible, setIsTimelineVisible] = useState(true);
+  const [isTimelineVisible, setIsTimelineVisible] = useState(false);
 
   // Initialize logs from location state
   useEffect(() => {
     if (state?.chunkedLogs) {
       setOriginalLogs(state.chunkedLogs); // 원본 로그 저장
-      
+
       // --- (수정) 병합된 로그를 계산하고 상태에 저장 ---
       const consolidated = consolidateSetAttributesLogs(state.chunkedLogs);
       setProcessedLogs(consolidated);
@@ -143,6 +141,7 @@ const FlowDetailViewer: React.FC = () => {
 
       buildFlowVisualization(consolidated); // 병합된 로그로 시각화 빌드
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
   // Build flow visualization from chunked logs with "ㄹ" pattern layout
@@ -264,6 +263,7 @@ const FlowDetailViewer: React.FC = () => {
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
     if (node.data?.logData) {
       setSelectedLog(node.data.logData); // 병합된 로그를 선택
+      setIsTimelineVisible(true); // 노드 클릭 시 타임라인 자동으로 열기
     }
   }, []); 
 
@@ -338,7 +338,7 @@ const FlowDetailViewer: React.FC = () => {
                 <DownloadIcon />
               </IconButton>
             </Tooltip>
-            <Tooltip title={isTimelineVisible ? "Hide Timeline" : "Show Timeline"}>
+            <Tooltip title={isTimelineVisible ? "Hide Details" : "Show Details"}>
               <IconButton onClick={() => setIsTimelineVisible(!isTimelineVisible)}>
                 <VerticalSplitIcon />
               </IconButton>
@@ -397,8 +397,8 @@ const FlowDetailViewer: React.FC = () => {
           </ReactFlowProvider>
         </Box>
 
-        {/* --- (수정) Right: Timeline View (병합된 로그 기준) --- */}
-        {isTimelineVisible && (
+        {/* --- (수정) Right: Log Details Panel (선택된 노드만 표시) --- */}
+        {isTimelineVisible && selectedLog && (
           <Box
             sx={{
               width: 450,
@@ -410,100 +410,101 @@ const FlowDetailViewer: React.FC = () => {
           >
             <Box sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
-                Time-Ordered Logs
+                Log Details
               </Typography>
               <Divider sx={{ mb: 2 }} />
 
-              <List sx={{ width: '100%', p: 0 }}>
-                {/* --- (수정) processedLogs.map() 사용 --- */}
-                {processedLogs.map((log, index) => { 
-                  const hasError =
-                    (log as any)._isGroupError ||
-                    log.Results?.includes('Error') ||
-                    log.Results?.includes('Failed') ||
-                    log.ExternalResults?.isSuccess === 'false';
+              {(() => {
+                const hasError =
+                  (selectedLog as any)._isGroupError ||
+                  selectedLog.Results?.includes('Error') ||
+                  selectedLog.Results?.includes('Failed') ||
+                  selectedLog.ExternalResults?.isSuccess === 'false';
 
-                  return (
-                    <ListItem key={index} sx={{ p: 0, mb: 1, display: 'block' }}>
-                      <Card
-                        variant="outlined"
-                        sx={{
-                          cursor: 'pointer',
-                          '&:hover': { boxShadow: 2 },
-                          borderLeft: `4px solid ${hasError ? '#F44336' : '#2196F3'}`,
-                          backgroundColor: selectedLog === log ? '#F5F5F5' : 'white',
-                        }}
-                        onClick={() => setSelectedLog(log)} // 병합된 로그를 선택
-                      >
-                        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                            {hasError ? (
-                              <ErrorIcon fontSize="small" color="error" />
-                            ) : (
-                              <SuccessIcon fontSize="small" color="success" />
-                            )}
-                            <Typography variant="subtitle2" fontWeight="bold">
-                              {log.ContactFlowModuleType}
-                            </Typography>
-                          </Stack>
+                return (
+                  <Card
+                    variant="outlined"
+                    sx={{
+                      borderLeft: `4px solid ${hasError ? '#F44336' : '#2196F3'}`,
+                    }}
+                  >
+                    <CardContent>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                        {hasError ? (
+                          <ErrorIcon fontSize="small" color="error" />
+                        ) : (
+                          <SuccessIcon fontSize="small" color="success" />
+                        )}
+                        <Typography variant="h6" fontWeight="bold">
+                          {selectedLog.ContactFlowModuleType}
+                        </Typography>
+                      </Stack>
 
-                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                            <TimeIcon fontSize="small" color="disabled" />
-                            <Typography variant="caption" color="text.secondary">
-                              {new Date(log.Timestamp).toLocaleTimeString()}
-                            </Typography>
-                          </Stack>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                        <TimeIcon fontSize="small" color="disabled" />
+                        <Typography variant="body2" color="text.secondary">
+                          {new Date(selectedLog.Timestamp).toLocaleString()}
+                        </Typography>
+                      </Stack>
 
-                          {log.Identifier && (
-                            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                              ID: {log.Identifier}
-                            </Typography>
-                          )}
+                      {selectedLog.Identifier && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          <strong>ID:</strong> {selectedLog.Identifier}
+                        </Typography>
+                      )}
 
-                          {log.Results && (
-                            <Chip
-                              label={log.Results}
-                              size="small"
-                              color={hasError ? 'error' : 'success'}
-                              sx={{ mt: 0.5 }}
-                            />
-                          )}
+                      {selectedLog.Results && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="body2" fontWeight="bold" sx={{ mb: 0.5 }}>
+                            Results:
+                          </Typography>
+                          <Chip
+                            label={selectedLog.Results}
+                            size="small"
+                            color={hasError ? 'error' : 'success'}
+                          />
+                        </Box>
+                      )}
 
-                          {/* selectedLog === log 비교가 이제 정상적으로 동작합니다.
-                            (둘 다 processedLogs 배열의 객체를 참조하므로)
-                          */}
-                          {selectedLog === log && (
-                            <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
-                              {log.Parameters && (
-                                <Box sx={{ mb: 1 }}>
-                                  <Typography variant="caption" fontWeight="bold">
-                                    Parameters:
-                                  </Typography>
-                                  <Box sx={{ mt: 0.5 }}>
-                                    {/* log.Parameters가 배열이면 요청하신 대로 JSON으로 렌더링됩니다.
-                                    */}
-                                    {renderValue(log.Parameters)}
-                                  </Box>
-                                </Box>
-                              )}
-                              {log.ExternalResults && (
-                                <Box>
-                                  <Typography variant="caption" fontWeight="bold">
-                                    External Results:
-                                  </Typography>
-                                  <Box sx={{ mt: 0.5 }}>
-                                    {renderValue(log.ExternalResults)}
-                                  </Box>
-                                </Box>
-                              )}
-                            </Box>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </ListItem>
-                  );
-                })}
-              </List>
+                      <Divider sx={{ my: 2 }} />
+
+                      {selectedLog.Parameters && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="body2" fontWeight="bold" sx={{ mb: 1 }}>
+                            Parameters:
+                          </Typography>
+                          <Box sx={{
+                            bgcolor: '#F5F5F5',
+                            p: 1.5,
+                            borderRadius: 1,
+                            maxHeight: '400px',
+                            overflowY: 'auto'
+                          }}>
+                            {renderValue(selectedLog.Parameters)}
+                          </Box>
+                        </Box>
+                      )}
+
+                      {selectedLog.ExternalResults && (
+                        <Box>
+                          <Typography variant="body2" fontWeight="bold" sx={{ mb: 1 }}>
+                            External Results:
+                          </Typography>
+                          <Box sx={{
+                            bgcolor: '#F5F5F5',
+                            p: 1.5,
+                            borderRadius: 1,
+                            maxHeight: '400px',
+                            overflowY: 'auto'
+                          }}>
+                            {renderValue(selectedLog.ExternalResults)}
+                          </Box>
+                        </Box>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
             </Box>
           </Box>
         )}

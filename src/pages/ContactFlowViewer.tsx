@@ -87,8 +87,7 @@ const ContactFlowViewer: React.FC = () => {
     }
   }, [contactId, config]);
 
-  // Fetch contact flow data
-  const { data: flowData, isLoading, error, refetch } = useQuery({
+  const { data: queryData, isLoading, error, refetch } = useQuery({
     queryKey: ['contact-flow', contactId, config.credentials?.accessKeyId],
     queryFn: async () => {
       if (!contactId) throw new Error('Contact ID is required');
@@ -113,8 +112,8 @@ const ContactFlowViewer: React.FC = () => {
         service.getTranscript(contactId, startTime),
       ]);
       
-      // Build flow
-      const flowBuilder = new FlowBuilderService(contactLogs);
+      // Build flow for main view (with filtering)
+      const flowBuilder = new FlowBuilderService(contactLogs, { filterModules: true });
       const flowData = flowBuilder.buildFlow();
       
       // Add transcript if available
@@ -123,11 +122,14 @@ const ContactFlowViewer: React.FC = () => {
         flowData.transcript = transcript;
       }
       
-      return flowData;
+      return { flowData, originalLogs: contactLogs }; // Return both
     },
     enabled: !!contactId,
     retry: 2,
   });
+
+  // Extract flowData for convenience
+  const flowData = queryData?.flowData;
 
   // Update nodes and edges when flow data changes
   useEffect(() => {
@@ -165,22 +167,29 @@ const ContactFlowViewer: React.FC = () => {
   // Handle node click - Navigate to flow detail page
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
-      // Get chunked logs for this node from node data
-      const chunkedLogs = node.data?.chunkedLogs as ContactLog[] | undefined;
       const flowName = node.data?.label as string;
+      const timeRange = node.data?.timeRange as { start: string, end:string } | undefined;
 
-      if (chunkedLogs && chunkedLogs.length > 0 && flowName) {
-        // Navigate to flow detail page with chunked logs
+      if (flowName && timeRange && queryData?.originalLogs) {
+        // Filter originalLogs to get all logs within the node's time range
+        const nodeOriginalLogs = queryData.originalLogs.filter(log => {
+          const logTime = new Date(log.Timestamp).getTime();
+          const startTime = new Date(timeRange.start).getTime();
+          const endTime = new Date(timeRange.end).getTime();
+          return logTime >= startTime && logTime <= endTime;
+        });
+
+        // Navigate to flow detail page with the unfiltered logs for that chunk
         navigate(`/contact-flow/${contactId}/flow/${encodeURIComponent(flowName)}`, {
           state: {
-            chunkedLogs,
+            chunkedLogs: nodeOriginalLogs, // Pass the unfiltered logs
             flowName,
             contactId,
           },
         });
       } else {
         // Fallback: try to find log by node_id for backward compatibility
-        const log = flowData?.logs.find((l) => l.node_id === node.id);
+        const log = queryData?.flowData?.logs.find((l) => l.node_id === node.id);
         if (log) {
           setSelectedLog(log);
           setDrawerOpen(true);
@@ -192,7 +201,7 @@ const ContactFlowViewer: React.FC = () => {
         }
       }
     },
-    [flowData, contactId, navigate, fetchSubFlowLogs]
+    [queryData, contactId, navigate, fetchSubFlowLogs]
   );
 
   // Handle export

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Handle, Position } from 'react-flow-renderer';
-import { Box, Typography, Chip, Stack } from '@mui/material';
+import { Box, Typography, Chip } from '@mui/material';
+import { AccountTree as ModuleIcon } from '@mui/icons-material';
 
 interface CustomNodeProps {
   data: {
@@ -15,13 +16,15 @@ interface CustomNodeProps {
     };
     sourcePosition?: Position;
     targetPosition?: Position;
+    isModuleNode?: boolean;
   };
 }
 
 const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const hasError = data.error || false;
-  const bgColor = hasError ? '#FFEBEE' : '#FFFFFF';
-  const borderColor = hasError ? '#F44336' : '#E0E0E0';
+  const isModuleNode = data.isModuleNode || false;
+  const bgColor = hasError ? '#FFEBEE' : isModuleNode ? '#E3F2FD' : '#FFFFFF';
+  const borderColor = hasError ? '#F44336' : isModuleNode ? '#2196F3' : '#E0E0E0';
   const targetPosition = data.targetPosition || Position.Left;
   const sourcePosition = data.sourcePosition || Position.Right;
 
@@ -90,21 +93,74 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
       />
 
       {/* Flow Name */}
-      <Typography
-        variant="subtitle1"
-        fontWeight="600"
-        sx={{
-          color: hasError ? '#D32F2F' : '#1976D2',
-          fontSize: '1rem',
-          lineHeight: 1.3,
-          mb: 1,
-        }}
-      >
-        {data.label}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        {isModuleNode && <ModuleIcon sx={{ fontSize: '1.2rem', color: '#2196F3' }} />}
+        <Typography
+          variant="subtitle1"
+          fontWeight="600"
+          sx={{
+            color: hasError ? '#D32F2F' : isModuleNode ? '#2196F3' : '#1976D2',
+            fontSize: '0.95rem',
+            lineHeight: 1.3,
+          }}
+        >
+          {data.label}
+        </Typography>
+      </Box>
+
+      {/* Module Info */}
+      {isModuleNode && data.timeRange && (
+        <Box sx={{ mb: 1 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block' }}>
+            {new Date(data.timeRange.start).toLocaleString('ko-KR', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              fractionalSecondDigits: 3,
+            })} ~
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block' }}>
+            {new Date(data.timeRange.end).toLocaleString('ko-KR', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              fractionalSecondDigits: 3,
+            })}
+          </Typography>
+          {data.logCount && (
+            <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem', display: 'block', mt: 0.5 }}>
+              Nodes : {data.logCount}
+            </Typography>
+          )}
+        </Box>
+      )}
+
+      {isModuleNode && (
+        <Chip
+          label="Click to view details"
+          size="small"
+          icon={<ModuleIcon sx={{ fontSize: '0.8rem' }} />}
+          sx={{
+            fontSize: '0.65rem',
+            height: '22px',
+            mb: 0.5,
+            backgroundColor: '#BBDEFB',
+            cursor: 'pointer',
+            '&:hover': {
+              backgroundColor: '#90CAF9',
+            },
+          }}
+        />
+      )}
 
       {/* Timestamp */}
-      {data.timestamp && (
+      {!isModuleNode && data.timestamp && (
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
           오전 {new Date(data.timestamp).toLocaleTimeString('ko-KR', {
             hour12: false,

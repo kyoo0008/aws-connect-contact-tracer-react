@@ -2,12 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Container,
-  Paper,
   Box,
   Typography,
   Button,
-  CircularProgress,
   Alert,
+  Paper,
   Toolbar,
   IconButton,
   Tooltip,
@@ -46,77 +45,12 @@ const nodeTypes = {
 
 interface LocationState {
   chunkedLogs?: ContactLog[];
-  flowName?: string;
+  moduleName?: string;
   contactId?: string;
+  flowName?: string;
 }
 
-// 헬퍼 함수: 모듈 플로우 로그들을 ContactFlowName 기준으로 청킹
-const chunkModuleLogs = (logs: ContactLog[]): ContactLog[] => {
-  if (!logs || logs.length === 0) {
-    return [];
-  }
-
-  const chunked: ContactLog[] = [];
-  let i = 0;
-
-  while (i < logs.length) {
-    const log = logs[i];
-
-    // MOD_로 시작하는 ContactFlowName이면 모듈 플로우
-    const isModuleFlow = log.ContactFlowName?.startsWith('MOD_');
-
-    if (isModuleFlow) {
-      const moduleGroup: ContactLog[] = [log];
-      const currentModuleName = log.ContactFlowName;
-      let j = i + 1;
-
-      // 같은 모듈 이름의 연속된 로그들을 그룹화
-      while (j < logs.length && logs[j].ContactFlowName === currentModuleName) {
-        moduleGroup.push(logs[j]);
-        j++;
-      }
-
-      // 모듈 그룹을 단일 노드로 표현
-      const moduleLog = { ...log };
-      const moduleName = currentModuleName || 'Unknown Module';
-
-      // 그룹 내 에러 체크
-      const hasError = moduleGroup.some(l =>
-        l.Results?.includes('Error') ||
-        l.Results?.includes('Failed') ||
-        l.ExternalResults?.isSuccess === 'false'
-      );
-
-      // 시간 범위 계산
-      const timestamps = moduleGroup.map(l => new Date(l.Timestamp).getTime());
-      const minTimestamp = new Date(Math.min(...timestamps));
-      const maxTimestamp = new Date(Math.max(...timestamps));
-
-      // 모듈 로그 그룹 전체를 저장
-      (moduleLog as any)._isModuleNode = true;
-      (moduleLog as any)._moduleLogs = moduleGroup;
-      (moduleLog as any)._moduleName = moduleName;
-      (moduleLog as any)._hasError = hasError;
-      (moduleLog as any)._logCount = moduleGroup.length;
-      (moduleLog as any)._timeRange = {
-        start: minTimestamp.toISOString(),
-        end: maxTimestamp.toISOString(),
-      };
-
-      chunked.push(moduleLog);
-      i = j; // 다음 인덱스로 점프
-    } else {
-      // 일반 로그는 그대로 추가
-      chunked.push(log);
-      i++;
-    }
-  }
-
-  return chunked;
-};
-
 // 헬퍼 함수: 연속되는 SetAttributes 로그를 병합합니다.
-// (수정) 그룹 내 오류를 감지하는 로직 추가
 const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
   if (!logs || logs.length === 0) {
     return [];
@@ -129,16 +63,11 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
     if (group.length === 0) return;
 
     if (group.length === 1) {
-      // 그룹에 하나만 있으면 그대로 추가
       consolidated.push(group[0]);
     } else {
-      // 2개 이상이면 병합
-      const baseLog = { ...group[0] }; // 첫 번째 로그를 복사하여 기준으로 사용
-
-      // Parameters를 배열로 병합
+      const baseLog = { ...group[0] };
       baseLog.Parameters = group.map(log => log.Parameters);
 
-      // (추가) 그룹 내에 에러가 하나라도 있는지 확인
       const anyError = group.some(log =>
         log.Results?.includes('Error') ||
         log.Results?.includes('Failed') ||
@@ -153,41 +82,26 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
       }
 
       baseLog.Timestamp = group[group.length - 1].Timestamp;
-
       consolidated.push(baseLog);
     }
-    group = []; // 그룹 초기화
+    group = [];
   };
 
   for (const log of logs) {
-    // (수정) 모듈 노드는 별도로 처리하여 병합되지 않도록 보장
-    if ((log as any)._isModuleNode) {
-      // 모듈 노드를 만나면, 그 전까지의 SetAttributes 그룹을 먼저 병합
-      mergeGroup();
-      // 그리고 모듈 노드를 그대로 추가
-      consolidated.push(log);
-      continue; // 다음 로그로 넘어감
-    }
-
     if (log.ContactFlowModuleType === 'SetAttributes') {
       group.push(log);
     } else {
-      // 다른 모듈 타입을 만나면, 그동안의 SetAttributes 그룹을 병합
       mergeGroup();
-      // 그리고 현재 로그를 추가
       consolidated.push(log);
     }
   }
 
-  // 루프가 끝난 후 마지막에 남아있는 그룹이 있다면 병합
   mergeGroup();
-
   return consolidated;
 };
 
-
-const FlowDetailViewer: React.FC = () => {
-  const { contactId, flowName } = useParams<{ contactId: string; flowName: string }>();
+const ModuleDetailViewer: React.FC = () => {
+  const { contactId, flowName, moduleName } = useParams<{ contactId: string; flowName: string; moduleName: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as LocationState;
@@ -195,10 +109,8 @@ const FlowDetailViewer: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  // --- (수정) 로그 상태를 '원본'과 '처리됨'으로 분리 ---
-  const [originalLogs, setOriginalLogs] = useState<ContactLog[]>([]); // 원본 (통계, 내보내기용)
-  const [processedLogs, setProcessedLogs] = useState<ContactLog[]>([]); // 병합된 로그 (노드, 사이드바용)
-  // ---
+  const [originalLogs, setOriginalLogs] = useState<ContactLog[]>([]);
+  const [processedLogs, setProcessedLogs] = useState<ContactLog[]>([]);
 
   const [selectedLog, setSelectedLog] = useState<ContactLog | null>(null);
   const [isTimelineVisible, setIsTimelineVisible] = useState(false);
@@ -206,23 +118,19 @@ const FlowDetailViewer: React.FC = () => {
   // Initialize logs from location state
   useEffect(() => {
     if (state?.chunkedLogs) {
-      setOriginalLogs(state.chunkedLogs); // 원본 로그 저장
+      setOriginalLogs(state.chunkedLogs);
 
-      // --- (수정) 모듈 청킹 후 SetAttributes 병합 ---
-      const moduleChunked = chunkModuleLogs(state.chunkedLogs);
-      console.log('Module Chunked Logs:', moduleChunked);
-      const consolidated = consolidateSetAttributesLogs(moduleChunked);
+      // SetAttributes 병합
+      const consolidated = consolidateSetAttributesLogs(state.chunkedLogs);
       setProcessedLogs(consolidated);
-      // ---
 
-      buildFlowVisualization(consolidated); // 병합된 로그로 시각화 빌드
+      buildFlowVisualization(consolidated);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
   // Build flow visualization from chunked logs with "ㄹ" pattern layout
   const buildFlowVisualization = (logsToProcess: ContactLog[]) => {
-    // 이제 이 함수는 '병합된' 로그 리스트(logsToProcess)를 받습니다.
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
 
@@ -234,20 +142,12 @@ const FlowDetailViewer: React.FC = () => {
     const verticalGap = 80;
 
     logsToProcess.forEach((log, index) => {
-      // 모듈 노드 확인
-      const isModuleNode = (log as any)._isModuleNode;
-      const moduleName = (log as any)._moduleName;
-      const moduleLogs = (log as any)._moduleLogs;
-
-      // (수정) 병합된 에러 플래그 확인
       const hasError =
-        (log as any)._hasError ||
         (log as any)._isGroupError ||
         log.Results?.includes('Error') ||
         log.Results?.includes('Failed') ||
         log.ExternalResults?.isSuccess === 'false';
 
-      // ... (x, y 좌표 계산 로직은 동일) ...
       const row = Math.floor(index / columns);
       const isEvenRow = row % 2 === 0;
       let column: number;
@@ -259,7 +159,6 @@ const FlowDetailViewer: React.FC = () => {
       const x = column * (nodeWidth + horizontalGap);
       const y = row * (nodeHeight + verticalGap);
 
-      // ... (Handle Posiion 계산 로직은 동일) ...
       const hasNextNode = index < logsToProcess.length - 1;
       const isLastInRow = (index + 1) % columns === 0;
       const isFirstInRow = index % columns === 0;
@@ -286,23 +185,19 @@ const FlowDetailViewer: React.FC = () => {
         type: 'custom',
         position: { x, y },
         data: {
-          label: isModuleNode ? moduleName : log.ContactFlowModuleType,
-          moduleType: isModuleNode ? 'FlowModule' : log.ContactFlowModuleType,
+          label: log.ContactFlowModuleType,
+          moduleType: log.ContactFlowModuleType,
           parameters: log.Parameters,
           results: log.Results,
           error: hasError,
           timestamp: log.Timestamp,
           sourcePosition,
           targetPosition,
-          logData: log, // 노드 클릭 시 사용할 병합된 로그 데이터
-          isModuleNode, // 모듈 노드 플래그
-          moduleLogs, // 모듈 내부 로그들
-          timeRange: (log as any)._timeRange, // 모듈 시간 범위
-          logCount: (log as any)._logCount, // 모듈 로그 개수
+          logData: log,
         },
         style: {
-          background: hasError ? '#FFEBEE' : isModuleNode ? '#E3F2FD' : '#F5F5F5',
-          border: hasError ? '2px solid #F44336' : isModuleNode ? '2px solid #2196F3' : '1px solid #E0E0E0',
+          background: hasError ? '#FFEBEE' : '#F5F5F5',
+          border: hasError ? '2px solid #F44336' : '1px solid #E0E0E0',
           borderRadius: '8px',
           padding: '10px',
           width: nodeWidth,
@@ -311,7 +206,6 @@ const FlowDetailViewer: React.FC = () => {
 
       flowNodes.push(node);
 
-      // ... (Edge 생성 로직은 동일) ...
       if (index > 0) {
         const prevLog = logsToProcess[index - 1];
         const prevNode = flowNodes[index - 1];
@@ -329,7 +223,7 @@ const FlowDetailViewer: React.FC = () => {
 
         flowEdges.push({
           id: `edge_${index - 1}_${index}`,
-          source: `${prevLog.Timestamp}_${index - 1}`, // prevLog 사용
+          source: `${prevLog.Timestamp}_${index - 1}`,
           target: `${log.Timestamp}_${index}`,
           sourceHandle: sourceHandleId,
           targetHandle: targetHandleId,
@@ -347,30 +241,17 @@ const FlowDetailViewer: React.FC = () => {
 
   // Handle node click
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
-    if (node.data?.isModuleNode && node.data?.moduleLogs) {
-      // 모듈 노드 클릭 시 ModuleDetailViewer로 이동
-      const moduleName = node.data.label;
-      const currentFlowName = state?.flowName || flowName;
-      navigate(`/contact-flow/${contactId}/flow/${encodeURIComponent(currentFlowName || '')}/module/${encodeURIComponent(moduleName)}`, {
-        state: {
-          chunkedLogs: node.data.moduleLogs,
-          moduleName,
-          contactId,
-          flowName: currentFlowName,
-        },
-      });
-    } else if (node.data?.logData) {
-      setSelectedLog(node.data.logData); // 병합된 로그를 선택
-      setIsTimelineVisible(true); // 노드 클릭 시 타임라인 자동으로 열기
+    if (node.data?.logData) {
+      setSelectedLog(node.data.logData);
+      setIsTimelineVisible(true);
     }
-  }, [contactId, flowName, navigate, state?.flowName]); 
+  }, []);
 
   // Handle export
   const handleExport = () => {
-    // 내보내기는 '원본' 로그를 사용
-    const dataStr = JSON.stringify({ flowName: state?.flowName, logs: originalLogs }, null, 2);
+    const dataStr = JSON.stringify({ moduleName: state?.moduleName, logs: originalLogs }, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    const exportFileDefaultName = `flow-detail-${flowName}.json`;
+    const exportFileDefaultName = `module-detail-${moduleName}.json`;
 
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
@@ -379,7 +260,6 @@ const FlowDetailViewer: React.FC = () => {
   };
 
   const renderValue = (value: any) => {
-    // 이 함수는 Parameters가 배열이든 객체이든 알아서 잘 처리합니다.
     if (typeof value === 'object' && value !== null) {
       return (
         <pre style={{ fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
@@ -391,24 +271,22 @@ const FlowDetailViewer: React.FC = () => {
   };
 
   if (!state?.chunkedLogs) {
-    // ... (No data Alert) ...
     return (
       <Container sx={{ mt: 4 }}>
         <Alert severity="warning" sx={{ mb: 2 }}>
-          No flow data available. Please navigate from the main contact flow view.
+          No module data available. Please navigate from the flow detail view.
         </Alert>
         <Button
           variant="outlined"
-          onClick={() => navigate(`/contact-flow/${contactId}`)}
+          onClick={() => navigate(`/contact-flow/${contactId}/flow/${encodeURIComponent(flowName || '')}`)}
           startIcon={<BackIcon />}
         >
-          Back to Contact Flow
+          Back to Flow Detail
         </Button>
       </Container>
     );
   }
 
-  // 통계는 '원본' 로그 기준
   const errorCount = originalLogs.filter(log =>
     log.Results?.includes('Error') ||
     log.Results?.includes('Failed') ||
@@ -421,14 +299,14 @@ const FlowDetailViewer: React.FC = () => {
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* ... Toolbar (변경 없음) ... */}
+      {/* Toolbar */}
       <Paper elevation={1} sx={{ zIndex: 10 }}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate(`/contact-flow/${contactId}`)}>
+          <IconButton edge="start" onClick={() => navigate(`/contact-flow/${contactId}/flow/${encodeURIComponent(state?.flowName || flowName || '')}`)}>
             <BackIcon />
           </IconButton>
           <Typography variant="h6" sx={{ flexGrow: 1, ml: 2 }}>
-            Flow Detail: {state?.flowName || flowName || 'Unknown'}
+            Module Detail: {state?.moduleName || moduleName || 'Unknown'}
           </Typography>
           <Stack direction="row" spacing={1}>
             <Tooltip title="Export JSON">
@@ -445,7 +323,7 @@ const FlowDetailViewer: React.FC = () => {
         </Toolbar>
       </Paper>
 
-      {/* Flow Statistics (원본 로그 기준) */}
+      {/* Module Statistics */}
       <Paper elevation={0} sx={{ p: 1, borderBottom: 1, borderColor: 'divider' }}>
         <Stack direction="row" spacing={2} alignItems="center">
           <Chip
@@ -461,6 +339,7 @@ const FlowDetailViewer: React.FC = () => {
             variant="outlined"
           />
           <Chip
+            icon={errorCount > 0 ? <ErrorIcon /> : <SuccessIcon />}
             label={`Errors: ${errorCount}`}
             size="small"
             color={errorCount > 0 ? 'error' : 'default'}
@@ -471,7 +350,7 @@ const FlowDetailViewer: React.FC = () => {
 
       {/* Main Content: Split View */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
-        {/* Left: Flow Visualization (병합된 노드) */}
+        {/* Left: Flow Visualization */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <ReactFlowProvider>
             <ReactFlow
@@ -495,7 +374,7 @@ const FlowDetailViewer: React.FC = () => {
           </ReactFlowProvider>
         </Box>
 
-        {/* --- (수정) Right: Log Details Panel (선택된 노드만 표시) --- */}
+        {/* Right: Log Details Panel */}
         {isTimelineVisible && selectedLog && (
           <Box
             sx={{
@@ -611,4 +490,4 @@ const FlowDetailViewer: React.FC = () => {
   );
 };
 
-export default FlowDetailViewer;
+export default ModuleDetailViewer;

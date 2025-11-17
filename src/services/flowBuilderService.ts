@@ -74,7 +74,7 @@ const ERROR_KEYWORDS = [
 ];
 
 // Module types to skip or consolidate
-const SKIP_MODULE_TYPES = ['InvokeFlowModule'];
+const SKIP_MODULE_TYPES = ['null'];
 const CONSOLIDATE_MODULE_TYPES = ['SetAttributes', 'SetFlowAttributes'];
 
 export class FlowBuilderService {
@@ -83,9 +83,12 @@ export class FlowBuilderService {
   private edges: ContactFlowEdge[];
   private nodePositions: Map<string, NodePosition>;
   private layoutOptions: LayoutOptions;
+  private filterModules: boolean;
 
-  constructor(logs: ContactLog[], options?: Partial<LayoutOptions>) {
+  constructor(logs: ContactLog[], options?: Partial<LayoutOptions> & { filterModules?: boolean }) {
+    this.filterModules = options?.filterModules ?? true;
     this.logs = this.preprocessLogs(logs);
+    console.log('Preprocessed Logs:', logs);
     this.nodes = new Map();
     this.edges = [];
     this.nodePositions = new Map();
@@ -204,8 +207,8 @@ export class FlowBuilderService {
         if (SKIP_MODULE_TYPES.includes(log.ContactFlowModuleType)) {
           return false;
         }
-        // Filter out Module flows (MOD_) from main view
-        if (this.isModuleFlow(log)) {
+        // Filter out Module flows (MOD_) from main view if filterModules is true
+        if (this.filterModules && this.isModuleFlow(log)) {
           return false;
         }
         return true;

@@ -171,22 +171,43 @@ const ContactFlowViewer: React.FC = () => {
       const timeRange = node.data?.timeRange as { start: string, end:string } | undefined;
 
       if (flowName && timeRange && queryData?.originalLogs) {
-        // Filter originalLogs to get all logs within the node's time range
-        const nodeOriginalLogs = queryData.originalLogs.filter(log => {
-          const logTime = new Date(log.Timestamp).getTime();
-          const startTime = new Date(timeRange.start).getTime();
-          const endTime = new Date(timeRange.end).getTime();
-          return logTime >= startTime && logTime <= endTime;
-        });
+        // Filter originalLogs to get all logs for this flow
+        // We need to extend the time range to include any MOD_ flows invoked during this flow
+        const allLogs = queryData.originalLogs;
+        const startTime = new Date(timeRange.start).getTime();
 
-        // Navigate to flow detail page with the unfiltered logs for that chunk
-        navigate(`/contact-flow/${contactId}/flow/${encodeURIComponent(flowName)}`, {
-          state: {
-            chunkedLogs: nodeOriginalLogs, // Pass the unfiltered logs
-            flowName,
-            contactId,
-          },
-        });
+        // Find the start index of this flow
+        const startIndex = allLogs.findIndex(log => new Date(log.Timestamp).getTime() >= startTime);
+
+        if (startIndex !== -1) {
+          // Find the end index: where the next different ContactFlowName (not MOD_) starts
+          let endIndex = startIndex;
+          for (let i = startIndex; i < allLogs.length; i++) {
+            const log = allLogs[i];
+            const isModuleLog = log.ContactFlowName?.startsWith('MOD_');
+            const isInvokeOrReturn = log.ContactFlowModuleType === 'InvokeFlowModule' ||
+                                    log.ContactFlowModuleType === 'ReturnFromFlowModule';
+
+            // Include: same flow, module logs, or invoke/return module types
+            if (log.ContactFlowName === flowName || isModuleLog || isInvokeOrReturn) {
+              endIndex = i;
+            } else {
+              // Different flow name (not MOD_) - stop here
+              break;
+            }
+          }
+
+          const nodeOriginalLogs = allLogs.slice(startIndex, endIndex + 1);
+
+          // Navigate to flow detail page with the unfiltered logs for that chunk
+          navigate(`/contact-flow/${contactId}/flow/${encodeURIComponent(flowName)}`, {
+            state: {
+              chunkedLogs: nodeOriginalLogs, // Pass the unfiltered logs including MOD_ flows
+              flowName,
+              contactId,
+            },
+          });
+        }
       } else {
         // Fallback: try to find log by node_id for backward compatibility
         const log = queryData?.flowData?.logs.find((l) => l.node_id === node.id);

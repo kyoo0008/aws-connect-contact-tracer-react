@@ -50,139 +50,120 @@ interface LocationState {
   contactId?: string;
 }
 
-// 헬퍼 함수: 모듈 플로우 로그들을 ContactFlowName 기준으로 청킹
-const chunkModuleLogs = (logs: ContactLog[]): ContactLog[] => {
+// 헬퍼 함수: 상세 뷰를 위해 로그를 처리합니다.
+// 모듈 로그를 청킹하고 SetAttributes 로그를 병합하는 로직을 통합합니다.
+const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
   if (!logs || logs.length === 0) {
     return [];
   }
 
-  const chunked: ContactLog[] = [];
-  let i = 0;
+  const processed: ContactLog[] = [];
+  let setAttributesGroup: ContactLog[] = [];
 
-  while (i < logs.length) {
-    const log = logs[i];
+  const mergeSetAttributesGroup = () => {
+    if (setAttributesGroup.length === 0) return;
 
-    // MOD_로 시작하는 ContactFlowName이면 모듈 플로우
-    const isModuleFlow = log.ContactFlowName?.startsWith('MOD_');
-
-    if (isModuleFlow) {
-      const moduleGroup: ContactLog[] = [log];
-      const currentModuleName = log.ContactFlowName;
-      let j = i + 1;
-
-      // 같은 모듈 이름의 연속된 로그들을 그룹화
-      while (j < logs.length && logs[j].ContactFlowName === currentModuleName) {
-        moduleGroup.push(logs[j]);
-        j++;
-      }
-
-      // 모듈 그룹을 단일 노드로 표현
-      const moduleLog = { ...log };
-      const moduleName = currentModuleName || 'Unknown Module';
-
-      // 그룹 내 에러 체크
-      const hasError = moduleGroup.some(l =>
-        l.Results?.includes('Error') ||
-        l.Results?.includes('Failed') ||
-        l.ExternalResults?.isSuccess === 'false'
-      );
-
-      // 시간 범위 계산
-      const timestamps = moduleGroup.map(l => new Date(l.Timestamp).getTime());
-      const minTimestamp = new Date(Math.min(...timestamps));
-      const maxTimestamp = new Date(Math.max(...timestamps));
-
-      // 모듈 로그 그룹 전체를 저장
-      (moduleLog as any)._isModuleNode = true;
-      (moduleLog as any)._moduleLogs = moduleGroup;
-      (moduleLog as any)._moduleName = moduleName;
-      (moduleLog as any)._hasError = hasError;
-      (moduleLog as any)._logCount = moduleGroup.length;
-      (moduleLog as any)._timeRange = {
-        start: minTimestamp.toISOString(),
-        end: maxTimestamp.toISOString(),
-      };
-
-      chunked.push(moduleLog);
-      i = j; // 다음 인덱스로 점프
+    if (setAttributesGroup.length === 1) {
+      processed.push(setAttributesGroup[0]);
     } else {
-      // 일반 로그는 그대로 추가
-      chunked.push(log);
-      i++;
-    }
-  }
-
-  return chunked;
-};
-
-// 헬퍼 함수: 연속되는 SetAttributes 로그를 병합합니다.
-// (수정) 그룹 내 오류를 감지하는 로직 추가
-const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
-  if (!logs || logs.length === 0) {
-    return [];
-  }
-
-  const consolidated: ContactLog[] = [];
-  let group: ContactLog[] = [];
-
-  const mergeGroup = () => {
-    if (group.length === 0) return;
-
-    if (group.length === 1) {
-      // 그룹에 하나만 있으면 그대로 추가
-      consolidated.push(group[0]);
-    } else {
-      // 2개 이상이면 병합
-      const baseLog = { ...group[0] }; // 첫 번째 로그를 복사하여 기준으로 사용
-
-      // Parameters를 배열로 병합
-      baseLog.Parameters = group.map(log => log.Parameters);
-
-      // (추가) 그룹 내에 에러가 하나라도 있는지 확인
-      const anyError = group.some(log =>
-        log.Results?.includes('Error') ||
-        log.Results?.includes('Failed') ||
-        log.ExternalResults?.isSuccess === 'false'
+      const baseLog = { ...setAttributesGroup[0] };
+      baseLog.Parameters = setAttributesGroup.map(log => log.Parameters);
+      const anyError = setAttributesGroup.some(
+        log =>
+          log.Results?.includes('Error') ||
+          log.Results?.includes('Failed') ||
+          log.ExternalResults?.isSuccess === 'false'
       );
 
       if (anyError) {
         (baseLog as any)._isGroupError = true;
-        baseLog.Results = group[group.length - 1].Results || "Error in group";
+        baseLog.Results = setAttributesGroup[setAttributesGroup.length - 1].Results || "Error in group";
       } else {
-        baseLog.Results = group[group.length - 1].Results;
+        baseLog.Results = setAttributesGroup[setAttributesGroup.length - 1].Results;
       }
-
-      baseLog.Timestamp = group[group.length - 1].Timestamp;
-
-      consolidated.push(baseLog);
+      baseLog.Timestamp = setAttributesGroup[setAttributesGroup.length - 1].Timestamp;
+      processed.push(baseLog);
     }
-    group = []; // 그룹 초기화
+    setAttributesGroup = [];
   };
 
-  for (const log of logs) {
-    // (수정) 모듈 노드는 별도로 처리하여 병합되지 않도록 보장
-    if ((log as any)._isModuleNode) {
-      // 모듈 노드를 만나면, 그 전까지의 SetAttributes 그룹을 먼저 병합
-      mergeGroup();
-      // 그리고 모듈 노드를 그대로 추가
-      consolidated.push(log);
-      continue; // 다음 로그로 넘어감
-    }
+  let i = 0;
+  while (i < logs.length) {
+    const log = logs[i];
+    const isModuleFlow = log.ContactFlowName?.startsWith('MOD_');
+    const isInvokeFlowModule = log.ContactFlowModuleType === 'InvokeFlowModule';
+    const isReturnFromFlowModule = log.ContactFlowModuleType === 'ReturnFromFlowModule';
 
-    if (log.ContactFlowModuleType === 'SetAttributes') {
-      group.push(log);
+    // InvokeFlowModule을 만나면, 다음 MOD_ 로그들을 찾아서 그룹화
+    if (isInvokeFlowModule) {
+      mergeSetAttributesGroup();
+
+      // InvokeFlowModule 다음에 오는 MOD_ 로그들 찾기
+      let j = i + 1;
+      const moduleGroup: ContactLog[] = [];
+      let moduleName = 'Unknown Module';
+
+      // 다음 로그가 MOD_로 시작하는지 확인
+      if (j < logs.length && logs[j].ContactFlowName?.startsWith('MOD_')) {
+        moduleName = logs[j].ContactFlowName || 'Unknown Module';
+
+        // 같은 모듈명을 가진 연속된 로그들 수집
+        while (j < logs.length && logs[j].ContactFlowName === moduleName) {
+          moduleGroup.push(logs[j]);
+          j++;
+        }
+
+        // ReturnFromFlowModule 건너뛰기
+        if (j < logs.length && logs[j].ContactFlowModuleType === 'ReturnFromFlowModule') {
+          j++;
+        }
+
+        // 모듈 노드 생성
+        const moduleLog = { ...moduleGroup[0] };
+        const hasError = moduleGroup.some(
+          l =>
+            l.Results?.includes('Error') ||
+            l.Results?.includes('Failed') ||
+            l.ExternalResults?.isSuccess === 'false'
+        );
+        const timestamps = moduleGroup.map(l => new Date(l.Timestamp).getTime());
+        const minTimestamp = new Date(Math.min(...timestamps));
+        const maxTimestamp = new Date(Math.max(...timestamps));
+
+        (moduleLog as any)._isModuleNode = true;
+        (moduleLog as any)._moduleLogs = moduleGroup;
+        (moduleLog as any)._moduleName = moduleName;
+        (moduleLog as any)._hasError = hasError;
+        (moduleLog as any)._logCount = moduleGroup.length;
+        (moduleLog as any)._timeRange = {
+          start: minTimestamp.toISOString(),
+          end: maxTimestamp.toISOString(),
+        };
+
+        processed.push(moduleLog);
+        i = j;
+      } else {
+        // MOD_ 로그가 없으면 InvokeFlowModule만 추가
+        processed.push(log);
+        i++;
+      }
+    } else if (isModuleFlow || isReturnFromFlowModule) {
+      // MOD_ 로그나 ReturnFromFlowModule은 이미 InvokeFlowModule에서 처리됨
+      // 혹시 단독으로 있다면 건너뛰기
+      i++;
+    } else if (log.ContactFlowModuleType === 'SetAttributes') {
+      setAttributesGroup.push(log);
+      i++;
     } else {
-      // 다른 모듈 타입을 만나면, 그동안의 SetAttributes 그룹을 병합
-      mergeGroup();
-      // 그리고 현재 로그를 추가
-      consolidated.push(log);
+      mergeSetAttributesGroup();
+      processed.push(log);
+      i++;
     }
   }
 
-  // 루프가 끝난 후 마지막에 남아있는 그룹이 있다면 병합
-  mergeGroup();
+  mergeSetAttributesGroup();
 
-  return consolidated;
+  return processed;
 };
 
 
@@ -195,27 +176,21 @@ const FlowDetailViewer: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  // --- (수정) 로그 상태를 '원본'과 '처리됨'으로 분리 ---
-  const [originalLogs, setOriginalLogs] = useState<ContactLog[]>([]); // 원본 (통계, 내보내기용)
-  const [processedLogs, setProcessedLogs] = useState<ContactLog[]>([]); // 병합된 로그 (노드, 사이드바용)
-  // ---
+  const [originalLogs, setOriginalLogs] = useState<ContactLog[]>([]);
+  const [processedLogs, setProcessedLogs] = useState<ContactLog[]>([]);
 
   const [selectedLog, setSelectedLog] = useState<ContactLog | null>(null);
   const [isTimelineVisible, setIsTimelineVisible] = useState(false);
 
-  // Initialize logs from location state
   useEffect(() => {
     if (state?.chunkedLogs) {
-      setOriginalLogs(state.chunkedLogs); // 원본 로그 저장
+      setOriginalLogs(state.chunkedLogs);
 
-      // --- (수정) 모듈 청킹 후 SetAttributes 병합 ---
-      const moduleChunked = chunkModuleLogs(state.chunkedLogs);
-      console.log('Module Chunked Logs:', moduleChunked);
-      const consolidated = consolidateSetAttributesLogs(moduleChunked);
+      // 통합된 로그 처리 함수 사용
+      const consolidated = processLogsForDetailView(state.chunkedLogs);
       setProcessedLogs(consolidated);
-      // ---
 
-      buildFlowVisualization(consolidated); // 병합된 로그로 시각화 빌드
+      buildFlowVisualization(consolidated);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);

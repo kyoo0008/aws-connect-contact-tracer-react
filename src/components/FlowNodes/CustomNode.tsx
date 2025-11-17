@@ -92,9 +92,19 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
         }}
       />
 
-      {/* Flow Name */}
+      {/* Flow Name & Icon */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        {isModuleNode && <ModuleIcon sx={{ fontSize: '1.2rem', color: '#2196F3' }} />}
+        <img
+          src={`/icons/img/${data.moduleType}.png`}
+          alt={`${data.moduleType} icon`}
+          width="24"
+          height="24"
+          onError={(e) => {
+            // 아이콘 로드 실패 시 숨김 처리
+            (e.target as HTMLImageElement).style.display = 'none';
+          }}
+          style={{ objectFit: 'contain' }}
+        />
         <Typography
           variant="subtitle1"
           fontWeight="600"
@@ -108,37 +118,35 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
         </Typography>
       </Box>
 
-      {/* Module Info */}
-      {isModuleNode && data.timeRange && (
-        <Box sx={{ mb: 1 }}>
+      {/* Timestamp or Time Range */}
+      {data.timeRange ? (
+        <Box sx={{ mb: 1, mt: 'auto' }}>
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block' }}>
             {new Date(data.timeRange.start).toLocaleString('ko-KR', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              fractionalSecondDigits: 3,
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit', second: '2-digit',
             })} ~
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block' }}>
             {new Date(data.timeRange.end).toLocaleString('ko-KR', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              fractionalSecondDigits: 3,
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit', second: '2-digit',
             })}
           </Typography>
-          {data.logCount && (
-            <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem', display: 'block', mt: 0.5 }}>
-              Nodes : {data.logCount}
-            </Typography>
-          )}
         </Box>
+      ) : data.timestamp && (
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', mt: 'auto' }}>
+          오전 {new Date(data.timestamp).toLocaleTimeString('ko-KR', {
+            hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+          })}
+        </Typography>
+      )}
+
+      {/* Module-specific details */}
+      {isModuleNode && data.logCount && (
+        <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem', display: 'block', mt: 0.5 }}>
+          Nodes : {data.logCount}
+        </Typography>
       )}
 
       {isModuleNode && (
@@ -149,7 +157,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
           sx={{
             fontSize: '0.65rem',
             height: '22px',
-            mb: 0.5,
+            mt: 0.5,
             backgroundColor: '#BBDEFB',
             cursor: 'pointer',
             '&:hover': {
@@ -157,18 +165,6 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
             },
           }}
         />
-      )}
-
-      {/* Timestamp */}
-      {!isModuleNode && data.timestamp && (
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-          오전 {new Date(data.timestamp).toLocaleTimeString('ko-KR', {
-            hour12: false,
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          })}
-        </Typography>
       )}
 
       {/* Source Handles - All 4 sides */}

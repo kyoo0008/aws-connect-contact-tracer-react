@@ -88,7 +88,8 @@ export class FlowBuilderService {
   constructor(logs: ContactLog[], options?: Partial<LayoutOptions> & { filterModules?: boolean }) {
     this.filterModules = options?.filterModules ?? true;
     this.logs = this.preprocessLogs(logs);
-    console.log('Preprocessed Logs:', logs);
+    console.log(logs)
+
     this.nodes = new Map();
     this.edges = [];
     this.nodePositions = new Map();
@@ -325,7 +326,8 @@ export class FlowBuilderService {
    * Stores all chunked logs in the node data
    */
   private createNodeFromLogs(firstLog: ContactLog, allLogs: ContactLog[], isError: boolean, sequenceNumber: number): ContactFlowNode {
-    const moduleType = this.defineModuleType(firstLog);
+    // const moduleType = this.defineModuleType(firstLog);
+    const moduleType = 'FlowModule'; // 아이콘 통일
 
     // Use ContactFlowName as label for main flow nodes
     const nodeLabel = firstLog.ContactFlowName;

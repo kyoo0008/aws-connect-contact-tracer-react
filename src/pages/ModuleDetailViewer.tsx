@@ -40,7 +40,7 @@ import { ContactLog } from '@/types/contact.types';
 import CustomNode from '@/components/FlowNodes/CustomNode';
 
 const nodeTypes = {
-  custom: CustomNode,
+  custom: (props: any) => <CustomNode {...props} isMainView={false} />,
 };
 
 interface LocationState {
@@ -241,6 +241,7 @@ const ModuleDetailViewer: React.FC = () => {
           sourcePosition,
           targetPosition,
           logData: log,
+          isMainView: false, // Module Detail View임을 CustomNode에 전달
         },
         style: {
           background: hasError ? '#FFEBEE' : '#F5F5F5',
@@ -361,11 +362,11 @@ const ModuleDetailViewer: React.FC = () => {
                 <DownloadIcon />
               </IconButton>
             </Tooltip>
-            <Tooltip title={isTimelineVisible ? "Hide Details" : "Show Details"}>
+            {/* <Tooltip title={isTimelineVisible ? "Hide Details" : "Show Details"}>
               <IconButton onClick={() => setIsTimelineVisible(!isTimelineVisible)}>
                 <VerticalSplitIcon />
               </IconButton>
-            </Tooltip>
+            </Tooltip> */}
           </Stack>
         </Toolbar>
       </Paper>

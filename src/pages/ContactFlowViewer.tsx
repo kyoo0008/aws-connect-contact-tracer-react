@@ -140,7 +140,10 @@ const ContactFlowViewer: React.FC = () => {
         id: node.id,
         type: node.type || 'custom',
         position: node.position,
-        data: node.data,
+        data: {
+          ...node.data,
+          isMainView: true, // Main View임을 CustomNode에 전달
+        },
         style: node.style,
       }));
 

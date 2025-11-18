@@ -58,6 +58,7 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
 
   const consolidated: ContactLog[] = [];
   let group: ContactLog[] = [];
+  let currentGroupType: string | null = null;
 
   const mergeGroup = () => {
     if (group.length === 0) return;
@@ -66,7 +67,18 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
       consolidated.push(group[0]);
     } else {
       const baseLog = { ...group[0] };
-      baseLog.Parameters = group.map(log => log.Parameters);
+      const isCheckAttribute = baseLog.ContactFlowModuleType === 'CheckAttribute';
+
+      // CheckAttribute의 경우 Parameters에 Results 키를 추가
+      if (isCheckAttribute) {
+        baseLog.Parameters = group.map(log => ({
+          ...log.Parameters,
+          Results: log.Results
+        }));
+      } else {
+        // SetAttributes, SetFlowAttributes의 경우 Parameters만 배열로 저장
+        baseLog.Parameters = group.map(log => log.Parameters);
+      }
 
       const anyError = group.some(log =>
         log.Results?.includes('Error') ||
@@ -85,10 +97,19 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
       consolidated.push(baseLog);
     }
     group = [];
+    currentGroupType = null;
   };
 
   for (const log of logs) {
-    if (log.ContactFlowModuleType === 'SetAttributes') {
+     if (['SetAttributes', 'SetFlowAttributes', 'CheckAttribute'].includes(log.ContactFlowModuleType)) {
+      const logType = log.ContactFlowModuleType;
+
+      // 타입이 다르면 이전 그룹을 먼저 병합
+      if (currentGroupType !== null && currentGroupType !== logType) {
+        mergeGroup();
+      }
+
+      currentGroupType = logType;
       group.push(log);
     } else {
       mergeGroup();

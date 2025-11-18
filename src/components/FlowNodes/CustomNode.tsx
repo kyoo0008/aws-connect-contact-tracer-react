@@ -133,6 +133,16 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
               hour: '2-digit', minute: '2-digit', second: '2-digit',
             })}
           </Typography>
+          {data.logCount && (
+            <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem', display: 'block', mt: 0.5 }}>
+              Nodes : {data.logCount}
+            </Typography>
+          )}
+          {data.timeRange && (
+            <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem', display: 'block' }}>
+              Duration : {((new Date(data.timeRange.end).getTime() - new Date(data.timeRange.start).getTime()) / 1000).toFixed(2)}s
+            </Typography>
+          )}
         </Box>
       ) : data.timestamp && (
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', mt: 'auto' }}>

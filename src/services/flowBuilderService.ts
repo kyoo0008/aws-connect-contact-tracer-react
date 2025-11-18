@@ -88,7 +88,6 @@ export class FlowBuilderService {
   constructor(logs: ContactLog[], options?: Partial<LayoutOptions> & { filterModules?: boolean }) {
     this.filterModules = options?.filterModules ?? true;
     this.logs = this.preprocessLogs(logs);
-    console.log(logs)
 
     this.nodes = new Map();
     this.edges = [];
@@ -354,7 +353,7 @@ export class FlowBuilderService {
           start: minTimestamp.toISOString(),
           end: maxTimestamp.toISOString(),
         },
-        logCount: sequenceNumber, // Use sequence number instead of log count for display
+        logCount: allLogs.length, // 상세 노드 개수
       },
       position: { x: 0, y: 0 }, // Will be calculated later
       style: {

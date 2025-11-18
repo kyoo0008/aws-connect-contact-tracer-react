@@ -58,17 +58,30 @@ const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
   }
 
   const processed: ContactLog[] = [];
-  let setAttributesGroup: ContactLog[] = [];
+  let attributesGroup: ContactLog[] = [];
+  let currentGroupType: string | null = null;
 
-  const mergeSetAttributesGroup = () => {
-    if (setAttributesGroup.length === 0) return;
+  const mergeAttributesGroup = () => {
+    if (attributesGroup.length === 0) return;
 
-    if (setAttributesGroup.length === 1) {
-      processed.push(setAttributesGroup[0]);
+    if (attributesGroup.length === 1) {
+      processed.push(attributesGroup[0]);
     } else {
-      const baseLog = { ...setAttributesGroup[0] };
-      baseLog.Parameters = setAttributesGroup.map(log => log.Parameters);
-      const anyError = setAttributesGroup.some(
+      const baseLog = { ...attributesGroup[0] };
+      const isCheckAttribute = baseLog.ContactFlowModuleType === 'CheckAttribute';
+
+      // CheckAttribute의 경우 Parameters에 Results 키를 추가
+      if (isCheckAttribute) {
+        baseLog.Parameters = attributesGroup.map(log => ({
+          ...log.Parameters,
+          Results: log.Results
+        }));
+      } else {
+        // SetAttributes, SetFlowAttributes의 경우 Parameters만 배열로 저장
+        baseLog.Parameters = attributesGroup.map(log => log.Parameters);
+      }
+
+      const anyError = attributesGroup.some(
         log =>
           log.Results?.includes('Error') ||
           log.Results?.includes('Failed') ||
@@ -77,14 +90,15 @@ const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
 
       if (anyError) {
         (baseLog as any)._isGroupError = true;
-        baseLog.Results = setAttributesGroup[setAttributesGroup.length - 1].Results || "Error in group";
+        baseLog.Results = attributesGroup[attributesGroup.length - 1].Results || "Error in group";
       } else {
-        baseLog.Results = setAttributesGroup[setAttributesGroup.length - 1].Results;
+        baseLog.Results = attributesGroup[attributesGroup.length - 1].Results;
       }
-      baseLog.Timestamp = setAttributesGroup[setAttributesGroup.length - 1].Timestamp;
+      baseLog.Timestamp = attributesGroup[attributesGroup.length - 1].Timestamp;
       processed.push(baseLog);
     }
-    setAttributesGroup = [];
+    attributesGroup = [];
+    currentGroupType = null;
   };
 
   let i = 0;
@@ -96,7 +110,7 @@ const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
 
     // InvokeFlowModule을 만나면, 다음 MOD_ 로그들을 찾아서 그룹화
     if (isInvokeFlowModule) {
-      mergeSetAttributesGroup();
+      mergeAttributesGroup();
 
       // InvokeFlowModule 다음에 오는 MOD_ 로그들 찾기
       let j = i + 1;
@@ -151,17 +165,26 @@ const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       // MOD_ 로그나 ReturnFromFlowModule은 이미 InvokeFlowModule에서 처리됨
       // 혹시 단독으로 있다면 건너뛰기
       i++;
-    } else if (log.ContactFlowModuleType === 'SetAttributes') {
-      setAttributesGroup.push(log);
+    } else if (['SetAttributes', 'SetFlowAttributes', 'CheckAttribute'].includes(log.ContactFlowModuleType)) {
+      // 같은 타입의 연속된 로그만 그룹화
+      const logType = log.ContactFlowModuleType;
+
+      // 타입이 다르면 이전 그룹을 먼저 병합
+      if (currentGroupType !== null && currentGroupType !== logType) {
+        mergeAttributesGroup();
+      }
+
+      currentGroupType = logType;
+      attributesGroup.push(log);
       i++;
     } else {
-      mergeSetAttributesGroup();
+      mergeAttributesGroup();
       processed.push(log);
       i++;
     }
   }
 
-  mergeSetAttributesGroup();
+  mergeAttributesGroup();
 
   return processed;
 };

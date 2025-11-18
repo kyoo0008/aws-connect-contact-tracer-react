@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, Chip } from '@mui/material';
 
 const renderValue = (value: any, max_length: number = 30) => {
   let strValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
@@ -29,14 +29,21 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
   const renderContent = () => {
     switch (moduleType) {
       case 'CheckAttribute': {
-        const { ComparisonMethod, Value, SecondValue } = params;
-        const operator = getOperatorSymbol(ComparisonMethod);
+        const checks = Array.isArray(params) ? params : [params];
         return (
-          <Typography variant="body2">
-            {renderValue(Value)} {operator} {renderValue(SecondValue)}?
-            <br />
-            <small>Result: {results}</small>
-          </Typography>
+          <Box>
+            {checks.map((p, i) => {
+              const operator = getOperatorSymbol(p.ComparisonMethod);
+              const result = p.Results || (i === checks.length - 1 ? results : '');
+              const resultColor = result === 'true' ? 'success' : result === 'false' ? 'error' : 'default';
+              return (
+                <Typography variant="body2" key={i} component="div" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  {renderValue(p.Value)} {operator} {renderValue(p.SecondValue)}?
+                  <Chip label={result} color={resultColor} size="small" sx={{ ml: 1 }} />
+                </Typography>
+              );
+            })}
+          </Box>
         );
       }
       case 'InvokeExternalResource':

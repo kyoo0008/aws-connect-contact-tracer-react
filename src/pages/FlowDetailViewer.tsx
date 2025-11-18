@@ -438,7 +438,7 @@ const FlowDetailViewer: React.FC = () => {
                         </Typography>
                       )}
 
-                      {selectedLog.Results && (
+                      {selectedLog.Results && selectedLog.ContactFlowModuleType !== "CheckAttribute" && (
                         <Box sx={{ mb: 2 }}>
                           <Typography variant="body2" fontWeight="bold" sx={{ mb: 0.5 }}>
                             Results:

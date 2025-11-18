@@ -25,7 +25,7 @@ import {
   VerticalSplit as VerticalSplitIcon,
 } from '@mui/icons-material';
 import ReactFlow, {
-  Node,
+  Node as ReactFlowNode,
   Edge,
   Controls,
   Background,
@@ -127,7 +127,7 @@ const ModuleDetailViewer: React.FC = () => {
   const location = useLocation();
   const state = location.state as LocationState;
 
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<ReactFlowNode[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   const [originalLogs, setOriginalLogs] = useState<ContactLog[]>([]);
@@ -135,6 +135,32 @@ const ModuleDetailViewer: React.FC = () => {
 
   const [selectedLog, setSelectedLog] = useState<ContactLog | null>(null);
   const [isTimelineVisible, setIsTimelineVisible] = useState(false);
+  const detailsPanelRef = React.useRef<HTMLDivElement>(null);
+
+  // Effect to handle Esc key and click outside to close details panel
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsTimelineVisible(false);
+      }
+    };
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (detailsPanelRef.current && !detailsPanelRef.current.contains(event.target as Node)) {
+        setIsTimelineVisible(false);
+      }
+    };
+
+    if (isTimelineVisible) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isTimelineVisible]);
 
   // Initialize logs from location state
   useEffect(() => {
@@ -152,7 +178,7 @@ const ModuleDetailViewer: React.FC = () => {
 
   // Build flow visualization from chunked logs with "ㄹ" pattern layout
   const buildFlowVisualization = (logsToProcess: ContactLog[]) => {
-    const flowNodes: Node[] = [];
+    const flowNodes: ReactFlowNode[] = [];
     const flowEdges: Edge[] = [];
 
     // Grid layout configuration
@@ -201,7 +227,7 @@ const ModuleDetailViewer: React.FC = () => {
         targetPosition = isEvenRow ? Position.Left : Position.Right;
       }
 
-      const node: Node = {
+      const node: ReactFlowNode = {
         id: `${log.Timestamp}_${index}`,
         type: 'custom',
         position: { x, y },
@@ -261,7 +287,7 @@ const ModuleDetailViewer: React.FC = () => {
   };
 
   // Handle node click
-  const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((event: React.MouseEvent, node: ReactFlowNode) => {
     if (node.data?.logData) {
       setSelectedLog(node.data.logData);
       setIsTimelineVisible(true);
@@ -323,7 +349,7 @@ const ModuleDetailViewer: React.FC = () => {
       {/* Toolbar */}
       <Paper elevation={1} sx={{ zIndex: 10 }}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate(`/contact-flow/${contactId}/flow/${encodeURIComponent(state?.flowName || flowName || '')}`)}>
+          <IconButton edge="start" onClick={() => navigate(-1)}>
             <BackIcon />
           </IconButton>
           <Typography variant="h6" sx={{ flexGrow: 1, ml: 2 }}>
@@ -398,6 +424,7 @@ const ModuleDetailViewer: React.FC = () => {
         {/* Right: Log Details Panel */}
         {isTimelineVisible && selectedLog && (
           <Box
+            ref={detailsPanelRef}
             sx={{
               width: 450,
               borderLeft: 1,

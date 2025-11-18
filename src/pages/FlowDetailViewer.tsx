@@ -26,7 +26,7 @@ import {
   VerticalSplit as VerticalSplitIcon,
 } from '@mui/icons-material';
 import ReactFlow, {
-  Node,
+  Node as ReactFlowNode,
   Edge,
   Controls,
   Background,
@@ -57,7 +57,7 @@ const FlowDetailViewer: React.FC = () => {
   const location = useLocation();
   const state = location.state as LocationState;
 
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<ReactFlowNode[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   const [originalLogs, setOriginalLogs] = useState<ContactLog[]>([]);
@@ -65,6 +65,32 @@ const FlowDetailViewer: React.FC = () => {
 
   const [selectedLog, setSelectedLog] = useState<ContactLog | null>(null);
   const [isTimelineVisible, setIsTimelineVisible] = useState(false);
+  const detailsPanelRef = React.useRef<HTMLDivElement>(null);
+
+  // Effect to handle Esc key and click outside to close details panel
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsTimelineVisible(false);
+      }
+    };
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (detailsPanelRef.current && !detailsPanelRef.current.contains(event.target as Node)) {
+        setIsTimelineVisible(false);
+      }
+    };
+
+    if (isTimelineVisible) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isTimelineVisible]);
 
   useEffect(() => {
     if (state?.chunkedLogs) {
@@ -82,7 +108,7 @@ const FlowDetailViewer: React.FC = () => {
   // Build flow visualization from chunked logs with "ㄹ" pattern layout
   const buildFlowVisualization = (logsToProcess: ContactLog[]) => {
     // 이제 이 함수는 '병합된' 로그 리스트(logsToProcess)를 받습니다.
-    const flowNodes: Node[] = [];
+    const flowNodes: ReactFlowNode[] = [];
     const flowEdges: Edge[] = [];
 
     // Grid layout configuration
@@ -140,7 +166,7 @@ const FlowDetailViewer: React.FC = () => {
         targetPosition = isEvenRow ? Position.Left : Position.Right;
       }
 
-      const node: Node = {
+      const node: ReactFlowNode = {
         id: `${log.Timestamp}_${index}`,
         type: 'custom',
         position: { x, y },
@@ -205,7 +231,7 @@ const FlowDetailViewer: React.FC = () => {
   };
 
   // Handle node click
-  const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((event: React.MouseEvent, node: ReactFlowNode) => {
     if (node.data?.isModuleNode && node.data?.moduleLogs) {
       // 모듈 노드 클릭 시 ModuleDetailViewer로 이동
       const moduleName = node.data.label;
@@ -283,7 +309,7 @@ const FlowDetailViewer: React.FC = () => {
       {/* ... Toolbar (변경 없음) ... */}
       <Paper elevation={1} sx={{ zIndex: 10 }}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate(`/contact-flow/${contactId}`)}>
+          <IconButton edge="start" onClick={() => navigate(-1)}>
             <BackIcon />
           </IconButton>
           <Typography variant="h6" sx={{ flexGrow: 1, ml: 2 }}>
@@ -357,6 +383,7 @@ const FlowDetailViewer: React.FC = () => {
         {/* --- (수정) Right: Log Details Panel (선택된 노드만 표시) --- */}
         {isTimelineVisible && selectedLog && (
           <Box
+            ref={detailsPanelRef}
             sx={{
               width: 450,
               borderLeft: 1,

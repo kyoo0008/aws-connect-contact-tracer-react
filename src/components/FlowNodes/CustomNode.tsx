@@ -153,11 +153,11 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
       )}
 
       {/* Module-specific details */}
-      {isModuleNode && data.logCount && (
+      {/* {isModuleNode && data.logCount && (
         <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem', display: 'block', mt: 0.5 }}>
           Nodes : {data.logCount}
         </Typography>
-      )}
+      )} */}
 
       {isModuleNode && (
         <Chip

@@ -1,3 +1,4 @@
+import { processLogsForDetailView } from '@/utils/logProcessor';
 import { Position } from 'react-flow-renderer';
 import { 
   ContactLog, 
@@ -78,6 +79,7 @@ const SKIP_MODULE_TYPES = ['null'];
 const CONSOLIDATE_MODULE_TYPES = ['SetAttributes', 'SetFlowAttributes'];
 
 export class FlowBuilderService {
+  private originalLogs: ContactLog[];
   private logs: ContactLog[];
   private nodes: Map<string, ContactFlowNode>;
   private edges: ContactFlowEdge[];
@@ -86,6 +88,7 @@ export class FlowBuilderService {
   private filterModules: boolean;
 
   constructor(logs: ContactLog[], options?: Partial<LayoutOptions> & { filterModules?: boolean }) {
+    this.originalLogs = logs; // 원본 로그 저장
     this.filterModules = options?.filterModules ?? true;
     this.logs = this.preprocessLogs(logs);
 
@@ -325,16 +328,21 @@ export class FlowBuilderService {
    * Stores all chunked logs in the node data
    */
   private createNodeFromLogs(firstLog: ContactLog, allLogs: ContactLog[], isError: boolean, sequenceNumber: number): ContactFlowNode {
-    // const moduleType = this.defineModuleType(firstLog);
-    const moduleType = 'FlowModule'; // 아이콘 통일
-
-    // Use ContactFlowName as label for main flow nodes
+    const moduleType = 'InvokeFlowModule'; // 아이콘 통일
     const nodeLabel = firstLog.ContactFlowName;
 
     // Calculate time range for this node
     const timestamps = allLogs.map(log => new Date(log.Timestamp).getTime());
     const minTimestamp = new Date(Math.min(...timestamps));
     const maxTimestamp = new Date(Math.max(...timestamps));
+
+    // 상세 뷰의 노드 개수를 정확하게 계산
+    const nodeOriginalLogs = this.originalLogs.filter(log => {
+      const logTime = new Date(log.Timestamp).getTime();
+      return logTime >= minTimestamp.getTime() && logTime <= maxTimestamp.getTime();
+    });
+    const detailNodes = processLogsForDetailView(nodeOriginalLogs);
+    const detailNodeCount = detailNodes.length;
 
     return {
       id: firstLog.node_id || `node_${Date.now()}_${Math.random()}`,
@@ -347,13 +355,12 @@ export class FlowBuilderService {
         error: isError,
         timestamp: firstLog.Timestamp,
         duration: this.calculateDuration(firstLog),
-        // Store all logs for this flow node (time-chunked)
         chunkedLogs: allLogs,
         timeRange: {
           start: minTimestamp.toISOString(),
           end: maxTimestamp.toISOString(),
         },
-        logCount: allLogs.length, // 상세 노드 개수
+        logCount: detailNodeCount, // 정확한 상세 노드 개수
       },
       position: { x: 0, y: 0 }, // Will be calculated later
       style: {

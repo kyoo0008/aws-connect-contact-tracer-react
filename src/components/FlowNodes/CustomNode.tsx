@@ -35,6 +35,27 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const targetPosition = data.targetPosition || Position.Left;
   const sourcePosition = data.sourcePosition || Position.Right;
 
+  // Ref for the scrollable body content
+  const bodyRef = React.useRef<HTMLDivElement>(null);
+  const [isHovered, setIsHovered] = React.useState(false);
+
+  // Handle wheel event to enable node scrolling on hover
+  const handleWheel = React.useCallback((e: React.WheelEvent) => {
+    if (bodyRef.current && isHovered) {
+      const { scrollTop, scrollHeight, clientHeight } = bodyRef.current;
+      const isScrollable = scrollHeight > clientHeight;
+
+      if (isScrollable) {
+        // Prevent ReactFlow zoom and panning when scrolling inside node
+        e.stopPropagation();
+
+        // Manually handle the scroll
+        const scrollAmount = e.deltaY;
+        bodyRef.current.scrollTop += scrollAmount;
+      }
+    }
+  }, [isHovered]);
+
   const renderMainViewContent = () => (
     <>
       {data.timeRange && (
@@ -145,7 +166,13 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
       </Box>
 
       {/* Body */}
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 1, minHeight: 0 }}>
+      <Box
+        ref={bodyRef}
+        onWheel={handleWheel}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        sx={{ flex: 1, overflowY: 'auto', p: 1, minHeight: 0 }}
+      >
         {isMainView ? renderMainViewContent() : renderDetailViewContent()}
       </Box>
 
@@ -172,18 +199,41 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
       {!isMainView && hasFooterExternalResults && (
         <Box sx={{
           borderTop: `1px solid ${borderColor}`,
-          p: 1,
-          backgroundColor: footerExternalResults?.isSuccess === 'false' ? '#FFEBEE' : '#E8F5E9',
+          px: 1.5,
+          py: 0.75,
+          backgroundColor: footerExternalResults?.isSuccess === 'false' ? '#FFF3F3' : '#F0F9F4',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '32px'
+          justifyContent: 'space-between',
+          minHeight: '28px'
         }}>
-          <Typography variant="caption" fontWeight="bold" sx={{
-            color: footerExternalResults?.isSuccess === 'false' ? '#D32F2F' : '#2E7D32'
-          }}>
-            {footerExternalResults?.isSuccess === 'true' ? 'Success ✅' : 'Failed ❌'}
+          <Typography variant="caption" sx={{ color: '#666', fontWeight: 500 }}>
+            Status
           </Typography>
+          <Box sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.5,
+            px: 1,
+            py: 0.25,
+            borderRadius: '4px',
+            backgroundColor: footerExternalResults?.isSuccess === 'false' ? '#FEE' : '#E8F5E9',
+            border: `1px solid ${footerExternalResults?.isSuccess === 'false' ? '#FFCDD2' : '#C8E6C9'}`
+          }}>
+            <Box sx={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              backgroundColor: footerExternalResults?.isSuccess === 'false' ? '#F44336' : '#4CAF50'
+            }} />
+            <Typography variant="caption" sx={{
+              color: footerExternalResults?.isSuccess === 'false' ? '#D32F2F' : '#2E7D32',
+              fontWeight: 600,
+              fontSize: '0.7rem'
+            }}>
+              {footerExternalResults?.isSuccess === 'true' ? 'Success' : 'Failed'}
+            </Typography>
+          </Box>
         </Box>
       )}
 

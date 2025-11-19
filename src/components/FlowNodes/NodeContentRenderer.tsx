@@ -31,11 +31,10 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
       case 'CheckAttribute': {
         const checks = Array.isArray(params) ? params : [params];
         return (
-          <Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             {checks.map((p, i) => {
               const operator = getOperatorSymbol(p.ComparisonMethod);
               const result = p.Results || (i === checks.length - 1 ? results : '');
-              const resultColor = result === 'true' ? 'success' : result === 'false' ? 'error' : 'default';
 
               // Flow definition에서 가져온 비교값 추가
               const comparisonValue = p._comparisonValue;
@@ -46,10 +45,60 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
               const displaySecondValue = p.SecondValue + (comparisonSecondValue ? `(${comparisonSecondValue})` : '');
 
               return (
-                <Typography variant="body2" key={i} component="div" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-                  {renderValue(displayValue)} {operator} {renderValue(displaySecondValue)}?
-                  <Chip label={result} color={resultColor} size="small" sx={{ ml: 1 }} />
-                </Typography>
+                <Box key={i} sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  p: 0.5,
+                  borderRadius: 0.75,
+                  backgroundColor: '#F9FAFB',
+                  border: '1px solid #E5E7EB'
+                }}>
+                  <Typography variant="caption" sx={{
+                    flex: 1,
+                    color: '#374151',
+                    lineHeight: 1.3,
+                    fontSize: '0.7rem',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {renderValue(displayValue, 20)} <Box component="span" sx={{ color: '#6B7280', fontWeight: 600 }}>{operator}</Box> {renderValue(displaySecondValue, 15)}?
+                  </Typography>
+                  <Box sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.4,
+                    px: 0.6,
+                    py: 0.2,
+                    borderRadius: '10px',
+                    fontSize: '0.6rem',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    ...(result === 'true' ? {
+                      backgroundColor: '#ECFDF5',
+                      color: '#047857',
+                      border: '1px solid #A7F3D0'
+                    } : result === 'false' ? {
+                      backgroundColor: '#FEF2F2',
+                      color: '#DC2626',
+                      border: '1px solid #FECACA'
+                    } : {
+                      backgroundColor: '#F3F4F6',
+                      color: '#6B7280',
+                      border: '1px solid #E5E7EB'
+                    })
+                  }}>
+                    <Box sx={{
+                      width: 4,
+                      height: 4,
+                      borderRadius: '50%',
+                      backgroundColor: result === 'true' ? '#10B981' : result === 'false' ? '#EF4444' : '#9CA3AF'
+                    }} />
+                    {result || 'N/A'}
+                  </Box>
+                </Box>
               );
             })}
           </Box>

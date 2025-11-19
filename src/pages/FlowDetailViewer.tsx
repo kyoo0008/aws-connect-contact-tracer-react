@@ -391,6 +391,8 @@ const FlowDetailViewer: React.FC = () => {
               nodeTypes={nodeTypes}
               fitView
               attributionPosition="bottom-left"
+              zoomOnScroll={false}
+              panOnScroll={false}
             >
               <Background gap={12} size={1} />
               <Controls />

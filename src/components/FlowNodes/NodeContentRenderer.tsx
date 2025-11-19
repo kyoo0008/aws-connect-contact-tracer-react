@@ -36,9 +36,18 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
               const operator = getOperatorSymbol(p.ComparisonMethod);
               const result = p.Results || (i === checks.length - 1 ? results : '');
               const resultColor = result === 'true' ? 'success' : result === 'false' ? 'error' : 'default';
+
+              // Flow definition에서 가져온 비교값 추가
+              const comparisonValue = p._comparisonValue;
+              const comparisonSecondValue = p._comparisonSecondValue;
+
+              // 값 표시 형식: value($.Attributes.AttributeName)
+              const displayValue = p.Value + (comparisonValue ? `(${comparisonValue})` : '');
+              const displaySecondValue = p.SecondValue + (comparisonSecondValue ? `(${comparisonSecondValue})` : '');
+
               return (
-                <Typography variant="body2" key={i} component="div" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  {renderValue(p.Value)} {operator} {renderValue(p.SecondValue)}?
+                <Typography variant="body2" key={i} component="div" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                  {renderValue(displayValue)} {operator} {renderValue(displaySecondValue)}?
                   <Chip label={result} color={resultColor} size="small" sx={{ ml: 1 }} />
                 </Typography>
               );
@@ -88,6 +97,16 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
       }
       case 'SetLoggingBehavior':
         return <Typography variant="body2">Logging: {params.LoggingBehavior}</Typography>;
+      case 'TagContact':
+        return (
+          <Box>
+            {Object.entries(params.Tags).map(([key, value]) => (
+              <Typography variant="caption" display="block" key={key}>
+                {key}: {renderValue(value)}
+              </Typography>
+            ))}
+          </Box>
+        )
       case 'SetContactFlow':
       case 'SetContactData':
         return (

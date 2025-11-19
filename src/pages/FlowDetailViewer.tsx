@@ -38,8 +38,9 @@ import ReactFlow, {
   Position,
 } from 'react-flow-renderer';
 import { ContactLog } from '@/types/contact.types';
-import { processLogsForDetailView } from '@/utils/logProcessor';
+import { processLogsForDetailView, enrichCheckAttributeLogs } from '@/utils/logProcessor';
 import CustomNode from '@/components/FlowNodes/CustomNode';
+import { useConfig } from '@/contexts/ConfigContext';
 
 const nodeTypes = {
   custom: (props: any) => <CustomNode {...props} isMainView={false} />,
@@ -56,12 +57,14 @@ const FlowDetailViewer: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as LocationState;
+  const { config } = useConfig();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ReactFlowNode[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   const [originalLogs, setOriginalLogs] = useState<ContactLog[]>([]);
   const [processedLogs, setProcessedLogs] = useState<ContactLog[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [selectedLog, setSelectedLog] = useState<ContactLog | null>(null);
   const [isTimelineVisible, setIsTimelineVisible] = useState(false);
@@ -93,17 +96,35 @@ const FlowDetailViewer: React.FC = () => {
   }, [isTimelineVisible]);
 
   useEffect(() => {
-    if (state?.chunkedLogs) {
-      setOriginalLogs(state.chunkedLogs);
+    const processLogs = async () => {
+      if (state?.chunkedLogs && config) {
+        setIsLoading(true);
+        try {
+          setOriginalLogs(state.chunkedLogs);
 
-      // 통합된 로그 처리 함수 사용
-      const consolidated = processLogsForDetailView(state.chunkedLogs);
-      setProcessedLogs(consolidated);
+          // 1. CheckAttribute 로그에 flow definition 데이터 추가
+          const enrichedLogs = await enrichCheckAttributeLogs(state.chunkedLogs, config);
 
-      buildFlowVisualization(consolidated);
-    }
+          // 2. 통합된 로그 처리 함수 사용 (병합)
+          const consolidated = processLogsForDetailView(enrichedLogs);
+          setProcessedLogs(consolidated);
+
+          buildFlowVisualization(consolidated);
+        } catch (error) {
+          console.error('Error processing logs:', error);
+          // 에러 발생 시 enrichment 없이 진행
+          const consolidated = processLogsForDetailView(state.chunkedLogs);
+          setProcessedLogs(consolidated);
+          buildFlowVisualization(consolidated);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    processLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
+  }, [state, config]);
 
   // Build flow visualization from chunked logs with "ㄹ" pattern layout
   const buildFlowVisualization = (logsToProcess: ContactLog[]) => {

@@ -1,4 +1,77 @@
-import { ContactLog } from '@/types/contact.types';
+import { ContactLog, AWSConfig } from '@/types/contact.types';
+import { getFlowDefinitionService } from '@/services/flowDefinitionService';
+
+/**
+ * CheckAttribute 로그에 Flow Definition 데이터를 추가하여 비교값을 enrichment 합니다
+ */
+export const enrichCheckAttributeLogs = async (
+  logs: ContactLog[],
+  config: AWSConfig
+): Promise<ContactLog[]> => {
+  const flowDefService = getFlowDefinitionService(config);
+  const enrichedLogs = await Promise.all(
+    logs.map(async (log) => {
+      // CheckAttribute가 아니면 그대로 반환
+      if (log.ContactFlowModuleType !== 'CheckAttribute') {
+        return log;
+      }
+
+      // Identifier와 ContactFlowId가 없으면 enrichment 불가
+      if (!log.Identifier || !log.ContactFlowId) {
+        return log;
+      }
+
+      try {
+        // Flow definition에서 비교값 가져오기
+        const comparisonValue = await flowDefService.getComparisonValue(
+          log.ContactFlowId,
+          log.Identifier,
+          'ComparisonValue',
+          false
+        );
+
+        const comparisonSecondValue = await flowDefService.getComparisonValue(
+          log.ContactFlowId,
+          log.Identifier,
+          'ComparisonValue',
+          true
+        );
+
+        // Parameters에 flow definition 정보 추가
+        if (comparisonValue || comparisonSecondValue) {
+          return {
+            ...log,
+            Parameters: {
+              ...log.Parameters,
+              _comparisonValue: comparisonValue,
+              _comparisonSecondValue: comparisonSecondValue,
+            },
+          };
+        }
+
+        return log;
+      } catch (error) {
+        console.error('Error enriching CheckAttribute log:', error);
+        return log;
+      }
+    })
+  );
+
+  return enrichedLogs;
+};
+
+/**
+ * CheckAttribute 로그 병합 시 각 파라미터에 enrichment 데이터도 병합합니다
+ * 이 함수는 이미 enriched된 로그를 처리한 후 병합할 때 사용됩니다
+ */
+export const preserveEnrichmentInMerge = (logs: ContactLog[]): any[] => {
+  return logs.map(log => ({
+    ...log.Parameters,
+    Results: log.Results,
+    _comparisonValue: log.Parameters?._comparisonValue,
+    _comparisonSecondValue: log.Parameters?._comparisonSecondValue,
+  }));
+};
 
 // 헬퍼 함수: 상세 뷰를 위해 로그를 처리합니다.
 // 모듈 로그를 청킹하고 SetAttributes 로그를 병합하는 로직을 통합합니다.
@@ -20,11 +93,13 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       const baseLog = { ...attributesGroup[0] };
       const isCheckAttribute = baseLog.ContactFlowModuleType === 'CheckAttribute';
 
-      // CheckAttribute의 경우 Parameters에 Results 키를 추가
+      // CheckAttribute의 경우 Parameters에 Results 키를 추가하고 enrichment 데이터 보존
       if (isCheckAttribute) {
         baseLog.Parameters = attributesGroup.map(log => ({
           ...log.Parameters,
-          Results: log.Results
+          Results: log.Results,
+          _comparisonValue: log.Parameters?._comparisonValue,
+          _comparisonSecondValue: log.Parameters?._comparisonSecondValue,
         }));
       } else {
         // SetAttributes, SetFlowAttributes의 경우 Parameters만 배열로 저장

@@ -38,6 +38,8 @@ import ReactFlow, {
 } from 'react-flow-renderer';
 import { ContactLog } from '@/types/contact.types';
 import CustomNode from '@/components/FlowNodes/CustomNode';
+import { useConfig } from '@/contexts/ConfigContext';
+import { enrichCheckAttributeLogs } from '@/utils/logProcessor';
 
 const nodeTypes = {
   custom: (props: any) => <CustomNode {...props} isMainView={false} />,
@@ -69,11 +71,13 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
       const baseLog = { ...group[0] };
       const isCheckAttribute = baseLog.ContactFlowModuleType === 'CheckAttribute';
 
-      // CheckAttribute의 경우 Parameters에 Results 키를 추가
+      // CheckAttribute의 경우 Parameters에 Results 키를 추가하고 enrichment 데이터 보존
       if (isCheckAttribute) {
         baseLog.Parameters = group.map(log => ({
           ...log.Parameters,
-          Results: log.Results
+          Results: log.Results,
+          _comparisonValue: log.Parameters?._comparisonValue,
+          _comparisonSecondValue: log.Parameters?._comparisonSecondValue,
         }));
       } else {
         // SetAttributes, SetFlowAttributes의 경우 Parameters만 배열로 저장
@@ -126,12 +130,14 @@ const ModuleDetailViewer: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as LocationState;
+  const { config } = useConfig();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ReactFlowNode[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   const [originalLogs, setOriginalLogs] = useState<ContactLog[]>([]);
   const [processedLogs, setProcessedLogs] = useState<ContactLog[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [selectedLog, setSelectedLog] = useState<ContactLog | null>(null);
   const [isTimelineVisible, setIsTimelineVisible] = useState(false);
@@ -164,17 +170,35 @@ const ModuleDetailViewer: React.FC = () => {
 
   // Initialize logs from location state
   useEffect(() => {
-    if (state?.chunkedLogs) {
-      setOriginalLogs(state.chunkedLogs);
+    const processLogs = async () => {
+      if (state?.chunkedLogs && config) {
+        setIsLoading(true);
+        try {
+          setOriginalLogs(state.chunkedLogs);
 
-      // SetAttributes 병합
-      const consolidated = consolidateSetAttributesLogs(state.chunkedLogs);
-      setProcessedLogs(consolidated);
+          // 1. CheckAttribute 로그에 flow definition 데이터 추가
+          const enrichedLogs = await enrichCheckAttributeLogs(state.chunkedLogs, config);
 
-      buildFlowVisualization(consolidated);
-    }
+          // 2. SetAttributes 병합
+          const consolidated = consolidateSetAttributesLogs(enrichedLogs);
+          setProcessedLogs(consolidated);
+
+          buildFlowVisualization(consolidated);
+        } catch (error) {
+          console.error('Error processing logs:', error);
+          // 에러 발생 시 enrichment 없이 진행
+          const consolidated = consolidateSetAttributesLogs(state.chunkedLogs);
+          setProcessedLogs(consolidated);
+          buildFlowVisualization(consolidated);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    processLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
+  }, [state, config]);
 
   // Build flow visualization from chunked logs with "ㄹ" pattern layout
   const buildFlowVisualization = (logsToProcess: ContactLog[]) => {

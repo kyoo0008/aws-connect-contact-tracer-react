@@ -63,6 +63,8 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
   let currentGroupType: string | null = null;
   let getUserInputGroup: ContactLog[] = [];
   let currentGetUserInputIdentifier: string | null = null;
+  let invokeExternalGroup: ContactLog[] = [];
+  let currentInvokeExternalIdentifier: string | null = null;
 
   const mergeGroup = () => {
     if (group.length === 0) return;
@@ -129,6 +131,29 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
     currentGetUserInputIdentifier = null;
   };
 
+  const mergeInvokeExternalGroup = () => {
+    if (invokeExternalGroup.length === 0) return;
+
+    if (invokeExternalGroup.length === 1) {
+      consolidated.push(invokeExternalGroup[0]);
+    } else {
+      // InvokeExternalResource 로그 병합: 첫 번째 로그의 Parameters를 사용하고, 마지막 로그의 ExternalResults를 footer로 표시
+      const baseLog = { ...invokeExternalGroup[0] };
+
+      // 마지막 로그의 ExternalResults 사용
+      const finalExternalResults = invokeExternalGroup[invokeExternalGroup.length - 1].ExternalResults;
+      baseLog.ExternalResults = finalExternalResults;
+      baseLog.Timestamp = invokeExternalGroup[invokeExternalGroup.length - 1].Timestamp;
+
+      // Footer에 표시할 ExternalResults를 별도 필드로 저장
+      (baseLog as any)._footerExternalResults = finalExternalResults;
+
+      consolidated.push(baseLog);
+    }
+    invokeExternalGroup = [];
+    currentInvokeExternalIdentifier = null;
+  };
+
   for (const log of logs) {
     if (['GetUserInput','PlayPrompt','StoreUserInput'].includes(log.ContactFlowModuleType)) {
       // GetUserInput 로그 처리: 같은 Identifier를 가진 연속된 로그를 병합
@@ -139,16 +164,33 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
         mergeGetUserInputGroup();
       }
 
-      // 이전에 SetAttributes 그룹이 있었다면 먼저 병합
+      // 이전에 다른 그룹이 있었다면 먼저 병합
       mergeGroup();
+      mergeInvokeExternalGroup();
 
       currentGetUserInputIdentifier = identifier || null;
       getUserInputGroup.push(log);
+    } else if (['InvokeExternalResource', 'InvokeLambdaFunction'].includes(log.ContactFlowModuleType)) {
+      // InvokeExternalResource 로그 처리: 같은 Identifier를 가진 연속된 로그를 병합
+      const identifier = log.Identifier;
+
+      // Identifier가 다르면 이전 그룹을 먼저 병합
+      if (currentInvokeExternalIdentifier !== null && currentInvokeExternalIdentifier !== identifier) {
+        mergeInvokeExternalGroup();
+      }
+
+      // 이전에 다른 그룹이 있었다면 먼저 병합
+      mergeGroup();
+      mergeGetUserInputGroup();
+
+      currentInvokeExternalIdentifier = identifier || null;
+      invokeExternalGroup.push(log);
     } else if (['SetAttributes', 'SetFlowAttributes', 'CheckAttribute'].includes(log.ContactFlowModuleType)) {
       const logType = log.ContactFlowModuleType;
 
-      // GetUserInput 그룹이 있었다면 먼저 병합
+      // 다른 그룹이 있었다면 먼저 병합
       mergeGetUserInputGroup();
+      mergeInvokeExternalGroup();
 
       // 타입이 다르면 이전 그룹을 먼저 병합
       if (currentGroupType !== null && currentGroupType !== logType) {
@@ -160,12 +202,14 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
     } else {
       mergeGroup();
       mergeGetUserInputGroup();
+      mergeInvokeExternalGroup();
       consolidated.push(log);
     }
   }
 
   mergeGroup();
   mergeGetUserInputGroup();
+  mergeInvokeExternalGroup();
   return consolidated;
 };
 
@@ -304,11 +348,12 @@ const ModuleDetailViewer: React.FC = () => {
           moduleType: log.ContactFlowModuleType,
           parameters: log.Parameters,
           results: log.Results,
+          externalResults: log.ExternalResults, // ExternalResults 추가
           error: hasError,
           timestamp: log.Timestamp,
           sourcePosition,
           targetPosition,
-          logData: log,
+          logData: log, // footer를 위해 필요
           isMainView: false, // Module Detail View임을 CustomNode에 전달
         },
         style: {

@@ -25,6 +25,8 @@ interface CustomNodeProps {
 }
 
 const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
+  if(data.logData.ContactFlowModuleType === 'InvokeExternalResource')
+    console.log(data.logData)
   const isMainView = data.isMainView || false;
   const hasError = data.error || false;
   const isModuleNode = data.isModuleNode || false;
@@ -101,6 +103,9 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const hasFooterResults = data.logData?._footerResults && ['PlayPrompt','StoreUserInput','GetUserInput'].includes(data?.moduleType ?? '');
   const footerResults = data.logData?._footerResults;
 
+  const hasFooterExternalResults = data.logData?._footerExternalResults && ['InvokeExternalResource', 'InvokeLambdaFunction'].includes(data?.moduleType ?? '');
+  const footerExternalResults = data.logData?._footerExternalResults;
+
   return (
     <Box
       sx={{
@@ -159,6 +164,25 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
             color: footerResults?.includes('Error') || footerResults?.includes('Timeout') ? '#D32F2F' : '#2E7D32'
           }}>
             Results: {footerResults}
+          </Typography>
+        </Box>
+      )}
+
+      {/* Footer - InvokeExternalResource Results */}
+      {!isMainView && hasFooterExternalResults && (
+        <Box sx={{
+          borderTop: `1px solid ${borderColor}`,
+          p: 1,
+          backgroundColor: footerExternalResults?.isSuccess === 'false' ? '#FFEBEE' : '#E8F5E9',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '32px'
+        }}>
+          <Typography variant="caption" fontWeight="bold" sx={{
+            color: footerExternalResults?.isSuccess === 'false' ? '#D32F2F' : '#2E7D32'
+          }}>
+            {footerExternalResults?.isSuccess === 'true' ? 'Success ✅' : 'Failed ❌'}
           </Typography>
         </Box>
       )}

@@ -3,61 +3,91 @@ import { getFlowDefinitionService } from '@/services/flowDefinitionService';
 
 /**
  * CheckAttribute 로그에 Flow Definition 데이터를 추가하여 비교값을 enrichment 합니다
+ * 최적화: 각 unique flow/module definition은 한 번만 fetch합니다
  */
 export const enrichCheckAttributeLogs = async (
   logs: ContactLog[],
   config: AWSConfig
 ): Promise<ContactLog[]> => {
   const flowDefService = getFlowDefinitionService(config);
-  const enrichedLogs = await Promise.all(
-    logs.map(async (log) => {
-      // CheckAttribute가 아니면 그대로 반환
-      if (log.ContactFlowModuleType !== 'CheckAttribute') {
-        return log;
-      }
 
-      // Identifier와 ContactFlowId가 없으면 enrichment 불가
-      if (!log.Identifier || !log.ContactFlowId) {
-        return log;
-      }
+  // Step 1: 모든 CheckAttribute 로그에서 unique flow IDs 추출
+  const uniqueFlowIds = new Set<string>();
+  const checkAttributeLogs: ContactLog[] = [];
 
-      try {
-        // Flow definition에서 비교값 가져오기
-        const comparisonValue = await flowDefService.getComparisonValue(
-          log.ContactFlowId,
-          log.Identifier,
-          'ComparisonValue',
-          false
-        );
+  logs.forEach((log) => {
+    if (log.ContactFlowModuleType === 'CheckAttribute' && log.Identifier && log.ContactFlowId) {
+      uniqueFlowIds.add(log.ContactFlowId);
+      checkAttributeLogs.push(log);
+    }
+  });
 
-        const comparisonSecondValue = await flowDefService.getComparisonValue(
-          log.ContactFlowId,
-          log.Identifier,
-          'ComparisonValue',
-          true
-        );
+  // Step 2: 모든 unique flow definitions을 한 번씩만 fetch (병렬 처리)
+  const flowDefinitionPromises = Array.from(uniqueFlowIds).map(async (flowId) => {
+    try {
+      await flowDefService.getFlowDefinitionByArn(flowId);
+    } catch (error) {
+      console.error(`Error fetching flow definition for ${flowId}:`, error);
+    }
+  });
 
-        // Parameters에 flow definition 정보 추가
-        if (comparisonValue || comparisonSecondValue) {
-          return {
-            ...log,
-            Parameters: {
-              ...log.Parameters,
-              _comparisonValue: comparisonValue,
-              _comparisonSecondValue: comparisonSecondValue,
-            },
-          };
+  // 모든 flow definitions이 cache에 로드될 때까지 대기
+  await Promise.all(flowDefinitionPromises);
+
+  // Step 3: 이제 cache에서 데이터를 가져와 logs를 enrichment
+  const enrichedLogs = logs.map((log) => {
+    // CheckAttribute가 아니면 그대로 반환
+    if (log.ContactFlowModuleType !== 'CheckAttribute') {
+      return log;
+    }
+
+    // Identifier와 ContactFlowId가 없으면 enrichment 불가
+    if (!log.Identifier || !log.ContactFlowId) {
+      return log;
+    }
+
+    try {
+      // Cache에서 가져오기 (동기적으로 처리 가능 - 이미 cache됨)
+      // getComparisonValue는 내부적으로 cache된 flow definition을 사용
+      const comparisonValuePromise = flowDefService.getComparisonValue(
+        log.ContactFlowId,
+        log.Identifier,
+        'ComparisonValue',
+        false
+      );
+
+      const comparisonSecondValuePromise = flowDefService.getComparisonValue(
+        log.ContactFlowId,
+        log.Identifier,
+        'ComparisonValue',
+        true
+      );
+
+      // 비동기 처리를 위해 Promise 반환
+      return Promise.all([comparisonValuePromise, comparisonSecondValuePromise]).then(
+        ([comparisonValue, comparisonSecondValue]) => {
+          // Parameters에 flow definition 정보 추가
+          if (comparisonValue || comparisonSecondValue) {
+            return {
+              ...log,
+              Parameters: {
+                ...log.Parameters,
+                _comparisonValue: comparisonValue,
+                _comparisonSecondValue: comparisonSecondValue,
+              },
+            };
+          }
+          return log;
         }
+      );
+    } catch (error) {
+      console.error('Error enriching CheckAttribute log:', error);
+      return log;
+    }
+  });
 
-        return log;
-      } catch (error) {
-        console.error('Error enriching CheckAttribute log:', error);
-        return log;
-      }
-    })
-  );
-
-  return enrichedLogs;
+  // Step 4: 모든 enrichment 완료 대기
+  return Promise.all(enrichedLogs);
 };
 
 /**
@@ -85,6 +115,8 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
   let currentGroupType: string | null = null;
   let getUserInputGroup: ContactLog[] = [];
   let currentGetUserInputIdentifier: string | null = null;
+  let invokeExternalGroup: ContactLog[] = [];
+  let currentInvokeExternalIdentifier: string | null = null;
 
   const mergeAttributesGroup = () => {
     if (attributesGroup.length === 0) return;
@@ -132,7 +164,10 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
     if (getUserInputGroup.length === 0) return;
 
     if (getUserInputGroup.length === 1) {
-      processed.push(getUserInputGroup[0]);
+      // 단일 로그도 footer 표시를 위해 _footerResults 추가
+      const log = { ...getUserInputGroup[0] };
+      (log as any)._footerResults = log.Results;
+      processed.push(log);
     } else {
       // GetUserInput 로그 병합: 첫 번째 로그의 Parameters를 사용하고, 마지막 로그의 Results를 footer로 표시
       const baseLog = { ...getUserInputGroup[0] };
@@ -151,6 +186,32 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
     currentGetUserInputIdentifier = null;
   };
 
+  const mergeInvokeExternalGroup = () => {
+    if (invokeExternalGroup.length === 0) return;
+
+    if (invokeExternalGroup.length === 1) {
+      // 단일 로그도 footer 표시를 위해 _footerExternalResults 추가
+      const log = { ...invokeExternalGroup[0] };
+      (log as any)._footerExternalResults = log.ExternalResults;
+      processed.push(log);
+    } else {
+      // InvokeExternalResource 로그 병합: 첫 번째 로그의 Parameters를 사용하고, 마지막 로그의 ExternalResults를 footer로 표시
+      const baseLog = { ...invokeExternalGroup[0] };
+
+      // 마지막 로그의 ExternalResults 사용
+      const finalExternalResults = invokeExternalGroup[invokeExternalGroup.length - 1].ExternalResults;
+      baseLog.ExternalResults = finalExternalResults;
+      baseLog.Timestamp = invokeExternalGroup[invokeExternalGroup.length - 1].Timestamp;
+
+      // Footer에 표시할 ExternalResults를 별도 필드로 저장
+      (baseLog as any)._footerExternalResults = finalExternalResults;
+
+      processed.push(baseLog);
+    }
+    invokeExternalGroup = [];
+    currentInvokeExternalIdentifier = null;
+  };
+
   let i = 0;
   while (i < logs.length) {
     const log = logs[i];
@@ -162,6 +223,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
     if (isInvokeFlowModule) {
       mergeAttributesGroup();
       mergeGetUserInputGroup();
+      mergeInvokeExternalGroup();
 
       // InvokeFlowModule 다음에 오는 MOD_ 로그들 찾기
       let j = i + 1;
@@ -225,18 +287,36 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
         mergeGetUserInputGroup();
       }
 
-      // 이전에 SetAttributes 그룹이 있었다면 먼저 병합
+      // 이전에 다른 그룹이 있었다면 먼저 병합
       mergeAttributesGroup();
+      mergeInvokeExternalGroup();
 
       currentGetUserInputIdentifier = identifier || null;
       getUserInputGroup.push(log);
+      i++;
+    } else if (['InvokeExternalResource', 'InvokeLambdaFunction'].includes(log.ContactFlowModuleType)) {
+      // InvokeExternalResource 로그 처리: 같은 Identifier를 가진 연속된 로그를 병합
+      const identifier = log.Identifier;
+
+      // Identifier가 다르면 이전 그룹을 먼저 병합
+      if (currentInvokeExternalIdentifier !== null && currentInvokeExternalIdentifier !== identifier) {
+        mergeInvokeExternalGroup();
+      }
+
+      // 이전에 다른 그룹이 있었다면 먼저 병합
+      mergeAttributesGroup();
+      mergeGetUserInputGroup();
+
+      currentInvokeExternalIdentifier = identifier || null;
+      invokeExternalGroup.push(log);
       i++;
     } else if (['SetAttributes', 'SetFlowAttributes', 'CheckAttribute'].includes(log.ContactFlowModuleType)) {
       // 같은 타입의 연속된 로그만 그룹화
       const logType = log.ContactFlowModuleType;
 
-      // GetUserInput 그룹이 있었다면 먼저 병합
+      // 다른 그룹이 있었다면 먼저 병합
       mergeGetUserInputGroup();
+      mergeInvokeExternalGroup();
 
       // 타입이 다르면 이전 그룹을 먼저 병합
       if (currentGroupType !== null && currentGroupType !== logType) {
@@ -249,6 +329,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
     } else {
       mergeAttributesGroup();
       mergeGetUserInputGroup();
+      mergeInvokeExternalGroup();
       processed.push(log);
       i++;
     }
@@ -256,6 +337,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
 
   mergeAttributesGroup();
   mergeGetUserInputGroup();
+  mergeInvokeExternalGroup();
 
   return processed;
 };

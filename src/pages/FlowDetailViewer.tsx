@@ -196,11 +196,12 @@ const FlowDetailViewer: React.FC = () => {
           moduleType: isModuleNode ? 'FlowModule' : log.ContactFlowModuleType,
           parameters: log.Parameters,
           results: log.Results,
+          externalResults: log.ExternalResults, // ExternalResults 추가
           error: hasError,
           timestamp: log.Timestamp,
           sourcePosition,
           targetPosition,
-          logData: log, // 노드 클릭 시 사용할 병합된 로그 데이터
+          logData: log, // 노드 클릭 시 사용할 병합된 로그 데이터 (footer를 위해 필요)
           isModuleNode, // 모듈 노드 플래그
           moduleLogs, // 모듈 내부 로그들
           timeRange: (log as any)._timeRange, // 모듈 시간 범위

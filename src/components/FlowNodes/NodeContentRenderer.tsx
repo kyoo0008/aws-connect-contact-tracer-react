@@ -23,7 +23,7 @@ const getOperatorSymbol = (op: string) => {
 };
 
 export const NodeContentRenderer = ({ data }: { data: any }) => {
-  const { moduleType, parameters, results, externalResults } = data;
+  const { moduleType, parameters, results } = data;
   const params = parameters || {};
 
   const renderContent = () => {
@@ -65,11 +65,7 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
                 {key}: {renderValue(value)}
               </Typography>
             ))}
-            {externalResults && (
-              <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                <small>Result: {externalResults.isSuccess === 'true' ? 'Success ✅' : 'Failed ❌'}</small>
-              </Typography>
-            )}
+            {/* Results는 이제 Footer에 표시되므로 여기서는 제거 */}
           </Box>
         );
       }

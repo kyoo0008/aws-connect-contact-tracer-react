@@ -25,8 +25,6 @@ interface CustomNodeProps {
 }
 
 const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
-  if(data.logData.ContactFlowModuleType === 'InvokeExternalResource')
-    console.log(data.logData)
   const isMainView = data.isMainView || false;
   const hasError = data.error || false;
   const isModuleNode = data.isModuleNode || false;
@@ -34,27 +32,6 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const borderColor = hasError ? '#F44336' : isModuleNode ? '#2196F3' : '#E0E0E0';
   const targetPosition = data.targetPosition || Position.Left;
   const sourcePosition = data.sourcePosition || Position.Right;
-
-  // Ref for the scrollable body content
-  const bodyRef = React.useRef<HTMLDivElement>(null);
-  const [isHovered, setIsHovered] = React.useState(false);
-
-  // Handle wheel event to enable node scrolling on hover
-  const handleWheel = React.useCallback((e: React.WheelEvent) => {
-    if (bodyRef.current && isHovered) {
-      const { scrollTop, scrollHeight, clientHeight } = bodyRef.current;
-      const isScrollable = scrollHeight > clientHeight;
-
-      if (isScrollable) {
-        // Prevent ReactFlow zoom and panning when scrolling inside node
-        e.stopPropagation();
-
-        // Manually handle the scroll
-        const scrollAmount = e.deltaY;
-        bodyRef.current.scrollTop += scrollAmount;
-      }
-    }
-  }, [isHovered]);
 
   const renderMainViewContent = () => (
     <>
@@ -120,6 +97,35 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
     );
   };
 
+  const handleWheel = (event: React.WheelEvent) => {
+    const target = event.currentTarget as HTMLElement;
+    const { scrollTop, scrollHeight, clientHeight } = target;
+    
+    // Check if content is scrollable
+    const isScrollable = scrollHeight > clientHeight;
+    
+    if (isScrollable) {
+      // Scrolling down
+      if (event.deltaY > 0) {
+        // If we're at the bottom, allow event to propagate (for ReactFlow zoom)
+        if (scrollTop + clientHeight >= scrollHeight - 1) {
+          return;
+        }
+      }
+      // Scrolling up
+      else {
+        // If we're at the top, allow event to propagate (for ReactFlow zoom)
+        if (scrollTop <= 1) {
+          return;
+        }
+      }
+      
+      // We're in the middle of scrollable content, prevent ReactFlow zoom
+      event.stopPropagation();
+    }
+    // If not scrollable, allow ReactFlow to handle the zoom
+  };
+
 
   const hasFooterResults = data.logData?._footerResults && ['PlayPrompt','StoreUserInput','GetUserInput'].includes(data?.moduleType ?? '');
   const footerResults = data.logData?._footerResults;
@@ -151,26 +157,33 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
       <Handle type="target" position={Position.Right} id="target-right" style={{ background: '#555' }} />
 
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, borderBottom: `1px solid ${borderColor}` }}>
-        <img
-          src={isMainView ? `/icons/img/InvokeFlowModule.png` : `/icons/img/${data.moduleType}.png`}
-          alt={`${data.moduleType} icon`}
-          width="20"
-          height="20"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          style={{ objectFit: 'contain' }}
-        />
-        <Typography variant="subtitle2" fontWeight="600" sx={{ color: hasError ? '#D32F2F' : '#1976D2' }} noWrap>
-          {data.label}
-        </Typography>
+      <Box sx={{ borderBottom: `1px solid ${borderColor}` }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, pb: 0.5 }}>
+          <img
+            src={isMainView ? `/icons/img/InvokeFlowModule.png` : `/icons/img/${data.moduleType}.png`}
+            alt={`${data.moduleType} icon`}
+            width="20"
+            height="20"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            style={{ objectFit: 'contain' }}
+          />
+          <Typography variant="subtitle2" fontWeight="600" sx={{ color: hasError ? '#D32F2F' : '#1976D2' }} noWrap>
+            {data.label}
+          </Typography>
+        </Box>
+        {data.logData?.Identifier && (
+          <Box sx={{ px: 1, pb: 0.5 }}>
+            <Typography variant="caption" sx={{ color: '#6B7280', fontSize: '0.65rem' }} noWrap>
+              {data.logData.Identifier}
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       {/* Body */}
       <Box
-        ref={bodyRef}
-        onWheel={handleWheel}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        className="nodrag" // Prevents react-flow drag events on this element
+        onWheel={handleWheel} // Prevents zoom on scroll
         sx={{ flex: 1, overflowY: 'auto', p: 1, minHeight: 0 }}
       >
         {isMainView ? renderMainViewContent() : renderDetailViewContent()}

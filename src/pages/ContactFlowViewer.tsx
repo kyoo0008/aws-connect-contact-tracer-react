@@ -243,7 +243,7 @@ const ContactFlowViewer: React.FC = () => {
     linkElement.click();
   };
 
-  // Handle search
+  // Handle search with deep search support
   const handleSearch = (term: string) => {
     setSearchTerm(term);
 
@@ -252,10 +252,42 @@ const ContactFlowViewer: React.FC = () => {
         const lowerTerm = term.toLowerCase();
         const label = node.data?.label || '';
         const parameters = node.data?.parameters || {};
+        const timeRange = node.data?.timeRange as { start: string; end: string } | undefined;
 
-        const matches =
+        // Basic search (current node)
+        let matches =
           label.toLowerCase().includes(lowerTerm) ||
           JSON.stringify(parameters).toLowerCase().includes(lowerTerm);
+
+        // Deep search (search in all logs within this flow's time range)
+        if (!matches && timeRange && queryData?.originalLogs) {
+          const allLogs = queryData.originalLogs;
+          const startTime = new Date(timeRange.start).getTime();
+          const endTime = new Date(timeRange.end).getTime();
+
+          // Find logs within this flow's time range
+          matches = allLogs.some((log: ContactLog) => {
+            const logTime = new Date(log.Timestamp).getTime();
+
+            // Check if log is within time range
+            if (logTime >= startTime && logTime <= endTime) {
+              const logLabel = log.ContactFlowModuleType || '';
+              const logParams = log.Parameters || {};
+              const logId = log.Identifier || '';
+              const logResults = log.Results || '';
+              const logExternalResults = log.ExternalResults || {};
+
+              return (
+                logLabel.toLowerCase().includes(lowerTerm) ||
+                logId.toLowerCase().includes(lowerTerm) ||
+                logResults.toLowerCase().includes(lowerTerm) ||
+                JSON.stringify(logParams).toLowerCase().includes(lowerTerm) ||
+                JSON.stringify(logExternalResults).toLowerCase().includes(lowerTerm)
+              );
+            }
+            return false;
+          });
+        }
 
         return {
           ...node,

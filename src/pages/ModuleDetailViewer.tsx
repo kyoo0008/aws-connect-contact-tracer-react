@@ -15,6 +15,8 @@ import {
   Chip,
   Stack,
   Divider,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -23,6 +25,7 @@ import {
   Error as ErrorIcon,
   AccessTime as TimeIcon,
   VerticalSplit as VerticalSplitIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import ReactFlow, {
   Node as ReactFlowNode,
@@ -230,6 +233,7 @@ const ModuleDetailViewer: React.FC = () => {
   const [selectedLog, setSelectedLog] = useState<ContactLog | null>(null);
   const [isTimelineVisible, setIsTimelineVisible] = useState(false);
   const detailsPanelRef = React.useRef<HTMLDivElement>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Effect to handle Esc key and click outside to close details panel
   useEffect(() => {
@@ -420,6 +424,46 @@ const ModuleDetailViewer: React.FC = () => {
     linkElement.click();
   };
 
+  // Handle search
+  const handleSearch = (term: string) => {
+    setSearchTerm(term);
+
+    if (term) {
+      const filteredNodes = nodes.map((node: ReactFlowNode) => {
+        const lowerTerm = term.toLowerCase();
+        const label = node.data?.label || '';
+        const parameters = node.data?.parameters || {};
+        const identifier = node.data?.logData?.Identifier || '';
+
+        const matches =
+          label.toLowerCase().includes(lowerTerm) ||
+          identifier.toLowerCase().includes(lowerTerm) ||
+          JSON.stringify(parameters).toLowerCase().includes(lowerTerm);
+
+        return {
+          ...node,
+          style: {
+            ...node.style,
+            opacity: matches ? 1 : 0.3,
+          },
+        };
+      });
+
+      setNodes(filteredNodes);
+    } else {
+      // Reset opacity
+      const resetNodes = nodes.map((node: ReactFlowNode) => ({
+        ...node,
+        style: {
+          ...node.style,
+          opacity: 1,
+        },
+      }));
+
+      setNodes(resetNodes);
+    }
+  };
+
   const renderValue = (value: any) => {
     if (typeof value === 'object' && value !== null) {
       return (
@@ -460,54 +504,74 @@ const ModuleDetailViewer: React.FC = () => {
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Toolbar */}
-      <Paper elevation={1} sx={{ zIndex: 10 }}>
-        <Toolbar>
-          <IconButton edge="start" onClick={() => navigate(-1)}>
-            <BackIcon />
-          </IconButton>
-          <Typography variant="h6" sx={{ flexGrow: 1, ml: 2 }}>
-            Module Detail: {state?.moduleName || moduleName || 'Unknown'}
-          </Typography>
-          <Stack direction="row" spacing={1}>
-            <Tooltip title="Export JSON">
-              <IconButton onClick={handleExport}>
-                <DownloadIcon />
-              </IconButton>
-            </Tooltip>
-            {/* <Tooltip title={isTimelineVisible ? "Hide Details" : "Show Details"}>
-              <IconButton onClick={() => setIsTimelineVisible(!isTimelineVisible)}>
-                <VerticalSplitIcon />
-              </IconButton>
-            </Tooltip> */}
-          </Stack>
-        </Toolbar>
-      </Paper>
+      {/* Header - Fixed */}
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1000, backgroundColor: 'background.paper' }}>
+        {/* Toolbar */}
+        <Paper elevation={1} sx={{ zIndex: 10 }}>
+          <Toolbar>
+            <IconButton edge="start" onClick={() => navigate(-1)}>
+              <BackIcon />
+            </IconButton>
+            <Typography variant="h6" sx={{ flexGrow: 1, ml: 2 }}>
+              Module Detail: {state?.moduleName || moduleName || 'Unknown'}
+            </Typography>
 
-      {/* Module Statistics */}
-      <Paper elevation={0} sx={{ p: 1, borderBottom: 1, borderColor: 'divider' }}>
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Chip
-            label={`Total Logs: ${originalLogs.length}`}
-            size="small"
-            color="primary"
-            variant="outlined"
-          />
-          <Chip
-            label={`Time Range: ${timeRangeText}`}
-            size="small"
-            color="secondary"
-            variant="outlined"
-          />
-          <Chip
-            icon={errorCount > 0 ? <ErrorIcon /> : <SuccessIcon />}
-            label={`Errors: ${errorCount}`}
-            size="small"
-            color={errorCount > 0 ? 'error' : 'default'}
-            variant="outlined"
-          />
-        </Stack>
-      </Paper>
+            {/* Search */}
+            <TextField
+              size="small"
+              placeholder="Search nodes..."
+              value={searchTerm}
+              onChange={(e) => handleSearch(e.target.value)}
+              sx={{ mr: 2, width: 250 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            <Stack direction="row" spacing={1}>
+              <Tooltip title="Export JSON">
+                <IconButton onClick={handleExport}>
+                  <DownloadIcon />
+                </IconButton>
+              </Tooltip>
+              {/* <Tooltip title={isTimelineVisible ? "Hide Details" : "Show Details"}>
+                <IconButton onClick={() => setIsTimelineVisible(!isTimelineVisible)}>
+                  <VerticalSplitIcon />
+                </IconButton>
+              </Tooltip> */}
+            </Stack>
+          </Toolbar>
+        </Paper>
+
+        {/* Module Statistics */}
+        <Paper elevation={0} sx={{ p: 1, borderBottom: 1, borderColor: 'divider' }}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Chip
+              label={`Total Logs: ${originalLogs.length}`}
+              size="small"
+              color="primary"
+              variant="outlined"
+            />
+            <Chip
+              label={`Time Range: ${timeRangeText}`}
+              size="small"
+              color="secondary"
+              variant="outlined"
+            />
+            <Chip
+              icon={errorCount > 0 ? <ErrorIcon /> : <SuccessIcon />}
+              label={`Errors: ${errorCount}`}
+              size="small"
+              color={errorCount > 0 ? 'error' : 'default'}
+              variant="outlined"
+            />
+          </Stack>
+        </Paper>
+      </Box>
 
       {/* Main Content: Split View */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>

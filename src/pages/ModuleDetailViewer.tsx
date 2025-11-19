@@ -61,6 +61,8 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
   const consolidated: ContactLog[] = [];
   let group: ContactLog[] = [];
   let currentGroupType: string | null = null;
+  let getUserInputGroup: ContactLog[] = [];
+  let currentGetUserInputIdentifier: string | null = null;
 
   const mergeGroup = () => {
     if (group.length === 0) return;
@@ -104,9 +106,49 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
     currentGroupType = null;
   };
 
+  const mergeGetUserInputGroup = () => {
+    if (getUserInputGroup.length === 0) return;
+
+    if (getUserInputGroup.length === 1) {
+      consolidated.push(getUserInputGroup[0]);
+    } else {
+      // GetUserInput 로그 병합: 첫 번째 로그의 Parameters를 사용하고, 마지막 로그의 Results를 footer로 표시
+      const baseLog = { ...getUserInputGroup[0] };
+
+      // 마지막 로그의 Results 사용 (사용자 입력 결과)
+      const finalResults = getUserInputGroup[getUserInputGroup.length - 1].Results;
+      baseLog.Results = finalResults;
+      baseLog.Timestamp = getUserInputGroup[getUserInputGroup.length - 1].Timestamp;
+
+      // Footer에 표시할 Results를 별도 필드로 저장
+      (baseLog as any)._footerResults = finalResults;
+
+      consolidated.push(baseLog);
+    }
+    getUserInputGroup = [];
+    currentGetUserInputIdentifier = null;
+  };
+
   for (const log of logs) {
-     if (['SetAttributes', 'SetFlowAttributes', 'CheckAttribute'].includes(log.ContactFlowModuleType)) {
+    if (['GetUserInput','PlayPrompt','StoreUserInput'].includes(log.ContactFlowModuleType)) {
+      // GetUserInput 로그 처리: 같은 Identifier를 가진 연속된 로그를 병합
+      const identifier = log.Identifier;
+
+      // Identifier가 다르면 이전 그룹을 먼저 병합
+      if (currentGetUserInputIdentifier !== null && currentGetUserInputIdentifier !== identifier) {
+        mergeGetUserInputGroup();
+      }
+
+      // 이전에 SetAttributes 그룹이 있었다면 먼저 병합
+      mergeGroup();
+
+      currentGetUserInputIdentifier = identifier || null;
+      getUserInputGroup.push(log);
+    } else if (['SetAttributes', 'SetFlowAttributes', 'CheckAttribute'].includes(log.ContactFlowModuleType)) {
       const logType = log.ContactFlowModuleType;
+
+      // GetUserInput 그룹이 있었다면 먼저 병합
+      mergeGetUserInputGroup();
 
       // 타입이 다르면 이전 그룹을 먼저 병합
       if (currentGroupType !== null && currentGroupType !== logType) {
@@ -117,11 +159,13 @@ const consolidateSetAttributesLogs = (logs: ContactLog[]): ContactLog[] => {
       group.push(log);
     } else {
       mergeGroup();
+      mergeGetUserInputGroup();
       consolidated.push(log);
     }
   }
 
   mergeGroup();
+  mergeGetUserInputGroup();
   return consolidated;
 };
 

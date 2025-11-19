@@ -83,6 +83,8 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
   const processed: ContactLog[] = [];
   let attributesGroup: ContactLog[] = [];
   let currentGroupType: string | null = null;
+  let getUserInputGroup: ContactLog[] = [];
+  let currentGetUserInputIdentifier: string | null = null;
 
   const mergeAttributesGroup = () => {
     if (attributesGroup.length === 0) return;
@@ -126,6 +128,29 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
     currentGroupType = null;
   };
 
+  const mergeGetUserInputGroup = () => {
+    if (getUserInputGroup.length === 0) return;
+
+    if (getUserInputGroup.length === 1) {
+      processed.push(getUserInputGroup[0]);
+    } else {
+      // GetUserInput 로그 병합: 첫 번째 로그의 Parameters를 사용하고, 마지막 로그의 Results를 footer로 표시
+      const baseLog = { ...getUserInputGroup[0] };
+
+      // 마지막 로그의 Results 사용 (사용자 입력 결과)
+      const finalResults = getUserInputGroup[getUserInputGroup.length - 1].Results;
+      baseLog.Results = finalResults;
+      baseLog.Timestamp = getUserInputGroup[getUserInputGroup.length - 1].Timestamp;
+
+      // Footer에 표시할 Results를 별도 필드로 저장
+      (baseLog as any)._footerResults = finalResults;
+
+      processed.push(baseLog);
+    }
+    getUserInputGroup = [];
+    currentGetUserInputIdentifier = null;
+  };
+
   let i = 0;
   while (i < logs.length) {
     const log = logs[i];
@@ -136,6 +161,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
     // InvokeFlowModule을 만나면, 다음 MOD_ 로그들을 찾아서 그룹화
     if (isInvokeFlowModule) {
       mergeAttributesGroup();
+      mergeGetUserInputGroup();
 
       // InvokeFlowModule 다음에 오는 MOD_ 로그들 찾기
       let j = i + 1;
@@ -190,9 +216,27 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       // MOD_ 로그나 ReturnFromFlowModule은 이미 InvokeFlowModule에서 처리됨
       // 혹시 단독으로 있다면 건너뛰기
       i++;
+    } else if (['GetUserInput','PlayPrompt','StoreUserInput'].includes(log.ContactFlowModuleType)) {
+      // GetUserInput 로그 처리: 같은 Identifier를 가진 연속된 로그를 병합
+      const identifier = log.Identifier;
+
+      // Identifier가 다르면 이전 그룹을 먼저 병합
+      if (currentGetUserInputIdentifier !== null && currentGetUserInputIdentifier !== identifier) {
+        mergeGetUserInputGroup();
+      }
+
+      // 이전에 SetAttributes 그룹이 있었다면 먼저 병합
+      mergeAttributesGroup();
+
+      currentGetUserInputIdentifier = identifier || null;
+      getUserInputGroup.push(log);
+      i++;
     } else if (['SetAttributes', 'SetFlowAttributes', 'CheckAttribute'].includes(log.ContactFlowModuleType)) {
       // 같은 타입의 연속된 로그만 그룹화
       const logType = log.ContactFlowModuleType;
+
+      // GetUserInput 그룹이 있었다면 먼저 병합
+      mergeGetUserInputGroup();
 
       // 타입이 다르면 이전 그룹을 먼저 병합
       if (currentGroupType !== null && currentGroupType !== logType) {
@@ -204,12 +248,14 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       i++;
     } else {
       mergeAttributesGroup();
+      mergeGetUserInputGroup();
       processed.push(log);
       i++;
     }
   }
 
   mergeAttributesGroup();
+  mergeGetUserInputGroup();
 
   return processed;
 };

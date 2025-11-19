@@ -59,37 +59,47 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
     </>
   );
 
-  const renderDetailViewContent = () => (
-    <>
-      {!isModuleNode ? (
-        <NodeContentRenderer data={data} />
-      ) : (
-        <>
-          {data.timeRange && (
-            <Box>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {new Date(data.timeRange.start).toLocaleString('ko-KR')} ~
-              </Typography>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {new Date(data.timeRange.end).toLocaleString('ko-KR')}
-              </Typography>
+  const renderDetailViewContent = () => {
+    return (
+      <>
+        {!isModuleNode ? (
+          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ flex: 1, overflowY: 'auto' }}>
+              <NodeContentRenderer data={data} />
             </Box>
-          )}
-          {data.logCount && (
-            <Typography variant="body2" fontWeight="bold" sx={{ mt: 1 }}>
-              Nodes : {data.logCount}
-            </Typography>
-          )}
-           <Chip
-              label="Click to view details"
-              size="small"
-              icon={<ModuleIcon sx={{ fontSize: '1rem' }} />}
-              sx={{ mt: 1, cursor: 'pointer' }}
-            />
-        </>
-      )}
-    </>
-  );
+          </Box>
+        ) : (
+          <>
+            {data.timeRange && (
+              <Box>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {new Date(data.timeRange.start).toLocaleString('ko-KR')} ~
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {new Date(data.timeRange.end).toLocaleString('ko-KR')}
+                </Typography>
+              </Box>
+            )}
+            {data.logCount && (
+              <Typography variant="body2" fontWeight="bold" sx={{ mt: 1 }}>
+                Nodes : {data.logCount}
+              </Typography>
+            )}
+             <Chip
+                label="Click to view details"
+                size="small"
+                icon={<ModuleIcon sx={{ fontSize: '1rem' }} />}
+                sx={{ mt: 1, cursor: 'pointer' }}
+              />
+          </>
+        )}
+      </>
+    );
+  };
+
+
+  const hasFooterResults = data.logData?._footerResults && ['PlayPrompt','StoreUserInput','GetUserInput'].includes(data?.moduleType ?? '');
+  const footerResults = data.logData?._footerResults;
 
   return (
     <Box
@@ -130,9 +140,28 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
       </Box>
 
       {/* Body */}
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 1 }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', p: 1, minHeight: 0 }}>
         {isMainView ? renderMainViewContent() : renderDetailViewContent()}
       </Box>
+
+      {/* Footer - GetUserInput Results */}
+      {!isMainView && hasFooterResults && (
+        <Box sx={{
+          borderTop: `1px solid ${borderColor}`,
+          p: 1,
+          backgroundColor: footerResults?.includes('Error') || footerResults?.includes('Timeout') ? '#FFEBEE' : '#E8F5E9',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '32px'
+        }}>
+          <Typography variant="caption" fontWeight="bold" sx={{
+            color: footerResults?.includes('Error') || footerResults?.includes('Timeout') ? '#D32F2F' : '#2E7D32'
+          }}>
+            Results: {footerResults}
+          </Typography>
+        </Box>
+      )}
 
       {/* Source Handles */}
       <Handle type="source" position={Position.Top} id="source-top" style={{ background: '#555' }} />

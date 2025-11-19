@@ -74,14 +74,52 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
         );
       }
       case 'PlayPrompt':
-      case 'GetUserInput':
-      case 'StoreUserInput': {
+      case 'StoreUserInput':
+      case 'GetUserInput': {
+        // GetUserInput의 경우 Parameters의 주요 정보 표시
         return (
-          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-            {params.Text || params.PromptLocation}
-          </Typography>
+          <Box>
+            {/* Text-to-Speech 또는 S3 Prompt 표시 */}
+            {params.Text && (
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', mb: 1 }}>
+                {renderValue(params.Text, 100)}
+              </Typography>
+            )}
+            {params.PromptLocation && (
+              <Typography variant="caption" display="block" sx={{ mb: 1 }}>
+                📢 Prompt: {renderValue(params.PromptLocation, 50)}
+              </Typography>
+            )}
+            {/* 추가 파라미터 표시 */}
+            {params.TextToSpeechType && (
+              <Typography variant="caption" display="block">
+                TTS Type: {params.TextToSpeechType}
+              </Typography>
+            )}
+            {params.Voice && (
+              <Typography variant="caption" display="block">
+                Voice: {params.Voice}
+              </Typography>
+            )}
+            {params.PromptSource && (
+              <Typography variant="caption" display="block">
+                Source: {params.PromptSource}
+              </Typography>
+            )}
+            {params.MaxDigits && (
+              <Typography variant="caption" display="block">
+                Max Digits: {params.MaxDigits}
+              </Typography>
+            )}
+            {params.Timeout && (
+              <Typography variant="caption" display="block">
+                Timeout: {params.Timeout}ms
+              </Typography>
+            )}
+          </Box>
         );
       }
+      
       case 'SetAttributes':
       case 'SetFlowAttributes': {
         const attrs = Array.isArray(params) ? params : [params];

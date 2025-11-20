@@ -323,6 +323,85 @@ export class AWSConnectService {
   }
 
   /**
+   * Lambda CloudWatch Log 그룹 목록
+   */
+  private readonly LAMBDA_LOG_GROUPS = [
+    "/aws/lambda/aicc-connect-flow-base/flow-agent-workspace-handler",
+    "/aws/lambda/aicc-connect-flow-base/flow-alms-if",
+    "/aws/lambda/aicc-connect-flow-base/flow-chat-app",
+    "/aws/lambda/aicc-connect-flow-base/flow-idnv-async-if",
+    "/aws/lambda/aicc-connect-flow-base/flow-idnv-common-if",
+    "/aws/lambda/aicc-connect-flow-base/flow-internal-handler",
+    "/aws/lambda/aicc-connect-flow-base/flow-kalis-if",
+    "/aws/lambda/aicc-connect-flow-base/flow-mdm-if",
+    "/aws/lambda/aicc-connect-flow-base/flow-ods-if",
+    "/aws/lambda/aicc-connect-flow-base/flow-oneid-if",
+    "/aws/lambda/aicc-connect-flow-base/flow-sample-integration",
+    "/aws/lambda/aicc-connect-flow-base/flow-tms-if",
+    "/aws/lambda/aicc-connect-flow-base/flow-vars-controller",
+    "/aws/lambda/aicc-chat-app/alb-chat-if",
+    "/aws/lambda/aicc-chat-app/sns-chat-if",
+  ];
+
+  /**
+   * 모든 Lambda 함수의 로그를 병렬로 조회
+   * Contact ID와 관련된 로그만 필터링
+   */
+  async getAllLambdaLogs(
+    contactId: string,
+    startTime: Date,
+    endTime: Date
+  ): Promise<Record<string, LambdaLog[]>> {
+    const lambdaLogs: Record<string, LambdaLog[]> = {};
+
+    console.log(`Fetching Lambda logs for contact ${contactId} from ${this.LAMBDA_LOG_GROUPS.length} log groups`);
+
+    // 병렬로 모든 Lambda 로그 조회
+    const logPromises = this.LAMBDA_LOG_GROUPS.map(async (logGroupName) => {
+      const query = `
+        fields @timestamp, @message, @logStream, @log
+        | filter @message like /${contactId}/
+        | sort @timestamp asc
+      `;
+
+      try {
+        const logs = await this.queryCloudWatchLogs(
+          logGroupName,
+          query,
+          startTime,
+          endTime
+        );
+
+        // 함수 이름 추출 (log group name의 마지막 부분)
+        const functionName = logGroupName.split('/').pop() || logGroupName;
+
+        return {
+          functionName,
+          logs: logs.map(log => this.transformToLambdaLog(log)),
+        };
+      } catch (error) {
+        console.error(`Error fetching logs from ${logGroupName}:`, error);
+        return {
+          functionName: logGroupName.split('/').pop() || logGroupName,
+          logs: [],
+        };
+      }
+    });
+
+    const results = await Promise.all(logPromises);
+
+    // 결과를 Record로 변환
+    results.forEach(({ functionName, logs }) => {
+      if (logs.length > 0) {
+        lambdaLogs[functionName] = logs;
+        console.log(`Found ${logs.length} logs for ${functionName}`);
+      }
+    });
+
+    return lambdaLogs;
+  }
+
+  /**
    * X-Ray 트레이스 조회 (Enhanced - batch-get-traces 사용)
    * Python connect-contact-tracer의 get_xray_trace 로직 참고
    */
@@ -660,6 +739,162 @@ export class AWSConnectService {
       summary,
       color,
     };
+  }
+
+  /**
+   * Lambda 호출 로그와 Lambda 함수 로그를 매칭하여 X-Ray Trace ID 추출
+   * Python의 Lambda X-Ray 추적 로직 참고
+   */
+  findXRayTraceIdForLambdaInvocation(
+    contactLog: any,
+    lambdaLogs: any[]
+  ): string | null {
+    const contactId = contactLog.ContactId;
+    const logParameters = contactLog.Parameters?.Parameters || contactLog.Parameters || {};
+
+    // Contact ID로 필터링
+    const contactLambdaLogs = lambdaLogs.filter(l => l.ContactId === contactId);
+
+    if (contactLambdaLogs.length === 0) {
+      return null;
+    }
+
+    const targetLogs = this.matchLambdaLogsByParameters(contactLambdaLogs, logParameters);
+
+    if (targetLogs.length === 0) {
+      return null;
+    }
+
+    return this.selectClosestLogByTimestamp(targetLogs, contactLog.Timestamp);
+  }
+
+  /**
+   * 파라미터로 Lambda 로그 매칭
+   */
+  private matchLambdaLogsByParameters(lambdaLogs: any[], logParameters: any): any[] {
+    return lambdaLogs.filter(lambdaLog =>
+      this.matchParameterLog(lambdaLog, logParameters) ||
+      this.matchEventLog(lambdaLog, logParameters)
+    );
+  }
+
+  /**
+   * "parameter" 메시지를 포함하는 로그 매칭
+   */
+  private matchParameterLog(lambdaLog: any, logParameters: any): boolean {
+    if (!lambdaLog.message?.includes('parameter')) {
+      return false;
+    }
+
+    const funcParam = JSON.stringify(lambdaLog.parameters || {}, null, 0).replaceAll(/\s/g, '');
+    const logParam = JSON.stringify(logParameters, null, 0).replaceAll(/\s/g, '');
+
+    // id&v -> idnv 예외 처리
+    const normalizedFuncParam = funcParam.replaceAll('id&v', 'idnv');
+    const normalizedLogParam = logParam.replaceAll('id&v', 'idnv');
+
+    return normalizedLogParam === normalizedFuncParam;
+  }
+
+  /**
+   * "Event" 메시지를 포함하는 로그 매칭 (varsConfig 예외 처리)
+   */
+  private matchEventLog(lambdaLog: any, logParameters: any): boolean {
+    if (!lambdaLog.message?.includes('Event')) {
+      return false;
+    }
+
+    if (!lambdaLog.event?.Details?.Parameters) {
+      return false;
+    }
+
+    const funcParam = { ...lambdaLog.event.Details.Parameters };
+    const logParam = { ...logParameters };
+
+    // varsConfig 제거
+    if (funcParam.varsConfig !== undefined && logParam.varsConfig !== undefined) {
+      delete funcParam.varsConfig;
+      delete logParam.varsConfig;
+    }
+
+    const funcParamStr = JSON.stringify(funcParam, null, 0).replaceAll(/\s/g, '');
+    const logParamStr = JSON.stringify(logParam, null, 0).replaceAll(/\s/g, '');
+
+    return funcParamStr === logParamStr;
+  }
+
+  /**
+   * 타임스탬프 차이가 가장 작은 로그 선택
+   */
+  private selectClosestLogByTimestamp(logs: any[], contactTimestamp: string): string | null {
+    if (logs.length === 1) {
+      return logs[0].xray_trace_id || logs[0].xrayTraceId || null;
+    }
+
+    const contactTime = new Date(contactTimestamp).getTime();
+    let minGap = Infinity;
+    let selectedTraceId: string | null = null;
+
+    for (const log of logs) {
+      const lambdaTime = new Date(log.timestamp).getTime();
+      const gap = Math.abs(contactTime - lambdaTime);
+
+      if (gap < minGap) {
+        minGap = gap;
+        selectedTraceId = log.xray_trace_id || log.xrayTraceId;
+      }
+    }
+
+    return selectedTraceId;
+  }
+
+  /**
+   * Contact 로그에 X-Ray Trace ID 추가
+   * InvokeLambdaFunction 및 InvokeExternalResource 모듈에 대해 처리
+   */
+  enrichContactLogsWithXRayTraceIds(
+    contactLogs: any[],
+    lambdaLogs: Record<string, any[]>
+  ): any[] {
+    const enrichedLogs = contactLogs.map(log => {
+      const moduleType = log.ContactFlowModuleType;
+
+      // Lambda 호출 모듈인 경우에만 처리
+      if (moduleType === 'InvokeLambdaFunction' || moduleType === 'InvokeExternalResource') {
+        // 함수 이름 추출
+        const functionArn = log.Parameters?.FunctionArn;
+        if (!functionArn) {
+          return log;
+        }
+
+        // ARN에서 함수 이름 추출 (arn:aws:lambda:region:account:function:function-name)
+        const functionName = functionArn.split(':').pop();
+        if (!functionName) {
+          return log;
+        }
+
+        // 해당 함수의 Lambda 로그 가져오기
+        const functionLogs = lambdaLogs[functionName];
+        if (!functionLogs || !Array.isArray(functionLogs) || functionLogs.length === 0) {
+          return log;
+        }
+
+        // X-Ray Trace ID 찾기
+        const xrayTraceId = this.findXRayTraceIdForLambdaInvocation(log, functionLogs);
+
+        if (xrayTraceId) {
+          return {
+            ...log,
+            xray_trace_id: xrayTraceId,
+            xrayTraceId: xrayTraceId,
+          };
+        }
+      }
+
+      return log;
+    });
+
+    return enrichedLogs;
   }
 
   /**

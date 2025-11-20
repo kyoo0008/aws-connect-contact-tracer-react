@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'react-flow-renderer';
-import { Box, Typography, Chip } from '@mui/material';
-import { AccountTree as ModuleIcon } from '@mui/icons-material';
+import { Box, Typography, Chip, IconButton, Tooltip } from '@mui/material';
+import { AccountTree as ModuleIcon, BugReport as XRayIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 
 import { NodeContentRenderer } from './NodeContentRenderer';
 import console from 'console';
@@ -27,6 +28,7 @@ interface CustomNodeProps {
 
 const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const navigate = useNavigate();
 
   const isMainView = data.isMainView || false;
   const hasError = data.error || false;
@@ -35,6 +37,11 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const borderColor = hasError ? '#F44336' : isModuleNode ? '#2196F3' : '#E0E0E0';
   const targetPosition = data.targetPosition || Position.Left;
   const sourcePosition = data.sourcePosition || Position.Right;
+
+  // X-Ray Trace ID 확인
+  const xrayTraceId = data.logData?.xray_trace_id || data.logData?.xrayTraceId;
+  const isLambdaInvocation = ['InvokeLambdaFunction', 'InvokeExternalResource'].includes(data.moduleType || '');
+  const hasXRayTrace = isLambdaInvocation && !!xrayTraceId;
 
   // React Flow 노드의 부모 wrapper에 z-index 적용
   useEffect(() => {
@@ -173,6 +180,28 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
           <Typography variant="subtitle2" fontWeight="600" sx={{ color: hasError ? '#D32F2F' : '#1976D2' }} noWrap>
             {data.label}
           </Typography>
+          {hasXRayTrace && (
+            <Tooltip title={`View X-Ray Trace: ${xrayTraceId}`} arrow>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/xray-trace?traceId=${xrayTraceId}&contactId=${data.logData?.ContactId}`);
+                }}
+                sx={{
+                  ml: 'auto',
+                  p: 0.5,
+                  color: '#4CAF50',
+                  '&:hover': {
+                    color: '#2E7D32',
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                  },
+                }}
+              >
+                <XRayIcon sx={{ fontSize: '1rem' }} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
         {data.logData?.Identifier && (
           <Box sx={{ px: 1, pb: 0.5 }}>

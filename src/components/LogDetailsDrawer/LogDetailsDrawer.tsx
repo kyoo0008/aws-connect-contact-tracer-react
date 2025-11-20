@@ -10,8 +10,11 @@ import {
   Paper,
   Button,
   CircularProgress,
+  Tooltip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import { BugReport as XRayIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { ContactLog } from '@/types/contact.types';
 
 interface LogDetailsDrawerProps {
@@ -31,6 +34,13 @@ const LogDetailsDrawer: React.FC<LogDetailsDrawerProps> = ({
   isFetchingSubFlow,
   fetchSubFlowLogs,
 }) => {
+  const navigate = useNavigate();
+
+  // Check for X-Ray trace ID
+  const xrayTraceId = log?.xray_trace_id || (log as any)?.xrayTraceId;
+  const isLambdaInvocation = log && ['InvokeLambdaFunction', 'InvokeExternalResource'].includes(log.ContactFlowModuleType);
+  const hasXRayTrace = isLambdaInvocation && !!xrayTraceId;
+
   const renderValue = (value: any) => {
     if (typeof value === 'object' && value !== null) {
       return (
@@ -74,9 +84,30 @@ const LogDetailsDrawer: React.FC<LogDetailsDrawerProps> = ({
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6">Log Details</Typography>
-        <IconButton onClick={onClose}>
-          <CloseIcon />
-        </IconButton>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {hasXRayTrace && (
+            <Tooltip title={`View X-Ray Trace: ${xrayTraceId}`} arrow>
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/xray-trace?traceId=${xrayTraceId}&contactId=${log?.ContactId}`);
+                }}
+                sx={{
+                  color: '#4CAF50',
+                  '&:hover': {
+                    color: '#2E7D32',
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                  },
+                }}
+              >
+                <XRayIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+          <IconButton onClick={onClose}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
       </Box>
       <Divider sx={{ mb: 2 }} />
       <Box>
@@ -163,8 +194,8 @@ const LogDetailsDrawer: React.FC<LogDetailsDrawerProps> = ({
                           ? '#FFEBEE'
                           : '#F5F5F5',
                         borderLeft: `3px solid ${subLog.Results?.includes('Error') || subLog.Results?.includes('Failed')
-                            ? '#F44336'
-                            : '#2196F3'
+                          ? '#F44336'
+                          : '#2196F3'
                           }`,
                       }}
                       variant="outlined"

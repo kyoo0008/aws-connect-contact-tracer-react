@@ -213,6 +213,7 @@ const ContactFlowViewerContent: React.FC = () => {
   // Handle node click - Navigate to flow detail page
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
+      event.stopPropagation(); // Prevent closing drawer when clicking a node
       const flowName = node.data?.label as string;
       const timeRange = node.data?.timeRange as { start: string, end: string } | undefined;
 
@@ -421,7 +422,10 @@ const ContactFlowViewerContent: React.FC = () => {
   }
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box
+      sx={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}
+      onClick={() => setDrawerOpen(false)} // Close drawer on click outside
+    >
       {/* Toolbar */}
       <Paper elevation={1} sx={{ zIndex: 10 }}>
         <Toolbar>

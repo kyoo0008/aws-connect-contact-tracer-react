@@ -41,6 +41,7 @@ import FlowDetailViewer from './pages/FlowDetailViewer';
 import ModuleDetailViewer from './pages/ModuleDetailViewer';
 import LogAnalysis from './pages/LogAnalysis';
 import Settings from './pages/Settings';
+import XRayTraceViewer from './pages/XRayTraceViewer';
 
 // Components
 import Layout from './components/Layout/Layout';
@@ -140,6 +141,7 @@ function App() {
                       <Route path="/contact-flow/:contactId/flow/:flowName" element={<FlowDetailViewer />} />
                       <Route path="/contact-flow/:contactId/flow/:flowName/module/:moduleName" element={<ModuleDetailViewer />} />
                       <Route path="/logs/:contactId?" element={<LogAnalysis />} />
+                      <Route path="/xray-trace" element={<XRayTraceViewer />} />
                       <Route path="/settings" element={<Settings />} />
                     </Routes>
                   </Layout>
@@ -340,6 +342,7 @@ export interface AWSConfig {
     accessKeyId: string;
     secretAccessKey: string;
     sessionToken?: string;
+    expiration?: string;
   };
   profile?: string; // AWS SSO profile name (for backend API)
 }
@@ -761,6 +764,8 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
   let currentGetUserInputIdentifier: string | null = null;
   let invokeExternalGroup: ContactLog[] = [];
   let currentInvokeExternalIdentifier: string | null = null;
+  let dialGroup: ContactLog[] = [];
+  let currentDialIdentifier: string | null = null;
 
   const mergeAttributesGroup = () => {
     if (attributesGroup.length === 0) return;
@@ -856,6 +861,25 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
     currentInvokeExternalIdentifier = null;
   };
 
+  const mergeDialGroup = () => {
+    if (dialGroup.length === 0) return;
+
+    if (dialGroup.length === 1) {
+      processed.push(dialGroup[0]);
+    } else {
+      // Dial 로그 병합: 첫 번째 로그의 Parameters를 사용하고, 마지막 로그의 Results를 사용
+      const baseLog = { ...dialGroup[0] };
+      const finalResults = dialGroup[dialGroup.length - 1].Results;
+
+      baseLog.Results = finalResults;
+      baseLog.Timestamp = dialGroup[dialGroup.length - 1].Timestamp;
+
+      processed.push(baseLog);
+    }
+    dialGroup = [];
+    currentDialIdentifier = null;
+  };
+
   let i = 0;
   while (i < logs.length) {
     const log = logs[i];
@@ -868,6 +892,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       mergeAttributesGroup();
       mergeGetUserInputGroup();
       mergeInvokeExternalGroup();
+      mergeDialGroup();
 
       // InvokeFlowModule 다음에 오는 MOD_ 로그들 찾기
       let j = i + 1;
@@ -922,7 +947,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       // MOD_ 로그나 ReturnFromFlowModule은 이미 InvokeFlowModule에서 처리됨
       // 혹시 단독으로 있다면 건너뛰기
       i++;
-    } else if (['GetUserInput','PlayPrompt','StoreUserInput'].includes(log.ContactFlowModuleType)) {
+    } else if (['GetUserInput', 'PlayPrompt', 'StoreUserInput'].includes(log.ContactFlowModuleType)) {
       // GetUserInput 로그 처리: 같은 Identifier를 가진 연속된 로그를 병합
       const identifier = log.Identifier;
 
@@ -934,6 +959,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       // 이전에 다른 그룹이 있었다면 먼저 병합
       mergeAttributesGroup();
       mergeInvokeExternalGroup();
+      mergeDialGroup();
 
       currentGetUserInputIdentifier = identifier || null;
       getUserInputGroup.push(log);
@@ -950,9 +976,27 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       // 이전에 다른 그룹이 있었다면 먼저 병합
       mergeAttributesGroup();
       mergeGetUserInputGroup();
+      mergeDialGroup();
 
       currentInvokeExternalIdentifier = identifier || null;
       invokeExternalGroup.push(log);
+      i++;
+    } else if (log.ContactFlowModuleType === 'Dial') {
+      // Dial 로그 처리: 같은 Identifier를 가진 연속된 로그를 병합
+      const identifier = log.Identifier;
+
+      // Identifier가 다르면 이전 그룹을 먼저 병합
+      if (currentDialIdentifier !== null && currentDialIdentifier !== identifier) {
+        mergeDialGroup();
+      }
+
+      // 이전에 다른 그룹이 있었다면 먼저 병합
+      mergeAttributesGroup();
+      mergeGetUserInputGroup();
+      mergeInvokeExternalGroup();
+
+      currentDialIdentifier = identifier || null;
+      dialGroup.push(log);
       i++;
     } else if (['SetAttributes', 'SetFlowAttributes', 'CheckAttribute'].includes(log.ContactFlowModuleType)) {
       // 같은 타입의 연속된 로그만 그룹화
@@ -961,6 +1005,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       // 다른 그룹이 있었다면 먼저 병합
       mergeGetUserInputGroup();
       mergeInvokeExternalGroup();
+      mergeDialGroup();
 
       // 타입이 다르면 이전 그룹을 먼저 병합
       if (currentGroupType !== null && currentGroupType !== logType) {
@@ -974,6 +1019,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       mergeAttributesGroup();
       mergeGetUserInputGroup();
       mergeInvokeExternalGroup();
+      mergeDialGroup();
       processed.push(log);
       i++;
     }
@@ -982,6 +1028,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
   mergeAttributesGroup();
   mergeGetUserInputGroup();
   mergeInvokeExternalGroup();
+  mergeDialGroup();
 
   return processed;
 };
@@ -1288,12 +1335,13 @@ export default TranscriptPanel;
 ---------------------
 /Users/ke-aicc/Downloads/files/src/components/FlowNodes/CustomNode.tsx
 ---------------------
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'react-flow-renderer';
 import { Box, Typography, Chip } from '@mui/material';
 import { AccountTree as ModuleIcon } from '@mui/icons-material';
 
 import { NodeContentRenderer } from './NodeContentRenderer';
+import console from 'console';
 
 interface CustomNodeProps {
   data: {
@@ -1315,6 +1363,8 @@ interface CustomNodeProps {
 }
 
 const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const isMainView = data.isMainView || false;
   const hasError = data.error || false;
   const isModuleNode = data.isModuleNode || false;
@@ -1322,6 +1372,24 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const borderColor = hasError ? '#F44336' : isModuleNode ? '#2196F3' : '#E0E0E0';
   const targetPosition = data.targetPosition || Position.Left;
   const sourcePosition = data.sourcePosition || Position.Right;
+
+  // React Flow 노드의 부모 wrapper에 z-index 적용
+  useEffect(() => {
+    if (isExpanded) {
+      const nodeElement = document.querySelector(`[data-id="${data.id}"]`);
+      if (nodeElement) {
+        (nodeElement as HTMLElement).style.zIndex = '9999';
+      }
+    } else {
+      const nodeElement = document.querySelector(`[data-id="${data.id}"]`);
+      if (nodeElement) {
+        (nodeElement as HTMLElement).style.zIndex = '';
+      }
+    }
+  }, [isExpanded, data.id]);
+
+
+
 
   const renderMainViewContent = () => (
     <>
@@ -1338,7 +1406,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
               Nodes : {data.logCount}
             </Typography>
           )}
-          <br /> 
+          <br />
           {data.timeRange && (
             <Typography variant="caption" fontWeight="bold" sx={{ mt: 1 }}>
               Duration : {((new Date(data.timeRange.end).getTime() - new Date(data.timeRange.start).getTime()) / 1000).toFixed(2)}s
@@ -1375,20 +1443,19 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
                 Nodes : {data.logCount}
               </Typography>
             )}
-             <Chip
-                label="Click to view details"
-                size="small"
-                icon={<ModuleIcon sx={{ fontSize: '1rem' }} />}
-                sx={{ mt: 1, cursor: 'pointer' }}
-              />
+            <Chip
+              label="Click to view details"
+              size="small"
+              icon={<ModuleIcon sx={{ fontSize: '1rem' }} />}
+              sx={{ mt: 1, cursor: 'pointer' }}
+            />
           </>
         )}
       </>
     );
   };
 
-
-  const hasFooterResults = data.logData?._footerResults && ['PlayPrompt','StoreUserInput','GetUserInput'].includes(data?.moduleType ?? '');
+  const hasFooterResults = data.logData?._footerResults && ['PlayPrompt', 'StoreUserInput', 'GetUserInput'].includes(data?.moduleType ?? '');
   const footerResults = data.logData?._footerResults;
 
   const hasFooterExternalResults = data.logData?._footerExternalResults && ['InvokeExternalResource', 'InvokeLambdaFunction'].includes(data?.moduleType ?? '');
@@ -1396,18 +1463,30 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
 
   return (
     <Box
+      className="nopan" // React Flow class to disable panning on drag
+      onWheel={(e) => e.stopPropagation()} // Stop zoom/pan on scroll
+      onMouseEnter={() => setIsExpanded(true)}
+      onMouseLeave={() => setIsExpanded(false)}
       sx={{
         padding: 1,
         borderRadius: 2,
         border: `2px solid ${borderColor}`,
         backgroundColor: bgColor,
         width: 280,
-        height: 180,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        height: isExpanded ? 'auto' : 180,
+        minHeight: 180,
+        maxHeight: isExpanded ? 'none' : 180,
+        boxShadow: isExpanded ? '0 8px 16px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
         display: 'flex',
         flexDirection: 'column',
+        position: isExpanded ? 'absolute' : 'relative',
+        zIndex: isExpanded ? '9999 !important' : 'auto',
+        transition: 'all 0.2s ease-in-out',
+        transform: isExpanded ? 'scale(1.02)' : 'scale(1)',
+        isolation: isExpanded ? 'isolate' : 'auto',
+        willChange: isExpanded ? 'transform, z-index' : 'auto',
         '&:hover': {
-          boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+          boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
         },
       }}
     >
@@ -1444,8 +1523,14 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
       {/* Body */}
       <Box
         className="nodrag" // Prevents react-flow drag events on this element
-        onWheel={(event) => event.stopPropagation()} // Prevents zoom on scroll
-        sx={{ flex: 1, overflowY: 'auto', p: 1, minHeight: 0 }}
+        sx={{
+          flex: 1,
+          overflowY: isExpanded ? 'visible' : 'auto',
+          overflowX: 'hidden',
+          p: 1,
+          minHeight: 0,
+          overscrollBehavior: 'contain' // Prevents scroll chaining to parent (canvas)
+        }}
       >
         {isMainView ? renderMainViewContent() : renderDetailViewContent()}
       </Box>
@@ -1693,7 +1778,7 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
           </Box>
         );
       }
-      
+
       case 'SetAttributes':
       case 'SetFlowAttributes': {
         const attrs = Array.isArray(params) ? params : [params];
@@ -1732,7 +1817,7 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
         );
       case 'GetCustomerProfile':
         return (
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
             ProfileId: {data.logData?.ResultData?.ProfileId}
             <br />
             <small>Result: {results}</small>
@@ -1753,11 +1838,223 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
   };
 
   return (
-    <Box sx={{ p: 1, height: '100%', overflowY: 'auto' }}>
+    <Box sx={{ p: 1, height: '100%' }}>
       {renderContent()}
     </Box>
   );
 };
+
+
+---------------------
+/Users/ke-aicc/Downloads/files/src/components/FlowNodes/XRayNode.tsx
+---------------------
+import React, { useState } from 'react';
+import { Handle, Position } from 'react-flow-renderer';
+import { Box, Typography, Chip } from '@mui/material';
+import {
+  CloudCircle as CloudIcon,
+  Storage as StorageIcon,
+  Functions as LambdaIcon,
+  Info as InfoIcon,
+  Warning as WarningIcon,
+  Error as ErrorIcon,
+} from '@mui/icons-material';
+
+interface XRayNodeProps {
+  data: {
+    label: string;
+    segmentData?: any;
+    logData?: any;
+    error?: boolean;
+    duration?: number;
+    service?: string;
+    operation?: string;
+    resource?: string;
+    httpMethod?: string;
+    httpUrl?: string;
+    httpStatus?: number;
+    message?: string;
+    timestamp?: string;
+  };
+}
+
+const XRayNode: React.FC<XRayNodeProps> = ({ data }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const isError = data.error || false;
+  const isLambdaLog = !!data.logData;
+  const isSegment = !!data.segmentData;
+
+  // Determine colors
+  const bgColor = isError ? '#FFEBEE' : isLambdaLog ? '#E3F2FD' : '#E8F5E9';
+  const borderColor = isError ? '#F44336' : isLambdaLog ? '#2196F3' : '#4CAF50';
+
+  // Get icon based on service type
+  const getServiceIcon = () => {
+    if (isLambdaLog) {
+      if (data.label === 'ERROR') return <ErrorIcon sx={{ fontSize: '1rem', color: '#D32F2F' }} />;
+      if (data.label === 'WARN') return <WarningIcon sx={{ fontSize: '1rem', color: '#F57C00' }} />;
+      return <InfoIcon sx={{ fontSize: '1rem', color: '#1976D2' }} />;
+    }
+
+    const service = data.service?.toLowerCase() || '';
+    if (service.includes('lambda')) return <LambdaIcon sx={{ fontSize: '1rem' }} />;
+    if (service.includes('dynamodb') || service.includes('s3')) return <StorageIcon sx={{ fontSize: '1rem' }} />;
+    return <CloudIcon sx={{ fontSize: '1rem' }} />;
+  };
+
+  // Format duration
+  const formatDuration = (duration?: number) => {
+    if (!duration) return '';
+    if (duration < 1) return `${(duration * 1000).toFixed(2)}ms`;
+    return `${duration.toFixed(2)}s`;
+  };
+
+  // Render segment content
+  const renderSegmentContent = () => {
+    if (!isSegment) return null;
+
+    return (
+      <Box sx={{ p: 1 }}>
+        {data.operation && (
+          <Typography variant="caption" display="block" sx={{ color: '#666' }}>
+            <strong>Operation:</strong> {data.operation}
+          </Typography>
+        )}
+        {data.resource && (
+          <Typography variant="caption" display="block" sx={{ color: '#666' }}>
+            <strong>Resource:</strong> {data.resource.split('/').pop()}
+          </Typography>
+        )}
+        {data.httpMethod && data.httpUrl && (
+          <Typography variant="caption" display="block" sx={{ color: '#666' }}>
+            <strong>HTTP:</strong> {data.httpMethod} {data.httpUrl.split('/').slice(3).join('/')}
+          </Typography>
+        )}
+        {data.httpStatus && (
+          <Chip
+            label={`Status: ${data.httpStatus}`}
+            size="small"
+            color={data.httpStatus >= 200 && data.httpStatus < 300 ? 'success' : 'error'}
+            sx={{ mt: 0.5 }}
+          />
+        )}
+        {data.duration !== undefined && (
+          <Typography variant="caption" display="block" sx={{ color: '#666', mt: 0.5 }}>
+            <strong>Duration:</strong> {formatDuration(data.duration)}
+          </Typography>
+        )}
+      </Box>
+    );
+  };
+
+  // Render Lambda log content
+  const renderLogContent = () => {
+    if (!isLambdaLog) return null;
+
+    return (
+      <Box sx={{ p: 1 }}>
+        {data.message && (
+          <Typography
+            variant="caption"
+            display="block"
+            sx={{
+              color: '#333',
+              whiteSpace: isExpanded ? 'pre-wrap' : 'nowrap',
+              overflow: isExpanded ? 'visible' : 'hidden',
+              textOverflow: isExpanded ? 'clip' : 'ellipsis',
+              wordBreak: 'break-word',
+            }}
+          >
+            {data.message}
+          </Typography>
+        )}
+        {data.timestamp && (
+          <Typography variant="caption" display="block" sx={{ color: '#999', mt: 0.5 }}>
+            {new Date(data.timestamp).toLocaleString('ko-KR')}
+          </Typography>
+        )}
+      </Box>
+    );
+  };
+
+  return (
+    <Box
+      className="nopan"
+      onMouseEnter={() => setIsExpanded(true)}
+      onMouseLeave={() => setIsExpanded(false)}
+      sx={{
+        padding: 1,
+        borderRadius: 2,
+        border: `2px solid ${borderColor}`,
+        backgroundColor: bgColor,
+        width: 280,
+        height: isExpanded ? 'auto' : 160,
+        minHeight: 160,
+        maxHeight: isExpanded ? 'none' : 160,
+        boxShadow: isExpanded ? '0 8px 16px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
+        display: 'flex',
+        flexDirection: 'column',
+        position: isExpanded ? 'absolute' : 'relative',
+        zIndex: isExpanded ? '9999 !important' : 'auto',
+        transition: 'all 0.2s ease-in-out',
+        transform: isExpanded ? 'scale(1.02)' : 'scale(1)',
+        isolation: isExpanded ? 'isolate' : 'auto',
+        willChange: isExpanded ? 'transform, z-index' : 'auto',
+        '&:hover': {
+          boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
+        },
+      }}
+    >
+      {/* Target Handles */}
+      <Handle type="target" position={Position.Top} id="target-top" style={{ background: '#555' }} />
+      <Handle type="target" position={Position.Bottom} id="target-bottom" style={{ background: '#555' }} />
+      <Handle type="target" position={Position.Left} id="target-left" style={{ background: '#555' }} />
+      <Handle type="target" position={Position.Right} id="target-right" style={{ background: '#555' }} />
+
+      {/* Header */}
+      <Box
+        sx={{
+          borderBottom: `1px solid ${borderColor}`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          p: 1,
+          pb: 0.5,
+        }}
+      >
+        {getServiceIcon()}
+        <Typography variant="subtitle2" fontWeight="600" sx={{ color: isError ? '#D32F2F' : '#1976D2' }}>
+          {data.label}
+        </Typography>
+        {data.service && (
+          <Chip label={data.service} size="small" sx={{ ml: 'auto', fontSize: '0.65rem', height: '18px' }} />
+        )}
+      </Box>
+
+      {/* Body */}
+      <Box
+        className="nodrag"
+        sx={{
+          flex: 1,
+          overflowY: isExpanded ? 'visible' : 'auto',
+          overflowX: 'hidden',
+          minHeight: 0,
+        }}
+      >
+        {isSegment ? renderSegmentContent() : renderLogContent()}
+      </Box>
+
+      {/* Source Handles */}
+      <Handle type="source" position={Position.Top} id="source-top" style={{ background: '#555' }} />
+      <Handle type="source" position={Position.Bottom} id="source-bottom" style={{ background: '#555' }} />
+      <Handle type="source" position={Position.Left} id="source-left" style={{ background: '#555' }} />
+      <Handle type="source" position={Position.Right} id="source-right" style={{ background: '#555' }} />
+    </Box>
+  );
+};
+
+export default XRayNode;
 
 
 ---------------------
@@ -2116,13 +2413,31 @@ const LogDetailsDrawer: React.FC<LogDetailsDrawerProps> = ({
   return (
     <Drawer
       anchor="right"
+      variant="persistent"
       open={open}
       onClose={onClose}
-      sx={{
-        '& .MuiDrawer-paper': {
+      onClick={(e) => e.stopPropagation()} // Prevent clicks inside drawer from closing it
+      PaperProps={{
+        sx: {
           width: { xs: '90%', sm: 400, md: 500 },
           p: 2,
-        },
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          height: '100%',
+          boxShadow: '-2px 0 8px rgba(0,0,0,0.1)',
+        }
+      }}
+      sx={{
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        height: '100%',
+        zIndex: 1200,
+        pointerEvents: open ? 'auto' : 'none', // Pass through clicks when closed
+        '& .MuiDrawer-root': {
+          position: 'absolute'
+        }
       }}
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -2215,11 +2530,10 @@ const LogDetailsDrawer: React.FC<LogDetailsDrawerProps> = ({
                         backgroundColor: subLog.Results?.includes('Error') || subLog.Results?.includes('Failed')
                           ? '#FFEBEE'
                           : '#F5F5F5',
-                        borderLeft: `3px solid ${
-                          subLog.Results?.includes('Error') || subLog.Results?.includes('Failed')
+                        borderLeft: `3px solid ${subLog.Results?.includes('Error') || subLog.Results?.includes('Failed')
                             ? '#F44336'
                             : '#2196F3'
-                        }`,
+                          }`,
                       }}
                       variant="outlined"
                     >
@@ -2657,6 +2971,346 @@ export default Settings;
 
 
 ---------------------
+/Users/ke-aicc/Downloads/files/src/pages/XRayTraceViewer.tsx
+---------------------
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Container,
+  Paper,
+  Box,
+  Typography,
+  Button,
+  CircularProgress,
+  Alert,
+  Toolbar,
+  IconButton,
+  Tooltip,
+  Chip,
+  Stack,
+} from '@mui/material';
+import {
+  ArrowBack as BackIcon,
+  Fullscreen as FullscreenIcon,
+  Download as DownloadIcon,
+  Refresh as RefreshIcon,
+} from '@mui/icons-material';
+import ReactFlow, {
+  Node,
+  Edge,
+  Controls,
+  Background,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  ReactFlowProvider,
+} from 'react-flow-renderer';
+import { useQuery } from '@tanstack/react-query';
+import { getAWSConnectService } from '@/services/awsConnectService';
+import XRayNode from '@/components/FlowNodes/XRayNode';
+import LogDetailsDrawer from '@/components/LogDetailsDrawer/LogDetailsDrawer';
+import { useConfig } from '@/contexts/ConfigContext';
+
+const nodeTypes = {
+  xraySegment: XRayNode,
+  lambdaLog: XRayNode,
+};
+
+const XRayCanvas: React.FC<{
+  nodes: Node[];
+  edges: Edge[];
+  onNodesChange: any;
+  onEdgesChange: any;
+  onNodeClick: any;
+  nodeTypes: any;
+}> = ({ nodes, edges, onNodesChange, onEdgesChange, onNodeClick, nodeTypes }) => {
+  return (
+    <ReactFlowProvider>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        nodeTypes={nodeTypes}
+        fitView
+        attributionPosition="bottom-left"
+      >
+        <Background gap={12} size={1} />
+        <Controls />
+        <MiniMap
+          nodeStrokeColor={(node) => {
+            if (node.data?.error) return '#f44336';
+            return '#4caf50';
+          }}
+          nodeColor={(node) => {
+            if (node.data?.error) return '#ffebee';
+            return '#e8f5e9';
+          }}
+          nodeBorderRadius={4}
+        />
+      </ReactFlow>
+    </ReactFlowProvider>
+  );
+};
+
+const XRayTraceViewerContent: React.FC = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const xrayTraceId = searchParams.get('traceId');
+  const contactId = searchParams.get('contactId');
+
+  const { config, isConfigured } = useConfig();
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [selectedLog, setSelectedLog] = useState<any | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Fetch X-Ray trace data
+  const { data: xrayData, isLoading, error, refetch } = useQuery({
+    queryKey: ['xrayTrace', xrayTraceId],
+    queryFn: async () => {
+      if (!isConfigured || !xrayTraceId) return null;
+      const service = getAWSConnectService(config);
+      return await service.getXRayTrace(xrayTraceId);
+    },
+    enabled: isConfigured && !!xrayTraceId,
+  });
+
+  // Build React Flow nodes and edges from X-Ray trace data
+  useEffect(() => {
+    if (!xrayData) return;
+
+    const flowNodes: Node[] = [];
+    const flowEdges: Edge[] = [];
+    let yPosition = 0;
+
+    // Process X-Ray segments
+    xrayData.segments?.forEach((segment: any, index: number) => {
+      const nodeId = segment.id;
+      const isError = segment.error || segment.fault;
+
+      // Main segment node
+      flowNodes.push({
+        id: nodeId,
+        type: 'xraySegment',
+        position: { x: index * 350, y: yPosition },
+        data: {
+          label: segment.name || 'Unknown',
+          segmentData: segment,
+          error: isError,
+          duration: segment.end_time - segment.start_time,
+          service: segment.origin || 'AWS',
+        },
+      });
+
+      // Process subsegments
+      segment.subsegments?.forEach((subsegment: any, subIndex: number) => {
+        if (['Overhead', 'Dwell Time', 'Lambda', 'QueueTime', 'Initialization'].includes(subsegment.name)) {
+          return; // Skip these subsegments
+        }
+
+        const subNodeId = subsegment.id;
+        const subIsError = subsegment.error || subsegment.fault;
+
+        flowNodes.push({
+          id: subNodeId,
+          type: 'xraySegment',
+          position: { x: index * 350 + 300, y: yPosition + (subIndex * 120) },
+          data: {
+            label: subsegment.name || 'Unknown',
+            segmentData: subsegment,
+            error: subIsError,
+            duration: subsegment.end_time - subsegment.start_time,
+            service: subsegment.namespace || 'aws',
+            operation: subsegment.aws?.operation,
+            resource: subsegment.aws?.resource_names?.[0],
+            httpMethod: subsegment.http?.request?.method,
+            httpUrl: subsegment.http?.request?.url,
+            httpStatus: subsegment.http?.response?.status,
+          },
+        });
+
+        // Edge from parent to subsegment
+        flowEdges.push({
+          id: `${nodeId}-${subNodeId}`,
+          source: nodeId,
+          target: subNodeId,
+          label: subsegment.aws?.operation || subsegment.http?.request?.method || '',
+          type: 'smoothstep',
+          animated: subIsError,
+          style: { stroke: subIsError ? '#f44336' : '#4caf50' },
+        });
+      });
+
+      // Connect parent segments
+      if (segment.parent_id && index > 0) {
+        const parentNode = flowNodes.find(n => n.id === segment.parent_id);
+        if (parentNode) {
+          flowEdges.push({
+            id: `${segment.parent_id}-${nodeId}`,
+            source: segment.parent_id,
+            target: nodeId,
+            type: 'smoothstep',
+          });
+        }
+      }
+    });
+
+    // Add Lambda CloudWatch Logs if available
+    xrayData.lambdaLogs?.forEach((log: any, index: number) => {
+      const logNodeId = `log_${log.timestamp}_${index}`;
+      const isError = log.level === 'ERROR' || log.level === 'WARN';
+
+      flowNodes.push({
+        id: logNodeId,
+        type: 'lambdaLog',
+        position: { x: 0, y: yPosition + 400 + (index * 100) },
+        data: {
+          label: log.level || 'INFO',
+          logData: log,
+          error: isError,
+          message: log.message,
+          timestamp: log.timestamp,
+        },
+      });
+
+      if (index > 0) {
+        flowEdges.push({
+          id: `log_${index - 1}_${index}`,
+          source: `log_${xrayData.lambdaLogs[index - 1].timestamp}_${index - 1}`,
+          target: logNodeId,
+          type: 'smoothstep',
+        });
+      }
+    });
+
+    setNodes(flowNodes);
+    setEdges(flowEdges);
+  }, [xrayData, setNodes, setEdges]);
+
+  const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    setSelectedLog(node.data.segmentData || node.data.logData);
+    setDrawerOpen(true);
+  }, []);
+
+  const handleBack = () => {
+    navigate(-1);
+  };
+
+  if (!isConfigured) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4 }}>
+        <Alert severity="warning">
+          AWS configuration is required. Please configure your settings first.
+        </Alert>
+        <Button startIcon={<BackIcon />} onClick={() => navigate('/settings')} sx={{ mt: 2 }}>
+          Go to Settings
+        </Button>
+      </Container>
+    );
+  }
+
+  if (!xrayTraceId) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4 }}>
+        <Alert severity="error">X-Ray Trace ID is required</Alert>
+        <Button startIcon={<BackIcon />} onClick={handleBack} sx={{ mt: 2 }}>
+          Go Back
+        </Button>
+      </Container>
+    );
+  }
+
+  return (
+    <Container maxWidth={false} disableGutters sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Header Toolbar */}
+      <Paper elevation={2} sx={{ borderRadius: 0 }}>
+        <Toolbar sx={{ gap: 2 }}>
+          <IconButton edge="start" onClick={handleBack}>
+            <BackIcon />
+          </IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
+            <Typography variant="h6" component="h1" noWrap>
+              AWS X-Ray Trace
+            </Typography>
+            <Chip label={xrayTraceId} size="small" color="primary" sx={{ fontFamily: 'monospace' }} />
+            {contactId && <Chip label={`Contact: ${contactId}`} size="small" variant="outlined" />}
+          </Box>
+          <Stack direction="row" spacing={1}>
+            <Tooltip title="Refresh">
+              <IconButton onClick={() => refetch()}>
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Fullscreen">
+              <IconButton>
+                <FullscreenIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Download">
+              <IconButton>
+                <DownloadIcon />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Toolbar>
+      </Paper>
+
+      {/* Main Content */}
+      <Box sx={{ flex: 1, position: 'relative', bgcolor: '#fafafa' }}>
+        {isLoading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+            <CircularProgress />
+          </Box>
+        )}
+
+        {error && (
+          <Box sx={{ p: 3 }}>
+            <Alert severity="error">
+              Failed to load X-Ray trace: {error instanceof Error ? error.message : 'Unknown error'}
+            </Alert>
+          </Box>
+        )}
+
+        {!isLoading && !error && nodes.length === 0 && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+            <Typography variant="h6" color="text.secondary">
+              No trace data available
+            </Typography>
+          </Box>
+        )}
+
+        {!isLoading && !error && nodes.length > 0 && (
+          <XRayCanvas
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={handleNodeClick}
+            nodeTypes={nodeTypes}
+          />
+        )}
+      </Box>
+
+      {/* Details Drawer */}
+      <LogDetailsDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        log={selectedLog}
+      />
+    </Container>
+  );
+};
+
+const XRayTraceViewer: React.FC = () => {
+  return <XRayTraceViewerContent />;
+};
+
+export default XRayTraceViewer;
+
+
+---------------------
 /Users/ke-aicc/Downloads/files/src/pages/ContactFlowViewer.tsx
 ---------------------
 import React, { useState, useEffect, useCallback } from 'react';
@@ -2706,11 +3360,52 @@ import TranscriptPanel from '@/components/TranscriptPanel/TranscriptPanel';
 import LogDetailsDrawer from '@/components/LogDetailsDrawer/LogDetailsDrawer';
 import { useConfig } from '@/contexts/ConfigContext';
 
+
 const nodeTypes = {
   custom: CustomNode,
 };
 
-const ContactFlowViewer: React.FC = () => {
+const FlowCanvas: React.FC<{
+  nodes: Node[];
+  edges: Edge[];
+  onNodesChange: any;
+  onEdgesChange: any;
+  onNodeClick: any;
+  nodeTypes: any;
+}> = ({ nodes, edges, onNodesChange, onEdgesChange, onNodeClick, nodeTypes }) => {
+  return (
+    <ReactFlowProvider>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        nodeTypes={nodeTypes}
+        fitView
+        attributionPosition="bottom-left"
+      >
+        <Background gap={12} size={1} />
+        <Controls />
+        <MiniMap
+          nodeStrokeColor={(node) => {
+            if (node.data?.error) return '#f44336';
+            if (node.type === 'input') return '#4caf50';
+            if (node.type === 'output') return '#2196f3';
+            return '#888';
+          }}
+          nodeColor={(node) => {
+            if (node.data?.error) return '#ffebee';
+            return '#f5f5f5';
+          }}
+          nodeBorderRadius={4}
+        />
+      </ReactFlow>
+    </ReactFlowProvider>
+  );
+};
+
+const ContactFlowViewerContent: React.FC = () => {
   const { contactId } = useParams<{ contactId: string }>();
   const navigate = useNavigate();
   const { config, isConfigured } = useConfig();
@@ -2724,6 +3419,8 @@ const ContactFlowViewer: React.FC = () => {
   const [subFlowLogs, setSubFlowLogs] = useState<ContactLog[]>([]);
   const [isFetchingSubFlow, setIsFetchingSubFlow] = useState(false);
 
+
+
   const fetchSubFlowLogs = useCallback(async (flowId: string) => {
     if (!contactId) return;
 
@@ -2733,11 +3430,11 @@ const ContactFlowViewer: React.FC = () => {
       const details = await service.getContactDetails(contactId);
       const startTime = new Date(details.initiationTimestamp);
       startTime.setHours(startTime.getHours() - 1);
-      const endTime = details.disconnectTimestamp 
+      const endTime = details.disconnectTimestamp
         ? new Date(details.disconnectTimestamp)
         : new Date();
       endTime.setHours(endTime.getHours() + 1);
-      
+
       const logs = await service.getContactLogs(flowId, startTime, endTime);
       setSubFlowLogs(logs);
     } catch (error) {
@@ -2755,34 +3452,34 @@ const ContactFlowViewer: React.FC = () => {
 
       // Initialize service with current config
       const service = getAWSConnectService(config);
-      
+
       // Get contact details
       const details = await service.getContactDetails(contactId);
-      
+
       // Calculate time range
       const startTime = new Date(details.initiationTimestamp);
       startTime.setHours(startTime.getHours() - 1);
-      const endTime = details.disconnectTimestamp 
+      const endTime = details.disconnectTimestamp
         ? new Date(details.disconnectTimestamp)
         : new Date();
       endTime.setHours(endTime.getHours() + 1);
-      
+
       // Fetch logs
       const [contactLogs, transcript] = await Promise.all([
         service.getContactLogs(contactId, startTime, endTime),
         service.getTranscript(contactId, startTime),
       ]);
-      
+
       // Build flow for main view (with filtering)
       const flowBuilder = new FlowBuilderService(contactLogs, { filterModules: true });
       const flowData = flowBuilder.buildFlow();
-      
+
       // Add transcript if available
       if (transcript.length > 0) {
         flowBuilder.addTranscript(transcript);
         flowData.transcript = transcript;
       }
-      
+
       return { flowData, originalLogs: contactLogs }; // Return both
     },
     enabled: !!contactId,
@@ -2831,8 +3528,9 @@ const ContactFlowViewer: React.FC = () => {
   // Handle node click - Navigate to flow detail page
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
+      event.stopPropagation(); // Prevent closing drawer when clicking a node
       const flowName = node.data?.label as string;
-      const timeRange = node.data?.timeRange as { start: string, end:string } | undefined;
+      const timeRange = node.data?.timeRange as { start: string, end: string } | undefined;
 
       if (flowName && timeRange && queryData?.originalLogs) {
         // Filter originalLogs to get all logs for this flow
@@ -2850,7 +3548,7 @@ const ContactFlowViewer: React.FC = () => {
             const log = allLogs[i];
             const isModuleLog = log.ContactFlowName?.startsWith('MOD_');
             const isInvokeOrReturn = log.ContactFlowModuleType === 'InvokeFlowModule' ||
-                                    log.ContactFlowModuleType === 'ReturnFromFlowModule';
+              log.ContactFlowModuleType === 'ReturnFromFlowModule';
 
             // Include: same flow, module logs, or invoke/return module types
             if (log.ContactFlowName === flowName || isModuleLog || isInvokeOrReturn) {
@@ -2892,12 +3590,12 @@ const ContactFlowViewer: React.FC = () => {
   // Handle export
   const handleExport = () => {
     if (!flowData) return;
-    
+
     const dataStr = JSON.stringify(flowData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    
+
     const exportFileDefaultName = `contact-flow-${contactId}.json`;
-    
+
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -3039,7 +3737,10 @@ const ContactFlowViewer: React.FC = () => {
   }
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box
+      sx={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}
+      onClick={() => setDrawerOpen(false)} // Close drawer on click outside
+    >
       {/* Toolbar */}
       <Paper elevation={1} sx={{ zIndex: 10 }}>
         <Toolbar>
@@ -3049,7 +3750,7 @@ const ContactFlowViewer: React.FC = () => {
           <Typography variant="h6" sx={{ flexGrow: 1, ml: 2 }}>
             Contact Flow: {contactId}
           </Typography>
-          
+
           {/* Search */}
           <TextField
             size="small"
@@ -3065,7 +3766,7 @@ const ContactFlowViewer: React.FC = () => {
               ),
             }}
           />
-          
+
           {/* Actions */}
           <Stack direction="row" spacing={1}>
             <Tooltip title="Refresh">
@@ -3118,34 +3819,14 @@ const ContactFlowViewer: React.FC = () => {
 
       {/* React Flow Canvas */}
       <Box sx={{ flex: 1 }}>
-        <ReactFlowProvider>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onNodeClick={onNodeClick}
-            nodeTypes={nodeTypes}
-            fitView
-            attributionPosition="bottom-left"
-          >
-            <Background gap={12} size={1} />
-            <Controls />
-            <MiniMap
-              nodeStrokeColor={(node) => {
-                if (node.data?.error) return '#f44336';
-                if (node.type === 'input') return '#4caf50';
-                if (node.type === 'output') return '#2196f3';
-                return '#888';
-              }}
-              nodeColor={(node) => {
-                if (node.data?.error) return '#ffebee';
-                return '#f5f5f5';
-              }}
-              nodeBorderRadius={4}
-            />
-          </ReactFlow>
-        </ReactFlowProvider>
+        <FlowCanvas
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick}
+          nodeTypes={nodeTypes}
+        />
       </Box>
 
       {/* Log Details Drawer */}
@@ -3165,6 +3846,12 @@ const ContactFlowViewer: React.FC = () => {
         transcript={flowData?.transcript || []}
       />
     </Box>
+  );
+};
+
+const ContactFlowViewer: React.FC = () => {
+  return (
+    <ContactFlowViewerContent />
   );
 };
 
@@ -4922,6 +5609,7 @@ const FlowDetailViewer: React.FC = () => {
               nodeTypes={nodeTypes}
               fitView
               attributionPosition="bottom-left"
+              preventScrolling={false}
               // zoomOnScroll={false}
               // panOnScroll={false}
             >
@@ -5173,7 +5861,14 @@ export class FlowDefinitionService {
     };
 
     if (config.credentials) {
-      clientConfig.credentials = config.credentials;
+      clientConfig.credentials = {
+        accessKeyId: config.credentials.accessKeyId,
+        secretAccessKey: config.credentials.secretAccessKey,
+        sessionToken: config.credentials.sessionToken,
+        expiration: config.credentials.expiration
+          ? new Date(config.credentials.expiration)
+          : undefined,
+      };
     }
 
     this.connectClient = new ConnectClient(clientConfig);
@@ -6048,6 +6743,7 @@ export interface AWSCredentials {
   accessKeyId: string;
   secretAccessKey: string;
   sessionToken?: string;
+  expiration?: string;
 }
 
 /**
@@ -6162,6 +6858,81 @@ export async function getRegionFromProfile(profile?: string): Promise<string | n
   }
 }
 
+/**
+ * AWS SDK v3 호환 Credential Provider를 생성합니다.
+ * 이 Provider는 자격 증명이 만료되기 전에 자동으로 갱신합니다.
+ */
+export function createAutoRenewingCredentialProvider(profile?: string) {
+  let cachedCredentials: AWSCredentials | null = null;
+  let refreshPromise: Promise<AWSCredentials> | null = null;
+
+  return async () => {
+    // 1. Check if we have valid cached credentials
+    if (cachedCredentials) {
+      const now = new Date();
+      // If expiration is missing, assume valid (or let SDK handle it)
+      // If expiration exists, check if it's expired or expiring soon (within 5 mins)
+      if (cachedCredentials.expiration) {
+        const expiration = new Date(cachedCredentials.expiration);
+        const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
+
+        if (expiration > fiveMinutesFromNow) {
+          return {
+            accessKeyId: cachedCredentials.accessKeyId,
+            secretAccessKey: cachedCredentials.secretAccessKey,
+            sessionToken: cachedCredentials.sessionToken,
+            expiration: expiration,
+          };
+        }
+      } else {
+        // If no expiration provided, just return what we have
+        // The SDK might fail if it's actually expired, but we can't know
+        return {
+          accessKeyId: cachedCredentials.accessKeyId,
+          secretAccessKey: cachedCredentials.secretAccessKey,
+          sessionToken: cachedCredentials.sessionToken,
+        };
+      }
+    }
+
+    // 2. Refresh credentials
+    if (!refreshPromise) {
+      refreshPromise = (async () => {
+        try {
+          console.log('Refreshing AWS credentials...');
+          let newCreds: AWSCredentials;
+
+          if (profile) {
+            newCreds = await fetchSSOCredentials(profile);
+          } else {
+            // Try auto-fetch if no profile specified
+            const result = await autoFetchSSOCredentials();
+            if (result) {
+              newCreds = result.credentials;
+            } else {
+              throw new Error('Failed to auto-fetch credentials');
+            }
+          }
+
+          cachedCredentials = newCreds;
+          return newCreds;
+        } finally {
+          refreshPromise = null;
+        }
+      })();
+    }
+
+    const creds = await refreshPromise;
+
+    return {
+      accessKeyId: creds.accessKeyId,
+      secretAccessKey: creds.secretAccessKey,
+      sessionToken: creds.sessionToken,
+      expiration: creds.expiration ? new Date(creds.expiration) : undefined,
+    };
+  };
+}
+
 
 ---------------------
 /Users/ke-aicc/Downloads/files/src/services/awsConnectService.ts
@@ -6199,6 +6970,7 @@ import {
   SearchCriteria,
   ApiResponse
 } from '@/types/contact.types';
+import { createAutoRenewingCredentialProvider } from './credentialService';
 
 export class AWSConnectService {
   private connectClient: ConnectClient;
@@ -6217,8 +6989,18 @@ export class AWSConnectService {
     };
 
     // Only add credentials if they are explicitly provided
-    if (config.credentials) {
-      clientConfig.credentials = config.credentials;
+    if (config.profile) {
+      // Use auto-renewing provider if profile is set
+      clientConfig.credentials = createAutoRenewingCredentialProvider(config.profile);
+    } else if (config.credentials) {
+      clientConfig.credentials = {
+        accessKeyId: config.credentials.accessKeyId,
+        secretAccessKey: config.credentials.secretAccessKey,
+        sessionToken: config.credentials.sessionToken,
+        expiration: config.credentials.expiration
+          ? new Date(config.credentials.expiration)
+          : undefined,
+      };
     }
 
     this.connectClient = new ConnectClient(clientConfig);
@@ -6255,7 +7037,7 @@ export class AWSConnectService {
         InstanceId: this.config.instanceId,
         ContactId: contactId,
       });
-      
+
       const response = await this.connectClient.send(command);
       const contact = response.Contact!;
 
@@ -6316,7 +7098,7 @@ export class AWSConnectService {
 
         const queryResults = await this.logsClient.send(getQueryResultsCommand);
         status = queryResults.status as QueryStatus;
-        
+
         if (status === QueryStatus.Complete) {
           results = queryResults.results || [];
         }
@@ -6347,7 +7129,7 @@ export class AWSConnectService {
       });
 
       const listResponse = await this.s3Client.send(listCommand);
-      
+
       if (!listResponse.Contents || listResponse.Contents.length === 0) {
         return [];
       }
@@ -6361,7 +7143,7 @@ export class AWSConnectService {
       const getResponse = await this.s3Client.send(getCommand);
       const bodyString = await this.streamToString(getResponse.Body);
       const data = JSON.parse(bodyString);
-      
+
       return data.Transcript || [];
     } catch (error) {
       console.error('Error fetching transcript:', error);
@@ -6388,7 +7170,7 @@ export class AWSConnectService {
       });
 
       const listResponse = await this.s3Client.send(listCommand);
-      
+
       if (!listResponse.Contents) {
         return { contactLogs: [], lambdaLogs: {} };
       }
@@ -6398,7 +7180,7 @@ export class AWSConnectService {
 
       for (const object of listResponse.Contents) {
         const key = object.Key!;
-        
+
         // Check if file is within time range
         const fileTime = this.extractTimeFromKey(key);
         if (!fileTime || fileTime < startTime || fileTime > endTime) {
@@ -6412,7 +7194,7 @@ export class AWSConnectService {
 
         const getResponse = await this.s3Client.send(getCommand);
         const bodyBuffer = await this.streamToBuffer(getResponse.Body);
-        
+
         // Decompress gzip
         const decompressed = pako.ungzip(bodyBuffer, { to: 'string' });
         const lines = decompressed.split('\n').filter(line => line.trim());
@@ -6420,7 +7202,7 @@ export class AWSConnectService {
         for (const line of lines) {
           try {
             const log = JSON.parse(line);
-            
+
             if (log.ContactId === contactId) {
               if (log.logGroup?.includes('/aws/connect/')) {
                 contactLogs.push(this.transformToContactLog(log));
@@ -6468,7 +7250,7 @@ export class AWSConnectService {
         startTime,
         endTime
       );
-      
+
       return logs.map(log => this.transformToLambdaLog(log));
     } catch (error) {
       console.error(`Error fetching Lambda logs for ${functionName}:`, error);
@@ -6477,7 +7259,7 @@ export class AWSConnectService {
   }
 
   /**
-   * X-Ray 트레이스 조회
+   * X-Ray 트레이스 조회 (상세 세그먼트 포함)
    */
   async getXRayTrace(traceId: string): Promise<any> {
     try {
@@ -6493,7 +7275,7 @@ export class AWSConnectService {
       const summariesResponse = await this.xrayClient.send(summariesCommand);
 
       if (!summariesResponse.TraceSummaries || summariesResponse.TraceSummaries.length === 0) {
-        return null;
+        return { segments: [], lambdaLogs: [] };
       }
 
       const graphCommand = new GetTraceGraphCommand({
@@ -6502,13 +7284,55 @@ export class AWSConnectService {
 
       const graphResponse = await this.xrayClient.send(graphCommand);
 
+      // Process segments to extract detailed information
+      const segments = (graphResponse.Services || []).flatMap(service => {
+        const segments: any[] = [];
+
+        // Parse segment document
+        if (service.Edges) {
+          for (const edge of service.Edges) {
+            const segment = {
+              id: edge.ReferenceId,
+              name: service.Name,
+              origin: service.Type,
+              parent_id: edge.StartTime, // This is a simplification
+              start_time: service.StartTime,
+              end_time: service.EndTime,
+              error: !!service.SummaryStatistics?.ErrorStatistics?.TotalCount,
+              fault: !!service.SummaryStatistics?.FaultStatistics?.TotalCount,
+              subsegments: [],
+            };
+
+            segments.push(segment);
+          }
+        } else {
+          // Single segment
+          const segment = {
+            id: `${service.Name}-${Date.now()}`,
+            name: service.Name,
+            origin: service.Type,
+            start_time: service.StartTime,
+            end_time: service.EndTime,
+            error: !!service.SummaryStatistics?.ErrorStatistics?.TotalCount,
+            fault: !!service.SummaryStatistics?.FaultStatistics?.TotalCount,
+            subsegments: [],
+          };
+
+          segments.push(segment);
+        }
+
+        return segments;
+      });
+
       return {
+        traceId,
         summary: summariesResponse.TraceSummaries[0],
-        services: graphResponse.Services || [],
+        segments,
+        lambdaLogs: [], // To be populated separately if needed
       };
     } catch (error) {
       console.error('Error fetching X-Ray trace:', error);
-      return null;
+      return { segments: [], lambdaLogs: [] };
     }
   }
 
@@ -6532,7 +7356,7 @@ export class AWSConnectService {
       });
 
       const response = await this.connectClient.send(command);
-      
+
       return (response.Contacts || []).map(contact => ({
         contactId: contact.Id!,
         instanceId: this.config.instanceId,
@@ -6578,7 +7402,7 @@ export class AWSConnectService {
 
       const queryResults = await this.logsClient.send(getQueryResultsCommand);
       status = queryResults.status as QueryStatus;
-      
+
       if (status === QueryStatus.Complete) {
         results = queryResults.results || [];
       }
@@ -6591,7 +7415,7 @@ export class AWSConnectService {
     return results.map(result => {
       const message = result.find((field: any) => field.field === '@message')?.value;
       const timestamp = result.find((field: any) => field.field === '@timestamp')?.value;
-      
+
       try {
         const parsed = JSON.parse(message);
         return {

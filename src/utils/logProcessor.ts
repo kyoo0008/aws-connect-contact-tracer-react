@@ -117,6 +117,8 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
   let currentGetUserInputIdentifier: string | null = null;
   let invokeExternalGroup: ContactLog[] = [];
   let currentInvokeExternalIdentifier: string | null = null;
+  let dialGroup: ContactLog[] = [];
+  let currentDialIdentifier: string | null = null;
 
   const mergeAttributesGroup = () => {
     if (attributesGroup.length === 0) return;
@@ -212,6 +214,25 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
     currentInvokeExternalIdentifier = null;
   };
 
+  const mergeDialGroup = () => {
+    if (dialGroup.length === 0) return;
+
+    if (dialGroup.length === 1) {
+      processed.push(dialGroup[0]);
+    } else {
+      // Dial 로그 병합: 첫 번째 로그의 Parameters를 사용하고, 마지막 로그의 Results를 사용
+      const baseLog = { ...dialGroup[0] };
+      const finalResults = dialGroup[dialGroup.length - 1].Results;
+
+      baseLog.Results = finalResults;
+      baseLog.Timestamp = dialGroup[dialGroup.length - 1].Timestamp;
+
+      processed.push(baseLog);
+    }
+    dialGroup = [];
+    currentDialIdentifier = null;
+  };
+
   let i = 0;
   while (i < logs.length) {
     const log = logs[i];
@@ -224,6 +245,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       mergeAttributesGroup();
       mergeGetUserInputGroup();
       mergeInvokeExternalGroup();
+      mergeDialGroup();
 
       // InvokeFlowModule 다음에 오는 MOD_ 로그들 찾기
       let j = i + 1;
@@ -278,7 +300,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       // MOD_ 로그나 ReturnFromFlowModule은 이미 InvokeFlowModule에서 처리됨
       // 혹시 단독으로 있다면 건너뛰기
       i++;
-    } else if (['GetUserInput','PlayPrompt','StoreUserInput'].includes(log.ContactFlowModuleType)) {
+    } else if (['GetUserInput', 'PlayPrompt', 'StoreUserInput'].includes(log.ContactFlowModuleType)) {
       // GetUserInput 로그 처리: 같은 Identifier를 가진 연속된 로그를 병합
       const identifier = log.Identifier;
 
@@ -290,6 +312,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       // 이전에 다른 그룹이 있었다면 먼저 병합
       mergeAttributesGroup();
       mergeInvokeExternalGroup();
+      mergeDialGroup();
 
       currentGetUserInputIdentifier = identifier || null;
       getUserInputGroup.push(log);
@@ -306,9 +329,27 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       // 이전에 다른 그룹이 있었다면 먼저 병합
       mergeAttributesGroup();
       mergeGetUserInputGroup();
+      mergeDialGroup();
 
       currentInvokeExternalIdentifier = identifier || null;
       invokeExternalGroup.push(log);
+      i++;
+    } else if (log.ContactFlowModuleType === 'Dial') {
+      // Dial 로그 처리: 같은 Identifier를 가진 연속된 로그를 병합
+      const identifier = log.Identifier;
+
+      // Identifier가 다르면 이전 그룹을 먼저 병합
+      if (currentDialIdentifier !== null && currentDialIdentifier !== identifier) {
+        mergeDialGroup();
+      }
+
+      // 이전에 다른 그룹이 있었다면 먼저 병합
+      mergeAttributesGroup();
+      mergeGetUserInputGroup();
+      mergeInvokeExternalGroup();
+
+      currentDialIdentifier = identifier || null;
+      dialGroup.push(log);
       i++;
     } else if (['SetAttributes', 'SetFlowAttributes', 'CheckAttribute'].includes(log.ContactFlowModuleType)) {
       // 같은 타입의 연속된 로그만 그룹화
@@ -317,6 +358,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       // 다른 그룹이 있었다면 먼저 병합
       mergeGetUserInputGroup();
       mergeInvokeExternalGroup();
+      mergeDialGroup();
 
       // 타입이 다르면 이전 그룹을 먼저 병합
       if (currentGroupType !== null && currentGroupType !== logType) {
@@ -330,6 +372,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
       mergeAttributesGroup();
       mergeGetUserInputGroup();
       mergeInvokeExternalGroup();
+      mergeDialGroup();
       processed.push(log);
       i++;
     }
@@ -338,6 +381,7 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
   mergeAttributesGroup();
   mergeGetUserInputGroup();
   mergeInvokeExternalGroup();
+  mergeDialGroup();
 
   return processed;
 };

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'react-flow-renderer';
 import { Box, Typography, Chip } from '@mui/material';
 import { AccountTree as ModuleIcon } from '@mui/icons-material';
@@ -26,6 +26,8 @@ interface CustomNodeProps {
 }
 
 const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const isMainView = data.isMainView || false;
   const hasError = data.error || false;
   const isModuleNode = data.isModuleNode || false;
@@ -33,6 +35,21 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const borderColor = hasError ? '#F44336' : isModuleNode ? '#2196F3' : '#E0E0E0';
   const targetPosition = data.targetPosition || Position.Left;
   const sourcePosition = data.sourcePosition || Position.Right;
+
+  // React Flow 노드의 부모 wrapper에 z-index 적용
+  useEffect(() => {
+    if (isExpanded) {
+      const nodeElement = document.querySelector(`[data-id="${data.id}"]`);
+      if (nodeElement) {
+        (nodeElement as HTMLElement).style.zIndex = '9999';
+      }
+    } else {
+      const nodeElement = document.querySelector(`[data-id="${data.id}"]`);
+      if (nodeElement) {
+        (nodeElement as HTMLElement).style.zIndex = '';
+      }
+    }
+  }, [isExpanded, data.id]);
 
 
 
@@ -111,18 +128,28 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
     <Box
       className="nopan" // React Flow class to disable panning on drag
       onWheel={(e) => e.stopPropagation()} // Stop zoom/pan on scroll
+      onMouseEnter={() => setIsExpanded(true)}
+      onMouseLeave={() => setIsExpanded(false)}
       sx={{
         padding: 1,
         borderRadius: 2,
         border: `2px solid ${borderColor}`,
         backgroundColor: bgColor,
         width: 280,
-        height: 180,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        height: isExpanded ? 'auto' : 180,
+        minHeight: 180,
+        maxHeight: isExpanded ? 'none' : 180,
+        boxShadow: isExpanded ? '0 8px 16px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
         display: 'flex',
         flexDirection: 'column',
+        position: isExpanded ? 'absolute' : 'relative',
+        zIndex: isExpanded ? '9999 !important' : 'auto',
+        transition: 'all 0.2s ease-in-out',
+        transform: isExpanded ? 'scale(1.02)' : 'scale(1)',
+        isolation: isExpanded ? 'isolate' : 'auto',
+        willChange: isExpanded ? 'transform, z-index' : 'auto',
         '&:hover': {
-          boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+          boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
         },
       }}
     >
@@ -161,7 +188,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
         className="nodrag" // Prevents react-flow drag events on this element
         sx={{
           flex: 1,
-          overflowY: 'auto',
+          overflowY: isExpanded ? 'visible' : 'auto',
           overflowX: 'hidden',
           p: 1,
           minHeight: 0,

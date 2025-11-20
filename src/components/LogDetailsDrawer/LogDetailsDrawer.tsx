@@ -45,13 +45,31 @@ const LogDetailsDrawer: React.FC<LogDetailsDrawerProps> = ({
   return (
     <Drawer
       anchor="right"
+      variant="persistent"
       open={open}
       onClose={onClose}
-      sx={{
-        '& .MuiDrawer-paper': {
+      onClick={(e) => e.stopPropagation()} // Prevent clicks inside drawer from closing it
+      PaperProps={{
+        sx: {
           width: { xs: '90%', sm: 400, md: 500 },
           p: 2,
-        },
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          height: '100%',
+          boxShadow: '-2px 0 8px rgba(0,0,0,0.1)',
+        }
+      }}
+      sx={{
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        height: '100%',
+        zIndex: 1200,
+        pointerEvents: open ? 'auto' : 'none', // Pass through clicks when closed
+        '& .MuiDrawer-root': {
+          position: 'absolute'
+        }
       }}
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -144,11 +162,10 @@ const LogDetailsDrawer: React.FC<LogDetailsDrawerProps> = ({
                         backgroundColor: subLog.Results?.includes('Error') || subLog.Results?.includes('Failed')
                           ? '#FFEBEE'
                           : '#F5F5F5',
-                        borderLeft: `3px solid ${
-                          subLog.Results?.includes('Error') || subLog.Results?.includes('Failed')
+                        borderLeft: `3px solid ${subLog.Results?.includes('Error') || subLog.Results?.includes('Failed')
                             ? '#F44336'
                             : '#2196F3'
-                        }`,
+                          }`,
                       }}
                       variant="outlined"
                     >

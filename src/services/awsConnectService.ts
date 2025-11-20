@@ -31,6 +31,7 @@ import {
   SearchCriteria,
   ApiResponse
 } from '@/types/contact.types';
+import { createAutoRenewingCredentialProvider } from './credentialService';
 
 export class AWSConnectService {
   private connectClient: ConnectClient;
@@ -49,8 +50,18 @@ export class AWSConnectService {
     };
 
     // Only add credentials if they are explicitly provided
-    if (config.credentials) {
-      clientConfig.credentials = config.credentials;
+    if (config.profile) {
+      // Use auto-renewing provider if profile is set
+      clientConfig.credentials = createAutoRenewingCredentialProvider(config.profile);
+    } else if (config.credentials) {
+      clientConfig.credentials = {
+        accessKeyId: config.credentials.accessKeyId,
+        secretAccessKey: config.credentials.secretAccessKey,
+        sessionToken: config.credentials.sessionToken,
+        expiration: config.credentials.expiration
+          ? new Date(config.credentials.expiration)
+          : undefined,
+      };
     }
 
     this.connectClient = new ConnectClient(clientConfig);
@@ -87,7 +98,7 @@ export class AWSConnectService {
         InstanceId: this.config.instanceId,
         ContactId: contactId,
       });
-      
+
       const response = await this.connectClient.send(command);
       const contact = response.Contact!;
 
@@ -148,7 +159,7 @@ export class AWSConnectService {
 
         const queryResults = await this.logsClient.send(getQueryResultsCommand);
         status = queryResults.status as QueryStatus;
-        
+
         if (status === QueryStatus.Complete) {
           results = queryResults.results || [];
         }
@@ -179,7 +190,7 @@ export class AWSConnectService {
       });
 
       const listResponse = await this.s3Client.send(listCommand);
-      
+
       if (!listResponse.Contents || listResponse.Contents.length === 0) {
         return [];
       }
@@ -193,7 +204,7 @@ export class AWSConnectService {
       const getResponse = await this.s3Client.send(getCommand);
       const bodyString = await this.streamToString(getResponse.Body);
       const data = JSON.parse(bodyString);
-      
+
       return data.Transcript || [];
     } catch (error) {
       console.error('Error fetching transcript:', error);
@@ -220,7 +231,7 @@ export class AWSConnectService {
       });
 
       const listResponse = await this.s3Client.send(listCommand);
-      
+
       if (!listResponse.Contents) {
         return { contactLogs: [], lambdaLogs: {} };
       }
@@ -230,7 +241,7 @@ export class AWSConnectService {
 
       for (const object of listResponse.Contents) {
         const key = object.Key!;
-        
+
         // Check if file is within time range
         const fileTime = this.extractTimeFromKey(key);
         if (!fileTime || fileTime < startTime || fileTime > endTime) {
@@ -244,7 +255,7 @@ export class AWSConnectService {
 
         const getResponse = await this.s3Client.send(getCommand);
         const bodyBuffer = await this.streamToBuffer(getResponse.Body);
-        
+
         // Decompress gzip
         const decompressed = pako.ungzip(bodyBuffer, { to: 'string' });
         const lines = decompressed.split('\n').filter(line => line.trim());
@@ -252,7 +263,7 @@ export class AWSConnectService {
         for (const line of lines) {
           try {
             const log = JSON.parse(line);
-            
+
             if (log.ContactId === contactId) {
               if (log.logGroup?.includes('/aws/connect/')) {
                 contactLogs.push(this.transformToContactLog(log));
@@ -300,7 +311,7 @@ export class AWSConnectService {
         startTime,
         endTime
       );
-      
+
       return logs.map(log => this.transformToLambdaLog(log));
     } catch (error) {
       console.error(`Error fetching Lambda logs for ${functionName}:`, error);
@@ -364,7 +375,7 @@ export class AWSConnectService {
       });
 
       const response = await this.connectClient.send(command);
-      
+
       return (response.Contacts || []).map(contact => ({
         contactId: contact.Id!,
         instanceId: this.config.instanceId,
@@ -410,7 +421,7 @@ export class AWSConnectService {
 
       const queryResults = await this.logsClient.send(getQueryResultsCommand);
       status = queryResults.status as QueryStatus;
-      
+
       if (status === QueryStatus.Complete) {
         results = queryResults.results || [];
       }
@@ -423,7 +434,7 @@ export class AWSConnectService {
     return results.map(result => {
       const message = result.find((field: any) => field.field === '@message')?.value;
       const timestamp = result.find((field: any) => field.field === '@timestamp')?.value;
-      
+
       try {
         const parsed = JSON.parse(message);
         return {

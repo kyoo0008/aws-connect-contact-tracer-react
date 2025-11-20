@@ -91,7 +91,14 @@ export class FlowDefinitionService {
     };
 
     if (config.credentials) {
-      clientConfig.credentials = config.credentials;
+      clientConfig.credentials = {
+        accessKeyId: config.credentials.accessKeyId,
+        secretAccessKey: config.credentials.secretAccessKey,
+        sessionToken: config.credentials.sessionToken,
+        expiration: config.credentials.expiration
+          ? new Date(config.credentials.expiration)
+          : undefined,
+      };
     }
 
     this.connectClient = new ConnectClient(clientConfig);

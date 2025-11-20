@@ -69,6 +69,7 @@ app.post('/api/aws/credentials', async (req, res) => {
       accessKeyId: credentials.accessKeyId,
       secretAccessKey: credentials.secretAccessKey,
       sessionToken: credentials.sessionToken,
+      expiration: credentials.expiration,
     });
   } catch (error) {
     console.error('Error fetching credentials:', error);
@@ -124,6 +125,7 @@ app.get('/api/aws/auto-credentials', async (req, res) => {
         accessKeyId: credentials.accessKeyId,
         secretAccessKey: credentials.secretAccessKey,
         sessionToken: credentials.sessionToken,
+        expiration: credentials.expiration,
       },
       profile: selectedProfile,
       region: selectedRegion,

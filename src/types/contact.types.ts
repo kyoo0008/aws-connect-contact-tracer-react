@@ -159,6 +159,7 @@ export interface AWSConfig {
     accessKeyId: string;
     secretAccessKey: string;
     sessionToken?: string;
+    expiration?: string;
   };
   profile?: string; // AWS SSO profile name (for backend API)
 }

@@ -7,6 +7,7 @@ export interface AWSCredentials {
   accessKeyId: string;
   secretAccessKey: string;
   sessionToken?: string;
+  expiration?: string;
 }
 
 /**
@@ -119,4 +120,79 @@ export async function getRegionFromProfile(profile?: string): Promise<string | n
     console.error('Error fetching region from profile:', error);
     return null;
   }
+}
+
+/**
+ * AWS SDK v3 호환 Credential Provider를 생성합니다.
+ * 이 Provider는 자격 증명이 만료되기 전에 자동으로 갱신합니다.
+ */
+export function createAutoRenewingCredentialProvider(profile?: string) {
+  let cachedCredentials: AWSCredentials | null = null;
+  let refreshPromise: Promise<AWSCredentials> | null = null;
+
+  return async () => {
+    // 1. Check if we have valid cached credentials
+    if (cachedCredentials) {
+      const now = new Date();
+      // If expiration is missing, assume valid (or let SDK handle it)
+      // If expiration exists, check if it's expired or expiring soon (within 5 mins)
+      if (cachedCredentials.expiration) {
+        const expiration = new Date(cachedCredentials.expiration);
+        const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
+
+        if (expiration > fiveMinutesFromNow) {
+          return {
+            accessKeyId: cachedCredentials.accessKeyId,
+            secretAccessKey: cachedCredentials.secretAccessKey,
+            sessionToken: cachedCredentials.sessionToken,
+            expiration: expiration,
+          };
+        }
+      } else {
+        // If no expiration provided, just return what we have
+        // The SDK might fail if it's actually expired, but we can't know
+        return {
+          accessKeyId: cachedCredentials.accessKeyId,
+          secretAccessKey: cachedCredentials.secretAccessKey,
+          sessionToken: cachedCredentials.sessionToken,
+        };
+      }
+    }
+
+    // 2. Refresh credentials
+    if (!refreshPromise) {
+      refreshPromise = (async () => {
+        try {
+          console.log('Refreshing AWS credentials...');
+          let newCreds: AWSCredentials;
+
+          if (profile) {
+            newCreds = await fetchSSOCredentials(profile);
+          } else {
+            // Try auto-fetch if no profile specified
+            const result = await autoFetchSSOCredentials();
+            if (result) {
+              newCreds = result.credentials;
+            } else {
+              throw new Error('Failed to auto-fetch credentials');
+            }
+          }
+
+          cachedCredentials = newCreds;
+          return newCreds;
+        } finally {
+          refreshPromise = null;
+        }
+      })();
+    }
+
+    const creds = await refreshPromise;
+
+    return {
+      accessKeyId: creds.accessKeyId,
+      secretAccessKey: creds.secretAccessKey,
+      sessionToken: creds.sessionToken,
+      expiration: creds.expiration ? new Date(creds.expiration) : undefined,
+    };
+  };
 }

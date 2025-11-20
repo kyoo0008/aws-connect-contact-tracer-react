@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Handle, Position } from 'react-flow-renderer';
 import { Box, Typography, Chip } from '@mui/material';
 import { AccountTree as ModuleIcon } from '@mui/icons-material';
 
 import { NodeContentRenderer } from './NodeContentRenderer';
+import console from 'console';
 
 interface CustomNodeProps {
   data: {
@@ -33,6 +34,9 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const targetPosition = data.targetPosition || Position.Left;
   const sourcePosition = data.sourcePosition || Position.Right;
 
+
+
+
   const renderMainViewContent = () => (
     <>
       {data.timeRange && (
@@ -48,7 +52,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
               Nodes : {data.logCount}
             </Typography>
           )}
-          <br /> 
+          <br />
           {data.timeRange && (
             <Typography variant="caption" fontWeight="bold" sx={{ mt: 1 }}>
               Duration : {((new Date(data.timeRange.end).getTime() - new Date(data.timeRange.start).getTime()) / 1000).toFixed(2)}s
@@ -85,49 +89,19 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
                 Nodes : {data.logCount}
               </Typography>
             )}
-             <Chip
-                label="Click to view details"
-                size="small"
-                icon={<ModuleIcon sx={{ fontSize: '1rem' }} />}
-                sx={{ mt: 1, cursor: 'pointer' }}
-              />
+            <Chip
+              label="Click to view details"
+              size="small"
+              icon={<ModuleIcon sx={{ fontSize: '1rem' }} />}
+              sx={{ mt: 1, cursor: 'pointer' }}
+            />
           </>
         )}
       </>
     );
   };
 
-  const handleWheel = (event: React.WheelEvent) => {
-    const target = event.currentTarget as HTMLElement;
-    const { scrollTop, scrollHeight, clientHeight } = target;
-    
-    // Check if content is scrollable
-    const isScrollable = scrollHeight > clientHeight;
-    
-    if (isScrollable) {
-      // Scrolling down
-      if (event.deltaY > 0) {
-        // If we're at the bottom, allow event to propagate (for ReactFlow zoom)
-        if (scrollTop + clientHeight >= scrollHeight - 1) {
-          return;
-        }
-      }
-      // Scrolling up
-      else {
-        // If we're at the top, allow event to propagate (for ReactFlow zoom)
-        if (scrollTop <= 1) {
-          return;
-        }
-      }
-      
-      // We're in the middle of scrollable content, prevent ReactFlow zoom
-      event.stopPropagation();
-    }
-    // If not scrollable, allow ReactFlow to handle the zoom
-  };
-
-
-  const hasFooterResults = data.logData?._footerResults && ['PlayPrompt','StoreUserInput','GetUserInput'].includes(data?.moduleType ?? '');
+  const hasFooterResults = data.logData?._footerResults && ['PlayPrompt', 'StoreUserInput', 'GetUserInput'].includes(data?.moduleType ?? '');
   const footerResults = data.logData?._footerResults;
 
   const hasFooterExternalResults = data.logData?._footerExternalResults && ['InvokeExternalResource', 'InvokeLambdaFunction'].includes(data?.moduleType ?? '');
@@ -135,6 +109,8 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
 
   return (
     <Box
+      className="nopan" // React Flow class to disable panning on drag
+      onWheel={(e) => e.stopPropagation()} // Stop zoom/pan on scroll
       sx={{
         padding: 1,
         borderRadius: 2,
@@ -183,8 +159,14 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
       {/* Body */}
       <Box
         className="nodrag" // Prevents react-flow drag events on this element
-        onWheel={handleWheel} // Prevents zoom on scroll
-        sx={{ flex: 1, overflowY: 'auto', p: 1, minHeight: 0 }}
+        sx={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          p: 1,
+          minHeight: 0,
+          overscrollBehavior: 'contain' // Prevents scroll chaining to parent (canvas)
+        }}
       >
         {isMainView ? renderMainViewContent() : renderDetailViewContent()}
       </Box>

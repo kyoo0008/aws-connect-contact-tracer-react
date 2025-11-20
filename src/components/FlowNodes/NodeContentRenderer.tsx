@@ -164,7 +164,7 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
           </Box>
         );
       }
-      
+
       case 'SetAttributes':
       case 'SetFlowAttributes': {
         const attrs = Array.isArray(params) ? params : [params];
@@ -203,7 +203,7 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
         );
       case 'GetCustomerProfile':
         return (
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
             ProfileId: {data.logData?.ResultData?.ProfileId}
             <br />
             <small>Result: {results}</small>
@@ -224,7 +224,7 @@ export const NodeContentRenderer = ({ data }: { data: any }) => {
   };
 
   return (
-    <Box sx={{ p: 1, height: '100%', overflowY: 'auto' }}>
+    <Box sx={{ p: 1, height: '100%' }}>
       {renderContent()}
     </Box>
   );

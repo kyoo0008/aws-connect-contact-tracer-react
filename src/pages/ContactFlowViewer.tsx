@@ -45,11 +45,52 @@ import TranscriptPanel from '@/components/TranscriptPanel/TranscriptPanel';
 import LogDetailsDrawer from '@/components/LogDetailsDrawer/LogDetailsDrawer';
 import { useConfig } from '@/contexts/ConfigContext';
 
+
 const nodeTypes = {
   custom: CustomNode,
 };
 
-const ContactFlowViewer: React.FC = () => {
+const FlowCanvas: React.FC<{
+  nodes: Node[];
+  edges: Edge[];
+  onNodesChange: any;
+  onEdgesChange: any;
+  onNodeClick: any;
+  nodeTypes: any;
+}> = ({ nodes, edges, onNodesChange, onEdgesChange, onNodeClick, nodeTypes }) => {
+  return (
+    <ReactFlowProvider>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        nodeTypes={nodeTypes}
+        fitView
+        attributionPosition="bottom-left"
+      >
+        <Background gap={12} size={1} />
+        <Controls />
+        <MiniMap
+          nodeStrokeColor={(node) => {
+            if (node.data?.error) return '#f44336';
+            if (node.type === 'input') return '#4caf50';
+            if (node.type === 'output') return '#2196f3';
+            return '#888';
+          }}
+          nodeColor={(node) => {
+            if (node.data?.error) return '#ffebee';
+            return '#f5f5f5';
+          }}
+          nodeBorderRadius={4}
+        />
+      </ReactFlow>
+    </ReactFlowProvider>
+  );
+};
+
+const ContactFlowViewerContent: React.FC = () => {
   const { contactId } = useParams<{ contactId: string }>();
   const navigate = useNavigate();
   const { config, isConfigured } = useConfig();
@@ -63,6 +104,8 @@ const ContactFlowViewer: React.FC = () => {
   const [subFlowLogs, setSubFlowLogs] = useState<ContactLog[]>([]);
   const [isFetchingSubFlow, setIsFetchingSubFlow] = useState(false);
 
+
+
   const fetchSubFlowLogs = useCallback(async (flowId: string) => {
     if (!contactId) return;
 
@@ -72,11 +115,11 @@ const ContactFlowViewer: React.FC = () => {
       const details = await service.getContactDetails(contactId);
       const startTime = new Date(details.initiationTimestamp);
       startTime.setHours(startTime.getHours() - 1);
-      const endTime = details.disconnectTimestamp 
+      const endTime = details.disconnectTimestamp
         ? new Date(details.disconnectTimestamp)
         : new Date();
       endTime.setHours(endTime.getHours() + 1);
-      
+
       const logs = await service.getContactLogs(flowId, startTime, endTime);
       setSubFlowLogs(logs);
     } catch (error) {
@@ -94,34 +137,34 @@ const ContactFlowViewer: React.FC = () => {
 
       // Initialize service with current config
       const service = getAWSConnectService(config);
-      
+
       // Get contact details
       const details = await service.getContactDetails(contactId);
-      
+
       // Calculate time range
       const startTime = new Date(details.initiationTimestamp);
       startTime.setHours(startTime.getHours() - 1);
-      const endTime = details.disconnectTimestamp 
+      const endTime = details.disconnectTimestamp
         ? new Date(details.disconnectTimestamp)
         : new Date();
       endTime.setHours(endTime.getHours() + 1);
-      
+
       // Fetch logs
       const [contactLogs, transcript] = await Promise.all([
         service.getContactLogs(contactId, startTime, endTime),
         service.getTranscript(contactId, startTime),
       ]);
-      
+
       // Build flow for main view (with filtering)
       const flowBuilder = new FlowBuilderService(contactLogs, { filterModules: true });
       const flowData = flowBuilder.buildFlow();
-      
+
       // Add transcript if available
       if (transcript.length > 0) {
         flowBuilder.addTranscript(transcript);
         flowData.transcript = transcript;
       }
-      
+
       return { flowData, originalLogs: contactLogs }; // Return both
     },
     enabled: !!contactId,
@@ -171,7 +214,7 @@ const ContactFlowViewer: React.FC = () => {
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
       const flowName = node.data?.label as string;
-      const timeRange = node.data?.timeRange as { start: string, end:string } | undefined;
+      const timeRange = node.data?.timeRange as { start: string, end: string } | undefined;
 
       if (flowName && timeRange && queryData?.originalLogs) {
         // Filter originalLogs to get all logs for this flow
@@ -189,7 +232,7 @@ const ContactFlowViewer: React.FC = () => {
             const log = allLogs[i];
             const isModuleLog = log.ContactFlowName?.startsWith('MOD_');
             const isInvokeOrReturn = log.ContactFlowModuleType === 'InvokeFlowModule' ||
-                                    log.ContactFlowModuleType === 'ReturnFromFlowModule';
+              log.ContactFlowModuleType === 'ReturnFromFlowModule';
 
             // Include: same flow, module logs, or invoke/return module types
             if (log.ContactFlowName === flowName || isModuleLog || isInvokeOrReturn) {
@@ -231,12 +274,12 @@ const ContactFlowViewer: React.FC = () => {
   // Handle export
   const handleExport = () => {
     if (!flowData) return;
-    
+
     const dataStr = JSON.stringify(flowData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    
+
     const exportFileDefaultName = `contact-flow-${contactId}.json`;
-    
+
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -388,7 +431,7 @@ const ContactFlowViewer: React.FC = () => {
           <Typography variant="h6" sx={{ flexGrow: 1, ml: 2 }}>
             Contact Flow: {contactId}
           </Typography>
-          
+
           {/* Search */}
           <TextField
             size="small"
@@ -404,7 +447,7 @@ const ContactFlowViewer: React.FC = () => {
               ),
             }}
           />
-          
+
           {/* Actions */}
           <Stack direction="row" spacing={1}>
             <Tooltip title="Refresh">
@@ -457,34 +500,14 @@ const ContactFlowViewer: React.FC = () => {
 
       {/* React Flow Canvas */}
       <Box sx={{ flex: 1 }}>
-        <ReactFlowProvider>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onNodeClick={onNodeClick}
-            nodeTypes={nodeTypes}
-            fitView
-            attributionPosition="bottom-left"
-          >
-            <Background gap={12} size={1} />
-            <Controls />
-            <MiniMap
-              nodeStrokeColor={(node) => {
-                if (node.data?.error) return '#f44336';
-                if (node.type === 'input') return '#4caf50';
-                if (node.type === 'output') return '#2196f3';
-                return '#888';
-              }}
-              nodeColor={(node) => {
-                if (node.data?.error) return '#ffebee';
-                return '#f5f5f5';
-              }}
-              nodeBorderRadius={4}
-            />
-          </ReactFlow>
-        </ReactFlowProvider>
+        <FlowCanvas
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick}
+          nodeTypes={nodeTypes}
+        />
       </Box>
 
       {/* Log Details Drawer */}
@@ -504,6 +527,12 @@ const ContactFlowViewer: React.FC = () => {
         transcript={flowData?.transcript || []}
       />
     </Box>
+  );
+};
+
+const ContactFlowViewer: React.FC = () => {
+  return (
+    <ContactFlowViewerContent />
   );
 };
 

@@ -5,7 +5,7 @@ import { AccountTree as ModuleIcon, BugReport as XRayIcon } from '@mui/icons-mat
 import { useNavigate } from 'react-router-dom';
 
 import { NodeContentRenderer } from './NodeContentRenderer';
-import console from 'console';
+
 
 interface CustomNodeProps {
   data: {
@@ -42,6 +42,11 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const xrayTraceId = data.logData?.xray_trace_id || data.logData?.xrayTraceId;
   const isLambdaInvocation = ['InvokeLambdaFunction', 'InvokeExternalResource'].includes(data.moduleType || '');
   const hasXRayTrace = isLambdaInvocation && !!xrayTraceId;
+
+
+  useEffect(() => {
+    console.log(data)
+  },[])
 
   // React Flow 노드의 부모 wrapper에 z-index 적용
   useEffect(() => {

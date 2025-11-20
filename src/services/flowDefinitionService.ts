@@ -133,8 +133,12 @@ export class FlowDefinitionService {
       }
 
       return null;
-    } catch (error) {
-      console.error('Error fetching contact flow definition:', error);
+    } catch (error: any) {
+      if (error.name === 'ExpiredTokenException' || error.message?.includes('expired')) {
+        console.error('AWS credentials have expired. Please refresh your credentials in Settings.');
+      } else {
+        console.error('Error fetching contact flow definition:', error);
+      }
       return null;
     }
   }
@@ -168,8 +172,12 @@ export class FlowDefinitionService {
       }
 
       return null;
-    } catch (error) {
-      console.error('Error fetching flow module definition:', error);
+    } catch (error: any) {
+      if (error.name === 'ExpiredTokenException' || error.message?.includes('expired')) {
+        console.error('AWS credentials have expired. Please refresh your credentials in Settings.');
+      } else {
+        console.error('Error fetching flow module definition:', error);
+      }
       return null;
     }
   }

@@ -34,6 +34,11 @@ export interface LambdaLog {
   response?: any;
   duration?: number;
   xrayTraceId?: string;
+  xray_trace_id?: string; // 호환성을 위한 snake_case 버전
+  logStream?: string;
+  logGroup?: string;
+  parameters?: any; // Parameter matching을 위한 필드
+  event?: any; // Event matching을 위한 필드
 }
 
 export interface ContactFlowNode {

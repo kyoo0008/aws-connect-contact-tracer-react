@@ -326,21 +326,21 @@ export class AWSConnectService {
    * Lambda CloudWatch Log 그룹 목록
    */
   private readonly LAMBDA_LOG_GROUPS = [
-    "/aws/lambda/aicc-connect-flow-base/flow-agent-workspace-handler",
-    "/aws/lambda/aicc-connect-flow-base/flow-alms-if",
-    "/aws/lambda/aicc-connect-flow-base/flow-chat-app",
-    "/aws/lambda/aicc-connect-flow-base/flow-idnv-async-if",
-    "/aws/lambda/aicc-connect-flow-base/flow-idnv-common-if",
-    "/aws/lambda/aicc-connect-flow-base/flow-internal-handler",
-    "/aws/lambda/aicc-connect-flow-base/flow-kalis-if",
-    "/aws/lambda/aicc-connect-flow-base/flow-mdm-if",
-    "/aws/lambda/aicc-connect-flow-base/flow-ods-if",
-    "/aws/lambda/aicc-connect-flow-base/flow-oneid-if",
-    "/aws/lambda/aicc-connect-flow-base/flow-sample-integration",
-    "/aws/lambda/aicc-connect-flow-base/flow-tms-if",
-    "/aws/lambda/aicc-connect-flow-base/flow-vars-controller",
-    "/aws/lambda/aicc-chat-app/alb-chat-if",
-    "/aws/lambda/aicc-chat-app/sns-chat-if",
+    "/aws/lmd/aicc-connect-flow-base/flow-agent-workspace-handler",
+    "/aws/lmd/aicc-connect-flow-base/flow-alms-if",
+    "/aws/lmd/aicc-connect-flow-base/flow-chat-app",
+    "/aws/lmd/aicc-connect-flow-base/flow-idnv-async-if",
+    "/aws/lmd/aicc-connect-flow-base/flow-idnv-common-if",
+    "/aws/lmd/aicc-connect-flow-base/flow-internal-handler",
+    "/aws/lmd/aicc-connect-flow-base/flow-kalis-if",
+    "/aws/lmd/aicc-connect-flow-base/flow-mdm-if",
+    "/aws/lmd/aicc-connect-flow-base/flow-ods-if",
+    "/aws/lmd/aicc-connect-flow-base/flow-oneid-if",
+    "/aws/lmd/aicc-connect-flow-base/flow-sample-integration",
+    "/aws/lmd/aicc-connect-flow-base/flow-tms-if",
+    "/aws/lmd/aicc-connect-flow-base/flow-vars-controller",
+    "/aws/lmd/aicc-chat-app/alb-chat-if",
+    "/aws/lmd/aicc-chat-app/sns-chat-if",
   ];
 
   /**
@@ -352,35 +352,55 @@ export class AWSConnectService {
     startTime: Date,
     endTime: Date
   ): Promise<Record<string, LambdaLog[]>> {
+    const startFetchTime = Date.now();
     const lambdaLogs: Record<string, LambdaLog[]> = {};
 
-    console.log(`Fetching Lambda logs for contact ${contactId} from ${this.LAMBDA_LOG_GROUPS.length} log groups`);
+    console.log(`[getAllLambdaLogs] Starting Lambda log fetch for contact ${contactId}`);
+    console.log(`[getAllLambdaLogs] Time range: ${startTime.toISOString()} ~ ${endTime.toISOString()}`);
+    console.log(`[getAllLambdaLogs] Querying ${this.LAMBDA_LOG_GROUPS.length} log groups in parallel...`);
 
     // 병렬로 모든 Lambda 로그 조회
-    const logPromises = this.LAMBDA_LOG_GROUPS.map(async (logGroupName) => {
+    const logPromises = this.LAMBDA_LOG_GROUPS.map(async (logGroupName, index) => {
       const query = `
-        fields @timestamp, @message, @logStream, @log
+        fields @timestamp, @message, @logStream, @xrayTraceId
         | filter @message like /${contactId}/
         | sort @timestamp asc
       `;
 
       try {
-        const logs = await this.queryCloudWatchLogs(
+        console.log(`[getAllLambdaLogs] [${index + 1}/${this.LAMBDA_LOG_GROUPS.length}] Querying ${logGroupName}...`);
+        const rawResults = await this.queryCloudWatchLogs(
           logGroupName,
           query,
           startTime,
           endTime
         );
 
+        // CloudWatch Logs 쿼리 결과를 파싱
+        const logs = rawResults.map((result: any) => {
+          // 결과는 [{field: '@timestamp', value: '...'}, {field: '@message', value: '...'}] 형태
+          const logData: any = {};
+          result.forEach((field: any) => {
+            logData[field.field] = field.value;
+          });
+
+          // logGroup 정보 추가
+          logData['@log'] = logGroupName;
+
+          return this.transformToLambdaLog(logData);
+        });
+
         // 함수 이름 추출 (log group name의 마지막 부분)
         const functionName = logGroupName.split('/').pop() || logGroupName;
 
+        console.log(`[getAllLambdaLogs] [${index + 1}/${this.LAMBDA_LOG_GROUPS.length}] ${logGroupName} → ${logs.length} logs`);
+
         return {
           functionName,
-          logs: logs.map(log => this.transformToLambdaLog(log)),
+          logs,
         };
       } catch (error) {
-        console.error(`Error fetching logs from ${logGroupName}:`, error);
+        console.error(`[getAllLambdaLogs] [${index + 1}/${this.LAMBDA_LOG_GROUPS.length}] Error fetching logs from ${logGroupName}:`, error);
         return {
           functionName: logGroupName.split('/').pop() || logGroupName,
           logs: [],
@@ -391,12 +411,18 @@ export class AWSConnectService {
     const results = await Promise.all(logPromises);
 
     // 결과를 Record로 변환
+    let totalLogCount = 0;
     results.forEach(({ functionName, logs }) => {
       if (logs.length > 0) {
         lambdaLogs[functionName] = logs;
-        console.log(`Found ${logs.length} logs for ${functionName}`);
+        totalLogCount += logs.length;
+        console.log(`[getAllLambdaLogs] ✓ ${functionName}: ${logs.length} logs`);
       }
     });
+
+    const fetchDuration = ((Date.now() - startFetchTime) / 1000).toFixed(2);
+    console.log(`[getAllLambdaLogs] ✅ Completed in ${fetchDuration}s`);
+    console.log(`[getAllLambdaLogs] 📊 Summary: ${totalLogCount} total logs from ${Object.keys(lambdaLogs).length} functions`);
 
     return lambdaLogs;
   }
@@ -752,16 +778,34 @@ export class AWSConnectService {
     const contactId = contactLog.ContactId;
     const logParameters = contactLog.Parameters?.Parameters || contactLog.Parameters || {};
 
+    console.log(`[findXRayTraceIdForLambdaInvocation] ContactId: ${contactId}`);
+    console.log(`[findXRayTraceIdForLambdaInvocation] Total Lambda logs: ${lambdaLogs.length}`);
+
     // Contact ID로 필터링
     const contactLambdaLogs = lambdaLogs.filter(l => l.ContactId === contactId);
 
+    console.log(`[findXRayTraceIdForLambdaInvocation] Lambda logs for ContactId: ${contactLambdaLogs.length}`);
+
     if (contactLambdaLogs.length === 0) {
+      console.log(`[findXRayTraceIdForLambdaInvocation] No Lambda logs found for ContactId`);
       return null;
     }
 
+    // Sample first 3 Lambda logs for debugging
+    console.log(`[findXRayTraceIdForLambdaInvocation] Sample Lambda logs:`, contactLambdaLogs.slice(0, 3).map(l => ({
+      ContactId: l.ContactId,
+      xrayTraceId: l.xrayTraceId,
+      message: l.message?.substring(0, 100),
+      parameters: l.parameters,
+      event: l.event
+    })));
+
     const targetLogs = this.matchLambdaLogsByParameters(contactLambdaLogs, logParameters);
 
+    console.log(`[findXRayTraceIdForLambdaInvocation] Matched logs by parameters: ${targetLogs.length}`);
+
     if (targetLogs.length === 0) {
+      console.log(`[findXRayTraceIdForLambdaInvocation] No matching logs by parameters`);
       return null;
     }
 
@@ -851,48 +895,53 @@ export class AWSConnectService {
   /**
    * Contact 로그에 X-Ray Trace ID 추가
    * InvokeLambdaFunction 및 InvokeExternalResource 모듈에 대해 처리
+   *
+   * 주의: Lambda Function ARN과 CloudWatch Log Group 이름이 다를 수 있으므로
+   * 모든 Lambda 로그를 검색하여 매칭합니다.
    */
   enrichContactLogsWithXRayTraceIds(
     contactLogs: any[],
     lambdaLogs: Record<string, any[]>
   ): any[] {
+    // 모든 Lambda 로그를 하나의 배열로 합치기
+    const allLambdaLogs = Object.values(lambdaLogs).flat();
+
+    console.log(`[enrichContactLogsWithXRayTraceIds] Total Lambda logs: ${allLambdaLogs.length}`);
+    console.log(`[enrichContactLogsWithXRayTraceIds] Lambda logs with X-Ray IDs: ${allLambdaLogs.filter(l => l.xrayTraceId || l.xray_trace_id).length}`);
+
+    if (allLambdaLogs.length === 0) {
+      console.warn('No Lambda logs available for X-Ray trace ID enrichment');
+      return contactLogs;
+    }
+
     const enrichedLogs = contactLogs.map(log => {
       const moduleType = log.ContactFlowModuleType;
 
       // Lambda 호출 모듈인 경우에만 처리
       if (moduleType === 'InvokeLambdaFunction' || moduleType === 'InvokeExternalResource') {
-        // 함수 이름 추출
-        const functionArn = log.Parameters?.FunctionArn;
-        if (!functionArn) {
-          return log;
-        }
+        console.log(`[enrichContactLogsWithXRayTraceIds] Processing ${moduleType} - Identifier: ${log.Identifier}`);
+        console.log(`[enrichContactLogsWithXRayTraceIds] Parameters:`, JSON.stringify(log.Parameters?.Parameters || log.Parameters, null, 2));
 
-        // ARN에서 함수 이름 추출 (arn:aws:lambda:region:account:function:function-name)
-        const functionName = functionArn.split(':').pop();
-        if (!functionName) {
-          return log;
-        }
-
-        // 해당 함수의 Lambda 로그 가져오기
-        const functionLogs = lambdaLogs[functionName];
-        if (!functionLogs || !Array.isArray(functionLogs) || functionLogs.length === 0) {
-          return log;
-        }
-
-        // X-Ray Trace ID 찾기
-        const xrayTraceId = this.findXRayTraceIdForLambdaInvocation(log, functionLogs);
+        // X-Ray Trace ID 찾기 (모든 Lambda 로그에서 검색)
+        const xrayTraceId = this.findXRayTraceIdForLambdaInvocation(log, allLambdaLogs);
 
         if (xrayTraceId) {
+          console.log(`[enrichContactLogsWithXRayTraceIds] ✅ Found X-Ray Trace ID: ${xrayTraceId}`);
           return {
             ...log,
             xray_trace_id: xrayTraceId,
             xrayTraceId: xrayTraceId,
           };
+        } else {
+          console.log(`[enrichContactLogsWithXRayTraceIds] ❌ No X-Ray Trace ID found`);
         }
       }
 
       return log;
     });
+
+    const enrichedCount = enrichedLogs.filter(l => l.xray_trace_id || l.xrayTraceId).length;
+    console.log(`[enrichContactLogsWithXRayTraceIds] Enriched ${enrichedCount} contact logs with X-Ray trace IDs`);
 
     return enrichedLogs;
   }
@@ -1011,14 +1060,45 @@ export class AWSConnectService {
   }
 
   private transformToLambdaLog(log: any): LambdaLog {
+    // CloudWatch Logs 쿼리 결과에서 필드 추출
+    const timestamp = log.timestamp || log['@timestamp'] || log.Timestamp;
+    const message = log.message || log['@message'];
+    const logStream = log.logStream || log['@logStream'];
+    const logGroup = log.logGroup || log['@log'];
+
+    // 메시지에서 JSON 파싱 시도
+    let parsedMessage: any = {};
+    if (message && typeof message === 'string') {
+      try {
+        parsedMessage = JSON.parse(message);
+      } catch {
+        // JSON이 아니면 그냥 문자열로 처리
+      }
+    }
+
+    // X-Ray Trace ID 추출 (우선순위: CloudWatch @xrayTraceId > 메시지 내부 > 환경 변수)
+    const xrayTraceId = log['@xrayTraceId'] ||
+                        log.xrayTraceId ||
+                        log.xray_trace_id ||
+                        parsedMessage.xrayTraceId ||
+                        parsedMessage.xray_trace_id ||
+                        parsedMessage._X_AMZN_TRACE_ID ||
+                        log._X_AMZN_TRACE_ID;
+
     return {
-      timestamp: log.timestamp || log['@timestamp'],
-      ContactId: log.ContactId,
-      service: log.service || this.extractFunctionName(log.logGroup),
-      message: log.message,
-      level: log.level || 'INFO',
-      duration: log.duration,
-      xrayTraceId: log.xrayTraceId || log['xray_trace_id'],
+      timestamp: timestamp || new Date().toISOString(),
+      ContactId: parsedMessage.ContactId || log.ContactId || '',
+      service: parsedMessage.service || log.service || (logGroup ? this.extractFunctionName(logGroup) : 'unknown'),
+      message: typeof message === 'string' ? message : JSON.stringify(message),
+      level: parsedMessage.level || log.level || 'INFO',
+      duration: parsedMessage.duration || log.duration,
+      xrayTraceId: xrayTraceId,
+      xray_trace_id: xrayTraceId, // 호환성을 위해 두 필드 모두 설정
+      logStream,
+      logGroup,
+      // Parameter matching을 위한 필드들 추가
+      parameters: parsedMessage.parameters || parsedMessage.Parameters,
+      event: parsedMessage.event || parsedMessage.Event,
     };
   }
 

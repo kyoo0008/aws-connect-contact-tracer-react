@@ -36,9 +36,9 @@ const { data: queryData, isLoading, error, refetch } = useQuery({
     endTime.setHours(endTime.getHours() + 1);
 
     // Fetch logs and transcript
-    const [contactLogs, transcript] = await Promise.all([
+    const [contactLogs] = await Promise.all([
       service.getContactLogs(contactId, startTime, endTime),
-      service.getTranscript(contactId, startTime),
+      // service.getTranscript(contactId, startTime),
     ]);
 
     // 🆕 NEW: Get Lambda logs (if available)
@@ -55,13 +55,13 @@ const { data: queryData, isLoading, error, refetch } = useQuery({
     const flowBuilder = new FlowBuilderService(contactLogs, { filterModules: true });
     const flowData = flowBuilder.buildFlow();
 
-    if (transcript.length > 0) {
-      flowBuilder.addTranscript(transcript);
-      flowData.transcript = transcript;
-    }
+    // if (transcript.length > 0) {
+    //   flowBuilder.addTranscript(transcript);
+    //   flowData.transcript = transcript;
+    // }
 
-    return { 
-      flowData, 
+    return {
+      flowData,
       originalLogs: contactLogs,
       lambdaLogs,
       xrayTraces, // 🆕 NEW: X-Ray trace data
@@ -94,7 +94,7 @@ class FlowBuilderService {
     const xrayEdges: ContactFlowEdge[] = [];
 
     // Find logs with X-Ray trace IDs
-    const logsWithXRay = this.logs.filter(log => 
+    const logsWithXRay = this.logs.filter(log =>
       log.xray_trace_id || log.xrayTraceId
     );
 
@@ -107,10 +107,10 @@ class FlowBuilderService {
 
       // Create X-Ray node
       const nodeId = `xray_${log.Timestamp?.replace(/:/g, '').replace(/\./g, '')}_${traceId}`;
-      
+
       // Get Lambda log statistics
       const lambdaLogStats = this.getXRayLambdaLogStats(traceData.lambdaLogs || []);
-      
+
       // Get trace summary (operations)
       const traceSummary = this.getXRayTraceSummary(traceData);
 
@@ -168,9 +168,9 @@ class FlowBuilderService {
    */
   private findLambdaNodeForLog(log: any): string | undefined {
     // Find the node that corresponds to this Lambda invocation
-    const lambdaNode = this.nodes.find(node => 
-      (node.data.moduleType === 'InvokeExternalResource' || 
-       node.data.moduleType === 'InvokeLambdaFunction') &&
+    const lambdaNode = this.nodes.find(node =>
+      (node.data.moduleType === 'InvokeExternalResource' ||
+        node.data.moduleType === 'InvokeLambdaFunction') &&
       node.data.timestamp === log.Timestamp
     );
     return lambdaNode?.id;
@@ -205,7 +205,7 @@ class FlowBuilderService {
       infoCount,
       hasIssues,
       color,
-      summary: hasIssues 
+      summary: hasIssues
         ? `${errorCount > 0 ? `Error: ${errorCount}` : ''} ${warnCount > 0 ? `Warn: ${warnCount}` : ''}`.trim()
         : undefined,
     };
@@ -225,7 +225,7 @@ class FlowBuilderService {
         if (segment.aws?.operation) {
           const resourceName = segment.aws.resource_names?.[0] || segment.name;
           const opKey = `${segment.aws.operation}_${resourceName}`;
-          
+
           if (!seenOperations.has(opKey)) {
             operations.push(`Operation ${operationIndex}: ${segment.aws.operation} ${resourceName}`);
             seenOperations.add(opKey);
@@ -244,7 +244,7 @@ class FlowBuilderService {
         if (sub.aws?.operation) {
           const resourceName = sub.aws.resource_names?.[0] || sub.name;
           const opKey = `${sub.aws.operation}_${resourceName}`;
-          
+
           if (!seenOperations.has(opKey)) {
             operations.push(`Operation ${operationIndex}: ${sub.aws.operation} ${resourceName}`);
             seenOperations.add(opKey);
@@ -323,13 +323,13 @@ const CustomNode: React.FC<{ data: any }> = ({ data }) => {
               <OpenInNewIcon fontSize="small" />
             </IconButton>
           </Box>
-          
+
           {data.parameters?.lambdaLogStats?.summary && (
             <Typography variant="caption" color="error">
               {data.parameters.lambdaLogStats.summary}
             </Typography>
           )}
-          
+
           {data.parameters?.operationsSummary && (
             <Typography
               variant="caption"
@@ -343,7 +343,7 @@ const CustomNode: React.FC<{ data: any }> = ({ data }) => {
               {data.parameters.operationsSummary}
             </Typography>
           )}
-          
+
           {data.parameters?.duration && (
             <Typography variant="caption" color="text.secondary">
               Duration: {(data.parameters.duration * 1000).toFixed(2)}ms
@@ -381,7 +381,7 @@ const ContactFlowViewerWithXRay: React.FC = () => {
 
       const service = getAWSConnectService(config);
       const details = await service.getContactDetails(contactId);
-      
+
       const startTime = new Date(details.initiationTimestamp);
       startTime.setHours(startTime.getHours() - 1);
       const endTime = details.disconnectTimestamp
@@ -390,9 +390,9 @@ const ContactFlowViewerWithXRay: React.FC = () => {
       endTime.setHours(endTime.getHours() + 1);
 
       // Load all data
-      const [contactLogs, transcript, lambdaLogs] = await Promise.all([
+      const [contactLogs, lambdaLogs] = await Promise.all([
         service.getContactLogs(contactId, startTime, endTime),
-        service.getTranscript(contactId, startTime),
+        // service.getTranscript(contactId, startTime),
         service.getLambdaLogs?.(contactId, startTime, endTime) || Promise.resolve({}),
       ]);
 
@@ -406,16 +406,16 @@ const ContactFlowViewerWithXRay: React.FC = () => {
       // Build flow with X-Ray nodes
       const flowBuilder = new FlowBuilderService(contactLogs, { filterModules: true });
       const flowData = flowBuilder.buildFlow();
-      
-      if (transcript.length > 0) {
-        flowBuilder.addTranscript(transcript);
-        flowData.transcript = transcript;
-      }
+
+      // if (transcript.length > 0) {
+      //   flowBuilder.addTranscript(transcript);
+      //   flowData.transcript = transcript;
+      // }
 
       // 🆕 Add X-Ray nodes to the flow
       flowBuilder.addXRayNodes(xrayTraces);
 
-      return { 
+      return {
         flowData: flowBuilder.getFlowData(),
         originalLogs: contactLogs,
         lambdaLogs,

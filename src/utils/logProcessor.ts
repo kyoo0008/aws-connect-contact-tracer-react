@@ -26,8 +26,13 @@ export const enrichCheckAttributeLogs = async (
   const flowDefinitionPromises = Array.from(uniqueFlowIds).map(async (flowId) => {
     try {
       await flowDefService.getFlowDefinitionByArn(flowId);
-    } catch (error) {
-      console.error(`Error fetching flow definition for ${flowId}:`, error);
+    } catch (error: any) {
+      // AWS 자격 증명 만료 에러는 warning으로 처리
+      if (error.name === 'ExpiredTokenException' || error.message?.includes('expired')) {
+        console.warn(`AWS credentials expired. CheckAttribute enrichment skipped for ${flowId}`);
+      } else {
+        console.error(`Error fetching flow definition for ${flowId}:`, error);
+      }
     }
   });
 
@@ -207,6 +212,12 @@ export const processLogsForDetailView = (logs: ContactLog[]): ContactLog[] => {
 
       // Footer에 표시할 ExternalResults를 별도 필드로 저장
       (baseLog as any)._footerExternalResults = finalExternalResults;
+
+      // X-Ray Trace ID 보존 (첫 번째 로그에서)
+      if (invokeExternalGroup[0].xray_trace_id || (invokeExternalGroup[0] as any).xrayTraceId) {
+        baseLog.xray_trace_id = invokeExternalGroup[0].xray_trace_id || (invokeExternalGroup[0] as any).xrayTraceId;
+        (baseLog as any).xrayTraceId = baseLog.xray_trace_id;
+      }
 
       processed.push(baseLog);
     }

@@ -28,21 +28,17 @@ const TranscriptPanel: React.FC<TranscriptPanelProps> = ({ open, onClose, transc
         </IconButton>
       </Box>
       <Box>
-        {transcript.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No transcript available
-          </Typography>
-        ) : (
-          <Box>
-            {transcript.map((item, index) => (
-              <Box key={index} sx={{ mb: 2, p: 1, bgcolor: 'grey.100', borderRadius: 1 }}>
-                <pre style={{ fontSize: '0.875rem', overflow: 'auto', margin: 0 }}>
-                  {JSON.stringify(item, null, 2)}
-                </pre>
-              </Box>
-            ))}
-          </Box>
-        )}
+
+        <Box>
+          {transcript.map((item, index) => (
+            <Box key={index} sx={{ mb: 2, p: 1, bgcolor: 'grey.100', borderRadius: 1 }}>
+              <pre style={{ fontSize: '0.875rem', overflow: 'auto', margin: 0 }}>
+                {JSON.stringify(item, null, 2)}
+              </pre>
+            </Box>
+          ))}
+        </Box>
+
       </Box>
     </Drawer>
   );

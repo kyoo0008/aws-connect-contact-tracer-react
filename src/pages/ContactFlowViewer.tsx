@@ -149,23 +149,27 @@ const ContactFlowViewerContent: React.FC = () => {
         : new Date();
       endTime.setHours(endTime.getHours() + 1);
 
-      // Fetch logs
-      const [contactLogs, transcript] = await Promise.all([
+      // Fetch logs in parallel
+      const [contactLogs, lambdaLogs] = await Promise.all([
         service.getContactLogs(contactId, startTime, endTime),
-        service.getTranscript(contactId, startTime),
+        // service.getTranscript(contactId, startTime),
+        service.getAllLambdaLogs(contactId, startTime, endTime),
       ]);
 
-      // Build flow for main view (with filtering)
-      const flowBuilder = new FlowBuilderService(contactLogs, { filterModules: true });
+      // Enrich contact logs with X-Ray trace IDs from Lambda logs
+      const enrichedLogs = service.enrichContactLogsWithXRayTraceIds(contactLogs, lambdaLogs);
+
+      // Build flow for main view (with filtering) using enriched logs
+      const flowBuilder = new FlowBuilderService(enrichedLogs, { filterModules: true });
       const flowData = flowBuilder.buildFlow();
 
       // Add transcript if available
-      if (transcript.length > 0) {
-        flowBuilder.addTranscript(transcript);
-        flowData.transcript = transcript;
-      }
+      // if (transcript.length > 0) {
+      //   flowBuilder.addTranscript(transcript);
+      //   flowData.transcript = transcript;
+      // }
 
-      return { flowData, originalLogs: contactLogs }; // Return both
+      return { flowData, originalLogs: enrichedLogs }; // Return enriched logs
     },
     enabled: !!contactId,
     retry: 2,

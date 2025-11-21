@@ -8,6 +8,9 @@ import {
   Info as InfoIcon,
   Warning as WarningIcon,
   Error as ErrorIcon,
+  Http as HttpIcon,
+  CloudQueue as CloudWatchIcon,
+  Api as ApiIcon,
 } from '@mui/icons-material';
 
 interface XRayNodeProps {
@@ -39,18 +42,48 @@ const XRayNode: React.FC<XRayNodeProps> = ({ data }) => {
   const bgColor = isError ? '#FFEBEE' : isLambdaLog ? '#E3F2FD' : '#E8F5E9';
   const borderColor = isError ? '#F44336' : isLambdaLog ? '#2196F3' : '#4CAF50';
 
-  // Get icon based on service type
+  // Get icon based on service type (Python의 get_segment_node 로직)
   const getServiceIcon = () => {
     if (isLambdaLog) {
-      if (data.label === 'ERROR') return <ErrorIcon sx={{ fontSize: '1rem', color: '#D32F2F' }} />;
-      if (data.label === 'WARN') return <WarningIcon sx={{ fontSize: '1rem', color: '#F57C00' }} />;
-      return <InfoIcon sx={{ fontSize: '1rem', color: '#1976D2' }} />;
+      if (data.label === 'ERROR') return <ErrorIcon sx={{ fontSize: '1.2rem', color: '#D32F2F' }} />;
+      if (data.label === 'WARN') return <WarningIcon sx={{ fontSize: '1.2rem', color: '#F57C00' }} />;
+      return <InfoIcon sx={{ fontSize: '1.2rem', color: '#1976D2' }} />;
     }
 
     const service = data.service?.toLowerCase() || '';
-    if (service.includes('lambda')) return <LambdaIcon sx={{ fontSize: '1rem' }} />;
-    if (service.includes('dynamodb') || service.includes('s3')) return <StorageIcon sx={{ fontSize: '1rem' }} />;
-    return <CloudIcon sx={{ fontSize: '1rem' }} />;
+
+    // Lambda 함수
+    if (service.includes('lambda')) {
+      return <LambdaIcon sx={{ fontSize: '1.3rem', color: '#FF9900' }} />;
+    }
+
+    // DynamoDB
+    if (service.includes('dynamodb')) {
+      return <StorageIcon sx={{ fontSize: '1.3rem', color: '#527FFF' }} />;
+    }
+
+    // S3
+    if (service.includes('s3')) {
+      return <StorageIcon sx={{ fontSize: '1.3rem', color: '#569A31' }} />;
+    }
+
+    // CloudWatch
+    if (service.includes('cloudwatch')) {
+      return <CloudWatchIcon sx={{ fontSize: '1.3rem', color: '#FF4F8B' }} />;
+    }
+
+    // HTTP / API Gateway / Remote
+    if (service.includes('http') || service.includes('api') || service.includes('remote')) {
+      return <ApiIcon sx={{ fontSize: '1.3rem', color: '#945DD6' }} />;
+    }
+
+    // External API
+    if (service.includes('external')) {
+      return <HttpIcon sx={{ fontSize: '1.3rem', color: '#00A1C9' }} />;
+    }
+
+    // Default AWS service
+    return <CloudIcon sx={{ fontSize: '1.3rem', color: '#232F3E' }} />;
   };
 
   // Format duration
@@ -135,32 +168,33 @@ const XRayNode: React.FC<XRayNodeProps> = ({ data }) => {
       onMouseLeave={() => setIsExpanded(false)}
       sx={{
         padding: 1,
-        borderRadius: 2,
+        borderRadius: 1,
         border: `2px solid ${borderColor}`,
         backgroundColor: bgColor,
-        width: 280,
-        height: isExpanded ? 'auto' : 160,
-        minHeight: 160,
-        maxHeight: isExpanded ? 'none' : 160,
-        boxShadow: isExpanded ? '0 8px 16px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
+        minWidth: isLambdaLog ? 150 : data.service?.includes('Lambda') ? 250 : 200,
+        width: 'auto',
+        height: isExpanded ? 'auto' : 'auto',
+        minHeight: isLambdaLog ? 80 : 100,
+        maxHeight: isExpanded ? 'none' : 200,
+        boxShadow: isExpanded ? '0 8px 16px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.15)',
         display: 'flex',
         flexDirection: 'column',
         position: isExpanded ? 'absolute' : 'relative',
         zIndex: isExpanded ? '9999 !important' : 'auto',
         transition: 'all 0.2s ease-in-out',
-        transform: isExpanded ? 'scale(1.02)' : 'scale(1)',
+        transform: isExpanded ? 'scale(1.05)' : 'scale(1)',
         isolation: isExpanded ? 'isolate' : 'auto',
         willChange: isExpanded ? 'transform, z-index' : 'auto',
         '&:hover': {
-          boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
+          boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
         },
       }}
     >
-      {/* Target Handles */}
-      <Handle type="target" position={Position.Top} id="target-top" style={{ background: '#555' }} />
-      <Handle type="target" position={Position.Bottom} id="target-bottom" style={{ background: '#555' }} />
-      <Handle type="target" position={Position.Left} id="target-left" style={{ background: '#555' }} />
-      <Handle type="target" position={Position.Right} id="target-right" style={{ background: '#555' }} />
+      {/* Target Handles - 각 방향에 대해 명확한 ID */}
+      <Handle type="target" position={Position.Top} id="top" style={{ background: '#555' }} />
+      <Handle type="target" position={Position.Bottom} id="bottom" style={{ background: '#555' }} />
+      <Handle type="target" position={Position.Left} id="left" style={{ background: '#555' }} />
+      <Handle type="target" position={Position.Right} id="right" style={{ background: '#555' }} />
 
       {/* Header */}
       <Box
@@ -195,11 +229,11 @@ const XRayNode: React.FC<XRayNodeProps> = ({ data }) => {
         {isSegment ? renderSegmentContent() : renderLogContent()}
       </Box>
 
-      {/* Source Handles */}
-      <Handle type="source" position={Position.Top} id="source-top" style={{ background: '#555' }} />
-      <Handle type="source" position={Position.Bottom} id="source-bottom" style={{ background: '#555' }} />
-      <Handle type="source" position={Position.Left} id="source-left" style={{ background: '#555' }} />
-      <Handle type="source" position={Position.Right} id="source-right" style={{ background: '#555' }} />
+      {/* Source Handles - 각 방향에 대해 명확한 ID */}
+      <Handle type="source" position={Position.Top} id="top" style={{ background: '#555' }} />
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: '#555' }} />
+      <Handle type="source" position={Position.Left} id="left" style={{ background: '#555' }} />
+      <Handle type="source" position={Position.Right} id="right" style={{ background: '#555' }} />
     </Box>
   );
 };

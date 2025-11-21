@@ -58,6 +58,188 @@ const nodeTypes = {
 };
 
 /**
+ * Helper: Subsegment에서 서비스 타입 추출
+ */
+const getServiceType = (subsegment: any): string => {
+  // AWS 서비스
+  if (subsegment.namespace === 'aws') {
+    if (subsegment.name?.includes('DynamoDB')) return 'DynamoDB';
+    if (subsegment.name?.includes('S3')) return 'S3';
+    if (subsegment.name?.includes('SNS')) return 'SNS';
+    if (subsegment.name?.includes('SQS')) return 'SQS';
+    if (subsegment.aws?.operation) {
+      return subsegment.name || 'AWS';
+    }
+    return 'AWS';
+  }
+
+  // Remote (HTTP 호출)
+  if (subsegment.namespace === 'remote' || subsegment.http) {
+    if (subsegment.http?.request?.url) {
+      const url = subsegment.http.request.url;
+      if (url.includes('api.koreanair.com')) return 'API Gateway';
+      if (url.includes('loyalty.amadeus.net')) return 'External API';
+      if (url.includes('oneid')) return 'OneID';
+      return 'HTTP';
+    }
+    return 'Remote';
+  }
+
+  return subsegment.name || 'Unknown';
+};
+
+/**
+ * Helper: Subsegment에서 레이블 생성
+ */
+const getServiceLabel = (subsegment: any): string => {
+  // AWS 작업
+  if (subsegment.aws?.operation) {
+    const operation = subsegment.aws.operation;
+    const resource = subsegment.aws.resource_names?.[0] || subsegment.name;
+    return `${operation}\n${resource}`;
+  }
+
+  // HTTP 요청
+  if (subsegment.http?.request) {
+    const method = subsegment.http.request.method || '';
+    const url = subsegment.http.request.url || '';
+    // URL을 짧게 표시
+    const urlPath = url.split('?')[0].split('/').slice(-2).join('/');
+    return `${method}\n${urlPath}`;
+  }
+
+  return subsegment.name || 'Service';
+};
+
+/**
+ * Helper: Edge 레이블 생성 (Python의 get_xray_edge_label 로직)
+ */
+const getEdgeLabel = (subsegment: any): { label: string; xlabel?: string } => {
+  let label = '';
+  let xlabel = undefined;
+
+  // AWS 서비스
+  if (subsegment.aws?.operation) {
+    const operation = subsegment.aws.operation;
+    const tableName = subsegment.aws.table_name || subsegment.aws.resource_names?.[0] || '';
+
+    if (tableName) {
+      label = `${operation}\\n${tableName}`;
+    } else {
+      label = operation;
+    }
+  }
+  // HTTP 요청
+  else if (subsegment.http?.request) {
+    const method = subsegment.http.request.method || 'GET';
+    const url = subsegment.http.request.url || '';
+    const status = subsegment.http.response?.status;
+
+    // URL에서 경로 추출
+    let path = url;
+    try {
+      const urlObj = new URL(url);
+      path = urlObj.pathname || '/';
+    } catch {
+      // URL 파싱 실패 시 그대로 사용
+      path = url.split('?')[0];
+    }
+
+    label = `${method}\\n${path}`;
+
+    // 에러 상태 코드는 xlabel로 표시
+    if (status && (status >= 400 || subsegment.error)) {
+      xlabel = `Status: ${status}`;
+    }
+  }
+  // 기타
+  else {
+    label = subsegment.name || '';
+  }
+
+  return { label, xlabel };
+};
+
+/**
+ * Helper: Parent ID 결정 (Python의 get_xray_parent_id 로직)
+ * Invocation/Attempt를 건너뛰고 실제 부모 세그먼트 ID를 찾습니다
+ */
+const getXRayParentId = (subsegment: any, segment: any): string => {
+  // subsegment에 parent_id가 있으면 해당 parent를 찾아야 함
+  if (!subsegment.parent_id) {
+    return segment.id;
+  }
+
+  // parent_id로 parent subsegment 찾기
+  const findParent = (subs: any[], targetId: string): any => {
+    for (const sub of subs) {
+      if (sub.id === targetId) {
+        return sub;
+      }
+      if (sub.subsegments) {
+        const found = findParent(sub.subsegments, targetId);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  let parent = findParent(segment.subsegments || [], subsegment.parent_id);
+
+  // parent가 Invocation 또는 Attempt인 경우, 그 parent를 찾아야 함
+  while (parent && (parent.name === 'Invocation' || parent.name?.includes('Attempt'))) {
+    if (parent.parent_id) {
+      parent = findParent(segment.subsegments || [], parent.parent_id);
+    } else {
+      // parent의 parent가 없으면 segment 자체가 parent
+      return segment.id;
+    }
+  }
+
+  return parent?.id || segment.id;
+};
+
+/**
+ * Helper: Subsegment를 전처리 (Python의 process_subsegments 로직)
+ * "Overhead", "Dwell Time", "Lambda", "Invocation", "Attempt" 등은 skip
+ * 재귀적으로 모든 중첩된 subsegments를 처리하고 parent_id를 함께 반환
+ */
+const preprocessSubsegments = (subsegments: any[], parentSegment: any): Array<{ subsegment: any; parentId: string }> => {
+  const skipTypes = ['Overhead', 'Dwell Time', 'Lambda', 'QueueTime', 'Initialization'];
+  const processed: Array<{ subsegment: any; parentId: string }> = [];
+
+  const processRecursive = (subs: any[], segment: any) => {
+    for (const subsegment of subs) {
+      const name = subsegment.name || '';
+
+      // Skip certain types
+      if (skipTypes.includes(name)) {
+        continue;
+      }
+
+      // Handle Invocation or Attempt - extract nested subsegments
+      if (name === 'Invocation' || name.includes('Attempt')) {
+        if (subsegment.subsegments && subsegment.subsegments.length > 0) {
+          processRecursive(subsegment.subsegments, segment);
+        }
+      } else {
+        // 실제 부모 ID 결정
+        const parentId = getXRayParentId(subsegment, segment);
+        processed.push({ subsegment, parentId });
+
+        // 중첩된 subsegments도 처리
+        if (subsegment.subsegments && subsegment.subsegments.length > 0) {
+          processRecursive(subsegment.subsegments, segment);
+        }
+      }
+    }
+  };
+
+  processRecursive(subsegments, parentSegment);
+  return processed;
+};
+
+/**
  * X-Ray 트레이스를 React Flow 노드/엣지로 변환
  * Python의 build_xray_nodes 로직 참고
  */
@@ -65,245 +247,199 @@ const buildXRayFlowData = (xrayData: any): { nodes: Node[]; edges: Edge[] } => {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
 
-  const xSpacing = 400;
-  const ySpacing = 150;
-  let currentY = 0;
+  const RAW_JSON_X = 50; // Raw Json 노드 X 위치 (가장 왼쪽)
+  const LAMBDA_X = 400; // Lambda 함수들의 X 위치
+  const SERVICE_BASE_X = 900; // 외부 서비스들의 X 시작 위치
+  const Y_SPACING = 120; // 노드 간 수직 간격
+  const SERVICE_X_SPACING = 350; // 서비스 컬럼 간 수평 간격
 
   if (!xrayData?.segments || xrayData.segments.length === 0) {
     return { nodes, edges };
   }
 
-  // Process segments
-  const processSegment = (
-    segment: any,
-    xPosition: number,
-    yPosition: number,
-    parentId?: string
-  ): number => {
+  let lambdaY = 50; // Lambda 노드들의 시작 Y 위치
+  const rawJsonNodeId = `${xrayData.traceId}_raw_json`;
+
+  // 1. Raw Json 노드 추가 (Lambda 로그가 있는 경우)
+  if (xrayData.lambdaLogs && xrayData.lambdaLogs.length > 0) {
+    const errorLogs = xrayData.lambdaLogs.filter((log: any) => log.level === 'ERROR' || log.level === 'WARN');
+    const hasErrors = errorLogs.length > 0;
+
+    nodes.push({
+      id: rawJsonNodeId,
+      type: 'xraySegment',
+      position: { x: RAW_JSON_X, y: lambdaY },
+      data: {
+        label: 'Raw Json',
+        service: 'CloudWatch',
+        logData: xrayData.lambdaLogs,
+        error: hasErrors,
+      },
+      style: {
+        border: hasErrors ? '2px solid #f44336' : '2px solid #1976d2',
+        borderRadius: '8px',
+        background: hasErrors ? '#ffebee' : '#e3f2fd',
+        minWidth: '120px',
+        padding: '8px',
+      },
+    });
+  }
+
+  // 서비스 노드들의 위치를 추적하기 위한 맵
+  const servicePositions = new Map<string, { x: number; y: number; count: number }>();
+
+  // 2. 각 segment (Lambda 함수) 처리
+  xrayData.segments.forEach((segment: any, segmentIndex: number) => {
     const segmentId = segment.id;
     const isError = segment.error || segment.fault;
+    const lambdaName = segment.name || 'Lambda Function';
 
-    // Determine icon/service type
-    let serviceIcon = 'AWS::Lambda::Function'; // default
-    if (segment.origin) {
-      const parts = segment.origin.split('::');
-      if (parts.length > 1) {
-        serviceIcon = parts[1]; // e.g., "Lambda", "DynamoDB", "S3"
-      }
-    }
-
-    // Create segment node
+    // Lambda 노드 생성
     nodes.push({
       id: segmentId,
       type: 'xraySegment',
-      position: { x: xPosition, y: yPosition },
+      position: { x: LAMBDA_X, y: lambdaY },
       data: {
-        label: segment.name,
+        label: lambdaName,
         segmentData: segment,
         error: isError,
         fault: segment.fault,
-        duration: segment.duration,
-        service: serviceIcon,
+        duration: segment.duration ? segment.duration * 1000 : 0,
+        service: 'Lambda',
         origin: segment.origin,
       },
       style: {
-        border: isError ? '2px solid #f44336' : '1px solid #4caf50',
+        border: isError ? '2px solid #f44336' : '2px solid #FF9900',
         borderRadius: '8px',
+        background: isError ? '#ffebee' : '#fff3e0',
+        minWidth: '220px',
+        padding: '10px',
       },
     });
 
-    // Connect to parent if exists
-    if (parentId) {
+    // Raw Json 노드와 첫 번째 Lambda 연결
+    if (segmentIndex === 0 && xrayData.lambdaLogs && xrayData.lambdaLogs.length > 0) {
       edges.push({
-        id: `${parentId}-${segmentId}`,
-        source: parentId,
+        id: `raw-json-to-lambda`,
+        source: rawJsonNodeId,
         target: segmentId,
         type: 'smoothstep',
-        animated: isError,
-        style: { stroke: isError ? '#f44336' : '#4caf50' },
+        style: { stroke: '#1976d2', strokeWidth: 2 },
       });
     }
 
-    let maxY = yPosition;
+    // 이전 Lambda와 연결 (체인 형태)
+    if (segmentIndex > 0) {
+      const prevSegmentId = xrayData.segments[segmentIndex - 1].id;
+      edges.push({
+        id: `chain-${prevSegmentId}-${segmentId}`,
+        source: prevSegmentId,
+        target: segmentId,
+        type: 'smoothstep',
+        style: { stroke: '#FF9900', strokeWidth: 2 },
+        label: 'invokes',
+      });
+    }
 
-    // Process subsegments
+    // 3. Subsegments 전처리 및 처리
     if (segment.subsegments && segment.subsegments.length > 0) {
-      let subY = yPosition;
-      segment.subsegments.forEach((subsegment: any) => {
-        const subMaxY = processSubsegment(
-          subsegment,
-          xPosition + xSpacing,
-          subY,
-          segmentId
-        );
-        subY = subMaxY + ySpacing;
-        maxY = Math.max(maxY, subMaxY);
+      const processedItems = preprocessSubsegments(segment.subsegments, segment);
+
+      // 서비스 타입별로 그룹화하되, depth(계층) 정보도 함께 저장
+      const serviceGroups = new Map<string, Array<{ subsegment: any; parentId: string; depth: number }>>();
+
+      processedItems.forEach(({ subsegment, parentId }) => {
+        const serviceType = getServiceType(subsegment);
+
+        // depth 계산: parent가 segment면 0, 아니면 parent의 depth + 1
+        let depth = 0;
+        if (parentId !== segmentId) {
+          // parent subsegment 찾기
+          const parentItem = processedItems.find(item => item.subsegment.id === parentId);
+          if (parentItem) {
+            depth = (parentItem as any).depth !== undefined ? (parentItem as any).depth + 1 : 1;
+          } else {
+            depth = 1;
+          }
+        }
+
+        if (!serviceGroups.has(serviceType)) {
+          serviceGroups.set(serviceType, []);
+        }
+        serviceGroups.get(serviceType)!.push({ subsegment, parentId, depth });
+      });
+
+      // 각 서비스 타입별로 노드 생성
+      let columnIndex = 0;
+      serviceGroups.forEach((items, serviceType) => {
+        const serviceX = SERVICE_BASE_X + (columnIndex * SERVICE_X_SPACING);
+        let serviceY = lambdaY;
+
+        items.forEach(({ subsegment, parentId, depth }) => {
+          const subId = subsegment.id;
+          const subError = subsegment.error || subsegment.fault;
+
+          // depth에 따라 X 위치 조정 (중첩된 호출은 오른쪽으로)
+          const adjustedX = serviceX + (depth * 50);
+
+          // 서비스 노드 생성
+          nodes.push({
+            id: subId,
+            type: 'xraySegment',
+            position: { x: adjustedX, y: serviceY },
+            data: {
+              label: getServiceLabel(subsegment),
+              segmentData: subsegment,
+              error: subError,
+              fault: subsegment.fault,
+              duration: subsegment.duration ? subsegment.duration * 1000 : 0,
+              service: serviceType,
+              operation: subsegment.aws?.operation,
+              resource: subsegment.aws?.resource_names?.[0],
+              httpMethod: subsegment.http?.request?.method,
+              httpUrl: subsegment.http?.request?.url,
+              httpStatus: subsegment.http?.response?.status,
+            },
+            style: {
+              border: subError ? '2px solid #f44336' : '1px solid #757575',
+              borderRadius: '6px',
+              background: subError ? '#ffebee' : '#ffffff',
+              minWidth: '180px',
+              padding: '8px',
+            },
+          });
+
+          // Parent에서 서비스로 연결
+          const edgeLabelData = getEdgeLabel(subsegment);
+          const edgeConfig: any = {
+            id: `${parentId}-${subId}`,
+            source: parentId,
+            target: subId,
+            label: edgeLabelData.label.replace(/\\n/g, '\n'), // 줄바꿈 처리
+            type: 'smoothstep',
+            animated: subError,
+            style: {
+              stroke: subError ? '#f44336' : '#757575',
+              strokeWidth: subError ? 2 : 1,
+            },
+          };
+
+          // xlabel이 있으면 label에 추가 (에러 상태 등)
+          if (edgeLabelData.xlabel) {
+            edgeConfig.label = `${edgeConfig.label}\n${edgeLabelData.xlabel}`;
+          }
+
+          edges.push(edgeConfig);
+
+          serviceY += Y_SPACING;
+        });
+
+        columnIndex++;
       });
     }
 
-    return maxY;
-  };
-
-  const processSubsegment = (
-    subsegment: any,
-    xPosition: number,
-    yPosition: number,
-    parentId: string
-  ): number => {
-    const subId = subsegment.id;
-    const isError = subsegment.error || subsegment.fault;
-
-    // Determine operation label
-    let operationLabel = subsegment.name;
-    if (subsegment.aws?.operation) {
-      operationLabel = subsegment.aws.operation;
-      if (subsegment.aws.resource_names && subsegment.aws.resource_names.length > 0) {
-        operationLabel += ` (${subsegment.aws.resource_names[0]})`;
-      }
-    } else if (subsegment.http?.request?.method) {
-      operationLabel = `${subsegment.http.request.method} ${subsegment.http.request.url || ''}`;
-    }
-
-    nodes.push({
-      id: subId,
-      type: 'xraySegment',
-      position: { x: xPosition, y: yPosition },
-      data: {
-        label: operationLabel,
-        segmentData: subsegment,
-        error: isError,
-        fault: subsegment.fault,
-        duration: subsegment.duration,
-        service: subsegment.namespace || 'aws',
-        operation: subsegment.aws?.operation,
-        resource: subsegment.aws?.resource_names?.[0],
-        httpMethod: subsegment.http?.request?.method,
-        httpUrl: subsegment.http?.request?.url,
-        httpStatus: subsegment.http?.response?.status,
-      },
-      style: {
-        border: isError ? '2px solid #f44336' : '1px solid #9e9e9e',
-        borderRadius: '4px',
-      },
-    });
-
-    // Create edge with operation label
-    const edgeLabel = subsegment.aws?.operation ||
-                      subsegment.http?.request?.method || '';
-
-    edges.push({
-      id: `${parentId}-${subId}`,
-      source: parentId,
-      target: subId,
-      label: edgeLabel,
-      type: 'smoothstep',
-      animated: isError,
-      style: {
-        stroke: isError ? '#f44336' : '#9e9e9e',
-      },
-    });
-
-    let maxY = yPosition;
-
-    // Recursively process nested subsegments
-    if (subsegment.subsegments && subsegment.subsegments.length > 0) {
-      let nestedY = yPosition;
-      subsegment.subsegments.forEach((nested: any) => {
-        const nestedMaxY = processSubsegment(
-          nested,
-          xPosition + xSpacing,
-          nestedY,
-          subId
-        );
-        nestedY = nestedMaxY + ySpacing;
-        maxY = Math.max(maxY, nestedMaxY);
-      });
-    }
-
-    return maxY;
-  };
-
-  // Process all segments
-  const currentX = 100;
-  xrayData.segments.forEach((segment: any) => {
-    const maxY = processSegment(segment, currentX, currentY, undefined);
-    currentY = maxY + ySpacing * 2; // Add extra space between top-level segments
+    lambdaY += Y_SPACING * 3; // 다음 Lambda를 위한 충분한 간격
   });
-
-  // Add Lambda CloudWatch Logs section
-  if (xrayData.lambdaLogs && xrayData.lambdaLogs.length > 0) {
-    currentY += 200; // Add space before logs section
-
-    // Add section header node
-    nodes.push({
-      id: 'lambda-logs-header',
-      type: 'default',
-      position: { x: 100, y: currentY },
-      data: {
-        label: '📝 Lambda CloudWatch Logs',
-      },
-      style: {
-        background: '#e3f2fd',
-        border: '2px solid #1976d2',
-        borderRadius: '8px',
-        fontWeight: 'bold',
-      },
-    });
-
-    currentY += 100;
-
-    xrayData.lambdaLogs.forEach((log: any, index: number) => {
-      const logId = `log_${log.timestamp}_${index}`;
-      const isError = log.level === 'ERROR' || log.level === 'WARN';
-
-      let logLabel = log.level || 'INFO';
-      if (log.level === 'ERROR') {
-        logLabel = `🚨 ${log.level}`;
-      } else if (log.level === 'WARN') {
-        logLabel = `⚠️ ${log.level}`;
-      }
-
-      nodes.push({
-        id: logId,
-        type: 'lambdaLog',
-        position: { x: 100, y: currentY + (index * 120) },
-        data: {
-          label: logLabel,
-          logData: log,
-          error: isError,
-          message: log.message,
-          timestamp: log.timestamp,
-          service: log.service,
-        },
-        style: {
-          background: isError ? '#ffebee' : '#f5f5f5',
-          border: isError ? '2px solid #f44336' : '1px solid #9e9e9e',
-          borderRadius: '4px',
-        },
-      });
-
-      // Connect logs sequentially
-      if (index > 0) {
-        const prevLogId = `log_${xrayData.lambdaLogs[index - 1].timestamp}_${index - 1}`;
-        edges.push({
-          id: `log-edge-${index}`,
-          source: prevLogId,
-          target: logId,
-          type: 'smoothstep',
-          style: { stroke: isError ? '#ff9800' : '#9e9e9e' },
-        });
-      } else {
-        // Connect first log to header
-        edges.push({
-          id: 'header-to-first-log',
-          source: 'lambda-logs-header',
-          target: logId,
-          type: 'smoothstep',
-          style: { stroke: '#1976d2' },
-        });
-      }
-    });
-  }
 
   return { nodes, edges };
 };

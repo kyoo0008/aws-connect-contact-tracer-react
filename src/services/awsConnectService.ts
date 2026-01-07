@@ -57,13 +57,15 @@ export class AWSConnectService {
       // Use auto-renewing provider if profile is set
       clientConfig.credentials = createAutoRenewingCredentialProvider(config.profile);
     } else if (config.credentials) {
+      const expiration = config.credentials.expiration
+        ? new Date(config.credentials.expiration as any)
+        : undefined;
+
       clientConfig.credentials = {
         accessKeyId: config.credentials.accessKeyId,
         secretAccessKey: config.credentials.secretAccessKey,
         sessionToken: config.credentials.sessionToken,
-        expiration: config.credentials.expiration
-          ? new Date(config.credentials.expiration)
-          : undefined,
+        expiration: expiration,
       };
     }
 
@@ -270,7 +272,7 @@ export class AWSConnectService {
             if (log.ContactId === contactId) {
               if (log.logGroup?.includes('/aws/connect/')) {
                 contactLogs.push(this.transformToContactLog(log));
-              } else if (log.logGroup?.includes('/aws/lambda/')) {
+              } else if (log.logGroup?.includes('/aws/lmd/')) {
                 const functionName = this.extractFunctionName(log.logGroup);
                 if (!lambdaLogs[functionName]) {
                   lambdaLogs[functionName] = [];
@@ -462,6 +464,8 @@ export class AWSConnectService {
 
       const trace = response.Traces[0];
       const segments = this.parseXRayTraceSegments(trace);
+
+      console.log(trace)
 
       // Calculate total duration and error states
       let minTime = Infinity;
@@ -1078,12 +1082,12 @@ export class AWSConnectService {
 
     // X-Ray Trace ID 추출 (우선순위: CloudWatch @xrayTraceId > 메시지 내부 > 환경 변수)
     const xrayTraceId = log['@xrayTraceId'] ||
-                        log.xrayTraceId ||
-                        log.xray_trace_id ||
-                        parsedMessage.xrayTraceId ||
-                        parsedMessage.xray_trace_id ||
-                        parsedMessage._X_AMZN_TRACE_ID ||
-                        log._X_AMZN_TRACE_ID;
+      log.xrayTraceId ||
+      log.xray_trace_id ||
+      parsedMessage.xrayTraceId ||
+      parsedMessage.xray_trace_id ||
+      parsedMessage._X_AMZN_TRACE_ID ||
+      log._X_AMZN_TRACE_ID;
 
     return {
       timestamp: timestamp || new Date().toISOString(),

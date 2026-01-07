@@ -94,18 +94,20 @@ const getServiceType = (subsegment: any): string => {
 const getServiceLabel = (subsegment: any): string => {
   // AWS 작업
   if (subsegment.aws?.operation) {
-    const operation = subsegment.aws.operation;
-    const resource = subsegment.aws.resource_names?.[0] || subsegment.name;
-    return `${operation}\n${resource}`;
+    // Only return resource name
+    return subsegment.aws.resource_names?.[0] || subsegment.name || 'AWS Service';
   }
 
   // HTTP 요청
   if (subsegment.http?.request) {
-    const method = subsegment.http.request.method || '';
     const url = subsegment.http.request.url || '';
-    // URL을 짧게 표시
-    const urlPath = url.split('?')[0].split('/').slice(-2).join('/');
-    return `${method}\n${urlPath}`;
+    // URL을 짧게 표시 (Domain or Path)
+    try {
+      const urlObj = new URL(url);
+      return urlObj.hostname;
+    } catch {
+      return url.split('?')[0].split('/').slice(-2).join('/');
+    }
   }
 
   return subsegment.name || 'Service';
@@ -117,47 +119,78 @@ const getServiceLabel = (subsegment: any): string => {
 const getEdgeLabel = (subsegment: any): { label: string; xlabel?: string } => {
   let label = '';
   let xlabel = undefined;
+  const name = subsegment.name || '';
 
-  // AWS 서비스
+  // AWS Services
   if (subsegment.aws?.operation) {
-    const operation = subsegment.aws.operation;
-    const tableName = subsegment.aws.table_name || subsegment.aws.resource_names?.[0] || '';
+    label = subsegment.aws.operation;
+  }
+  // URL / HTTP
+  else if (name.includes('.') || subsegment.http?.request?.url) {
+    const method = subsegment.http?.request?.method || '';
+    const url = subsegment.http?.request?.url || '';
 
-    if (tableName) {
-      label = `${operation}\\n${tableName}`;
-    } else {
-      label = operation;
+    // URL 경로 처리 (3번째 슬래시 이후)
+    const urlParts = url.split('/');
+    const path = urlParts.length > 3 ? urlParts.slice(3).join('/') : url;
+    label = `${method}\n${path}`;
+
+    // Response Status or Exception
+    if (subsegment.http?.response) {
+      const status = subsegment.http.response.status;
+      if (status && !String(status).startsWith('2')) {
+        xlabel = String(status);
+      }
+    } else if (subsegment.cause?.exceptions) {
+      xlabel = subsegment.cause.exceptions[0]?.message;
     }
   }
-  // HTTP 요청
-  else if (subsegment.http?.request) {
-    const method = subsegment.http.request.method || 'GET';
-    const url = subsegment.http.request.url || '';
-    const status = subsegment.http.response?.status;
-
-    // URL에서 경로 추출
-    let path = url;
-    try {
-      const urlObj = new URL(url);
-      path = urlObj.pathname || '/';
-    } catch {
-      // URL 파싱 실패 시 그대로 사용
-      path = url.split('?')[0];
-    }
-
-    label = `${method}\\n${path}`;
-
-    // 에러 상태 코드는 xlabel로 표시
-    if (status && (status >= 400 || subsegment.error)) {
-      xlabel = `Status: ${status}`;
-    }
-  }
-  // 기타
+  // Fallback
   else {
-    label = subsegment.name || '';
+    label = name;
   }
 
   return { label, xlabel };
+};
+
+/**
+ * Helper: Lambda 로그 메시지 포맷팅 (Python 로직 참고)
+ */
+const formatLambdaLogMessage = (log: any): string => {
+  let nodeText = "";
+  const message = log.message || "";
+
+  // Helper for truncating text
+  const wrapText = (text: string, maxLength: number = 25) => {
+    if (!text) return "";
+    return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
+  };
+
+  if (message.includes("parameter")) {
+    const params = log.parameters || {};
+    Object.keys(params).forEach(key => {
+      const val = String(params[key]);
+      nodeText += `${wrapText(`${key} : ${val}`)}\n`;
+    });
+    if (message.includes("lex")) {
+      nodeText += `intent : ${log.intent || ""}\n`;
+    }
+  } else if (message.includes("attribute")) {
+    const attrs = log.attributes || {};
+    Object.keys(attrs).forEach(key => {
+      const val = String(attrs[key]);
+      nodeText += `${wrapText(`${key} : ${val}`)}\n`;
+    });
+  } else if (message.includes("lex")) {
+    nodeText += message.replace("]", "]\n");
+    if (log.event?.inputTranscript) {
+      nodeText += `\n${log.event.inputTranscript}`;
+    }
+  } else {
+    nodeText += message.replace("]", "]\n");
+  }
+
+  return nodeText.trim();
 };
 
 /**
@@ -344,6 +377,7 @@ const buildXRayFlowData = (xrayData: any): { nodes: Node[]; edges: Edge[] } => {
     // 3. Subsegments 전처리 및 처리
     if (segment.subsegments && segment.subsegments.length > 0) {
       const processedItems = preprocessSubsegments(segment.subsegments, segment);
+      console.log(processedItems)
 
       // 서비스 타입별로 그룹화하되, depth(계층) 정보도 함께 저장
       const serviceGroups = new Map<string, Array<{ subsegment: any; parentId: string; depth: number }>>();
@@ -427,6 +461,8 @@ const buildXRayFlowData = (xrayData: any): { nodes: Node[]; edges: Edge[] } => {
           // xlabel이 있으면 label에 추가 (에러 상태 등)
           if (edgeLabelData.xlabel) {
             edgeConfig.label = `${edgeConfig.label}\n${edgeLabelData.xlabel}`;
+            edgeConfig.style = { ...edgeConfig.style, stroke: 'tomato' };
+            edgeConfig.labelStyle = { fill: 'tomato', fontWeight: 700 };
           }
 
           edges.push(edgeConfig);
@@ -440,6 +476,67 @@ const buildXRayFlowData = (xrayData: any): { nodes: Node[]; edges: Edge[] } => {
 
     lambdaY += Y_SPACING * 3; // 다음 Lambda를 위한 충분한 간격
   });
+
+  // 4. Lambda Logs (Raw Json 아래에 표시)
+  if (xrayData.lambdaLogs && xrayData.lambdaLogs.length > 0) {
+    let logY = lambdaY + 100; // 마지막 Lambda 아래에 배치? 아니면 Raw Json 아래?
+    // Python 코드에서는 Raw Json이 있고 그 아래에 로그들이 연결됨.
+    // 여기서는 Raw Json 노드가 (RAW_JSON_X, 50)에 있음.
+    logY = 200; // Raw Json 아래
+
+    xrayData.lambdaLogs.forEach((log: any, index: number) => {
+      const logId = `log_${log.timestamp}_${index}`;
+      const isError = log.level === 'ERROR' || log.level === 'WARN';
+
+      let logLabel = log.level || 'INFO';
+      if (log.level === 'ERROR') logLabel = `🚨 ${log.level}`;
+      else if (log.level === 'WARN') logLabel = `⚠️ ${log.level}`;
+
+      const formattedMessage = formatLambdaLogMessage(log);
+
+      nodes.push({
+        id: logId,
+        type: 'lambdaLog',
+        position: { x: RAW_JSON_X, y: logY },
+        data: {
+          label: logLabel,
+          logData: log,
+          error: isError,
+          message: formattedMessage, // 포맷팅된 메시지 사용
+          timestamp: log.timestamp,
+          service: log.service,
+        },
+        style: {
+          background: isError ? '#ffebee' : '#f5f5f5',
+          border: isError ? '2px solid #f44336' : '1px solid #9e9e9e',
+          borderRadius: '4px',
+          minWidth: '250px',
+        },
+      });
+
+      // Connect logs
+      if (index === 0) {
+        edges.push({
+          id: `raw-json-to-log-0`,
+          source: rawJsonNodeId,
+          target: logId,
+          type: 'smoothstep',
+          style: { stroke: '#9e9e9e' },
+        });
+      } else {
+        const prevLogId = `log_${xrayData.lambdaLogs[index - 1].timestamp}_${index - 1}`;
+        edges.push({
+          id: `log-${index - 1}-to-${index}`,
+          source: prevLogId,
+          target: logId,
+          type: 'smoothstep',
+          style: { stroke: '#9e9e9e' },
+        });
+      }
+
+      logY += 150; // 로그 간격
+    });
+  }
 
   return { nodes, edges };
 };

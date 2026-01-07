@@ -40,7 +40,7 @@ export async function fetchSSOCredentials(profile?: string): Promise<AWSCredenti
   } catch (error) {
     console.error('Error fetching SSO credentials:', error);
     throw new Error(
-      'SSO 자격 증명을 가져올 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요.'
+      'SSO 자격 증명을 가져올 수 없습니다. 백엔드 서버가 실행 중인지 또는 AWS SSO 로그인이 되어있는지 확인하세요.'
     );
   }
 }
@@ -123,6 +123,15 @@ export async function getRegionFromProfile(profile?: string): Promise<string | n
 }
 
 /**
+ * Helper: Ensure value is a Date object
+ */
+function ensureDate(date: string | Date | undefined): Date | undefined {
+  if (!date) return undefined;
+  if (date instanceof Date) return date;
+  return new Date(date);
+}
+
+/**
  * AWS SDK v3 호환 Credential Provider를 생성합니다.
  * 이 Provider는 자격 증명이 만료되기 전에 자동으로 갱신합니다.
  */
@@ -137,16 +146,19 @@ export function createAutoRenewingCredentialProvider(profile?: string) {
       // If expiration is missing, assume valid (or let SDK handle it)
       // If expiration exists, check if it's expired or expiring soon (within 5 mins)
       if (cachedCredentials.expiration) {
-        const expiration = new Date(cachedCredentials.expiration);
-        const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
+        const expiration = ensureDate(cachedCredentials.expiration);
 
-        if (expiration > fiveMinutesFromNow) {
-          return {
-            accessKeyId: cachedCredentials.accessKeyId,
-            secretAccessKey: cachedCredentials.secretAccessKey,
-            sessionToken: cachedCredentials.sessionToken,
-            expiration: expiration,
-          };
+        if (expiration && !isNaN(expiration.getTime())) {
+          const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
+
+          if (expiration > fiveMinutesFromNow) {
+            return {
+              accessKeyId: cachedCredentials.accessKeyId,
+              secretAccessKey: cachedCredentials.secretAccessKey,
+              sessionToken: cachedCredentials.sessionToken,
+              expiration: expiration,
+            };
+          }
         }
       } else {
         // If no expiration provided, just return what we have
@@ -192,7 +204,7 @@ export function createAutoRenewingCredentialProvider(profile?: string) {
       accessKeyId: creds.accessKeyId,
       secretAccessKey: creds.secretAccessKey,
       sessionToken: creds.sessionToken,
-      expiration: creds.expiration ? new Date(creds.expiration) : undefined,
+      expiration: ensureDate(creds.expiration),
     };
   };
 }

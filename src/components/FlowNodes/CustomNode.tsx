@@ -44,9 +44,6 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data }) => {
   const hasXRayTrace = isLambdaInvocation && !!xrayTraceId;
 
 
-  useEffect(() => {
-    console.log(data)
-  },[])
 
   // React Flow 노드의 부모 wrapper에 z-index 적용
   useEffect(() => {

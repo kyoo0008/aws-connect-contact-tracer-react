@@ -140,6 +140,58 @@ app.get('/api/aws/auto-credentials', async (req, res) => {
 });
 
 /**
+ * 로컬 AWS 설정에서 SSO 프로필 목록을 가져오는 엔드포인트
+ *
+ * GET /api/aws/profiles
+ *
+ * Response: { profiles: [{ name, region, sso_start_url, sso_account_id, isLoggedIn }] }
+ */
+app.get('/api/aws/profiles', async (req, res) => {
+  try {
+    const awsConfigPath = path.join(os.homedir(), '.aws', 'config');
+
+    if (!fs.existsSync(awsConfigPath)) {
+      return res.json({ profiles: [] });
+    }
+
+    const configContent = fs.readFileSync(awsConfigPath, 'utf-8');
+    const config = ini.parse(configContent);
+
+    const profiles = [];
+
+    for (const [key, value] of Object.entries(config)) {
+      // SSO 프로필만 필터링 (sso_start_url이 있는 프로필)
+      if (key.startsWith('profile ') && value.sso_start_url) {
+        const profileName = key.replace('profile ', '');
+
+        // SSO 캐시에서 로그인 상태 확인
+        let isLoggedIn = false;
+        try {
+          const credentialProvider = fromSSO({ profile: profileName });
+          await credentialProvider();
+          isLoggedIn = true;
+        } catch {
+          isLoggedIn = false;
+        }
+
+        profiles.push({
+          name: profileName,
+          region: value.region || 'ap-northeast-2',
+          sso_start_url: value.sso_start_url,
+          sso_account_id: value.sso_account_id,
+          isLoggedIn,
+        });
+      }
+    }
+
+    res.json({ profiles });
+  } catch (error) {
+    console.error('Error fetching profiles:', error);
+    res.status(500).json({ error: 'Failed to fetch profiles', message: error.message });
+  }
+});
+
+/**
  * AWS 프로필에서 리전 정보를 가져오는 엔드포인트
  *
  * POST /api/aws/region
@@ -650,6 +702,7 @@ app.listen(PORT, () => {
 
 엔드포인트:
 [AWS Credentials]
+- GET  /api/aws/profiles         - SSO 프로필 목록 가져오기
 - POST /api/aws/credentials      - SSO 자격 증명 가져오기
 - GET  /api/aws/auto-credentials - SSO 자격 증명 자동 가져오기
 - POST /api/aws/region           - 프로필에서 리전 가져오기

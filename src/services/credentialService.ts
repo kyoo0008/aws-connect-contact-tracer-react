@@ -10,6 +10,14 @@ export interface AWSCredentials {
   expiration?: string;
 }
 
+export interface AWSSSOProfile {
+  name: string;
+  region: string;
+  sso_start_url: string;
+  sso_account_id?: string;
+  isLoggedIn: boolean;
+}
+
 /**
  * 백엔드 API를 통해 SSO 자격 증명을 가져옵니다.
  *
@@ -42,6 +50,31 @@ export async function fetchSSOCredentials(profile?: string): Promise<AWSCredenti
     throw new Error(
       'SSO 자격 증명을 가져올 수 없습니다. 백엔드 서버가 실행 중인지 또는 AWS SSO 로그인이 되어있는지 확인하세요.'
     );
+  }
+}
+
+/**
+ * 로컬 PC의 AWS SSO 프로필 목록을 가져옵니다.
+ * 각 프로필의 로그인 상태도 함께 반환합니다.
+ */
+export async function fetchSSOProfiles(): Promise<AWSSSOProfile[]> {
+  try {
+    const response = await fetch('/api/aws/profiles', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = await response.json();
+    return data.profiles || [];
+  } catch (error) {
+    console.error('Error fetching SSO profiles:', error);
+    return [];
   }
 }
 

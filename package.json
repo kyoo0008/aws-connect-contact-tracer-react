@@ -12,6 +12,7 @@
     "@aws-sdk/credential-provider-ini": "^3.932.0",
     "@aws-sdk/credential-provider-node": "^3.931.0",
     "@aws-sdk/credential-provider-sso": "^3.931.0",
+    "@aws-sdk/util-dynamodb": "^3.967.0",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.14.19",

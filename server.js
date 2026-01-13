@@ -31,7 +31,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, x-aws-credentials, x-aws-region, x-environment');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -678,6 +678,332 @@ app.post('/api/search/lambda-error', async (req, res) => {
   }
 });
 
+// ========================================
+// QM Automation APIs
+// ========================================
+
+/**
+ * credentials 파싱 및 expiration Date 변환
+ */
+function parseCredentials(credentialsHeader) {
+  const credentials = JSON.parse(credentialsHeader);
+  if (credentials.expiration && typeof credentials.expiration === 'string') {
+    credentials.expiration = new Date(credentials.expiration);
+  }
+  return credentials;
+}
+
+/**
+ * DynamoDB 아이템을 unmarshall (간단한 버전)
+ */
+function unmarshallItem(item) {
+  const result = {};
+  for (const [key, value] of Object.entries(item)) {
+    if (value.S !== undefined) result[key] = value.S;
+    else if (value.N !== undefined) result[key] = parseFloat(value.N);
+    else if (value.BOOL !== undefined) result[key] = value.BOOL;
+    else if (value.NULL !== undefined) result[key] = null;
+    else if (value.L !== undefined) result[key] = value.L.map(v => unmarshallItem({ _: v })._ );
+    else if (value.M !== undefined) result[key] = unmarshallItem(value.M);
+    else result[key] = value;
+  }
+  return result;
+}
+
+/**
+ * QM Automation 목록 조회 (contactId GSI 사용)
+ *
+ * GET /api/agent/v1/qm-automation/list?contactId=xxx
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ */
+app.get('/api/agent/v1/qm-automation/list', async (req, res) => {
+  try {
+    const { contactId } = req.query;
+
+    if (!contactId) {
+      return res.status(400).json({ error: 'contactId is required' });
+    }
+
+    // 헤더에서 credentials 가져오기
+    const credentialsHeader = req.headers['x-aws-credentials'];
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+
+    let credentials;
+    if (credentialsHeader) {
+      credentials = parseCredentials(credentialsHeader);
+    } else {
+      // 기본 프로필 사용
+      const credentialProvider = defaultProvider();
+      credentials = await credentialProvider();
+    }
+
+    const dynamoClient = new DynamoDBClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const tableName = `aicc-${prefix}-ddb-gemini-response`;
+    const indexName = `aicc-${prefix}-ddb-gemini-response-gsi-contactId`;
+
+    const command = new QueryCommand({
+      TableName: tableName,
+      IndexName: indexName,
+      KeyConditionExpression: 'contactId = :contactId',
+      ExpressionAttributeValues: {
+        ':contactId': { S: contactId },
+      },
+      ScanIndexForward: false, // 최신순 정렬
+    });
+
+    const response = await dynamoClient.send(command);
+
+    if (!response.Items || response.Items.length === 0) {
+      return res.json({ items: [] });
+    }
+
+    // DynamoDB 아이템을 변환
+    const items = response.Items.map(item => {
+      const unmarshalled = unmarshallItem(item);
+      return {
+        requestId: unmarshalled.requestId,
+        contactId: unmarshalled.contactId,
+        agentId: unmarshalled.agentId,
+        status: unmarshalled.status,
+        createdAt: unmarshalled.sk, // sk가 생성 timestamp
+        completedAt: unmarshalled.completedAt,
+        geminiModel: unmarshalled.result?.geminiModel || unmarshalled.input?.model,
+        processingTime: unmarshalled.result?.processingTime,
+      };
+    });
+
+    res.json({ items });
+  } catch (error) {
+    console.error('Error fetching QM Automation list:', error);
+    res.status(500).json({ error: 'Failed to fetch QM Automation list', message: error.message });
+  }
+});
+
+/**
+ * QM Automation 상세 조회 (requestId로 조회)
+ *
+ * GET /api/agent/v1/qm-automation/status?requestId=xxx
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ */
+app.get('/api/agent/v1/qm-automation/status', async (req, res) => {
+  try {
+    const { requestId } = req.query;
+
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+
+    // 헤더에서 credentials 가져오기
+    const credentialsHeader = req.headers['x-aws-credentials'];
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+
+    let credentials;
+    if (credentialsHeader) {
+      credentials = parseCredentials(credentialsHeader);
+    } else {
+      const credentialProvider = defaultProvider();
+      credentials = await credentialProvider();
+    }
+
+    const dynamoClient = new DynamoDBClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const tableName = `aicc-${prefix}-ddb-gemini-response`;
+
+    // pk가 "requestId#<uuid>" 형식
+    const command = new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: {
+        ':pk': { S: `requestId#${requestId}` },
+      },
+      Limit: 1,
+    });
+
+    const response = await dynamoClient.send(command);
+
+    if (!response.Items || response.Items.length === 0) {
+      return res.status(404).json({ error: 'QM Automation not found' });
+    }
+
+    const item = unmarshallItem(response.Items[0]);
+
+    res.json({
+      requestId: item.requestId,
+      contactId: item.contactId,
+      agentId: item.agentId,
+      status: item.status,
+      createdAt: item.sk,
+      completedAt: item.completedAt,
+      result: item.result,
+      input: item.input,
+      error: item.error,
+    });
+  } catch (error) {
+    console.error('Error fetching QM Automation status:', error);
+    res.status(500).json({ error: 'Failed to fetch QM Automation status', message: error.message });
+  }
+});
+
+/**
+ * QM Automation 월별 목록 조회 (gsi_yearmm GSI 사용)
+ *
+ * GET /api/agent/v1/qm-automation/statistics?month=YYYYMM&limit=100
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ */
+app.get('/api/agent/v1/qm-automation/statistics', async (req, res) => {
+  try {
+    const { month, limit = 100 } = req.query;
+
+    if (!month) {
+      return res.status(400).json({ error: 'month (YYYYMM format) is required' });
+    }
+
+    const credentialsHeader = req.headers['x-aws-credentials'];
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+
+    let credentials;
+    if (credentialsHeader) {
+      credentials = parseCredentials(credentialsHeader);
+    } else {
+      const credentialProvider = defaultProvider();
+      credentials = await credentialProvider();
+    }
+
+    const dynamoClient = new DynamoDBClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const tableName = `aicc-${prefix}-ddb-gemini-response`;
+    const indexName = `aicc-${prefix}-ddb-gemini-response-gsi-yearmm`;
+
+    // connectedToAgentYYYYMM은 "QM#YYYYMM" 형식
+    const command = new QueryCommand({
+      TableName: tableName,
+      IndexName: indexName,
+      KeyConditionExpression: 'connectedToAgentYYYYMM = :yearMonth',
+      ExpressionAttributeValues: {
+        ':yearMonth': { S: `QM#${month}` },
+      },
+      ScanIndexForward: false,
+      Limit: parseInt(limit, 10),
+    });
+
+    const response = await dynamoClient.send(command);
+
+    if (!response.Items || response.Items.length === 0) {
+      return res.json({ items: [] });
+    }
+
+    const items = response.Items.map(item => {
+      const unmarshalled = unmarshallItem(item);
+      return {
+        requestId: unmarshalled.requestId,
+        contactId: unmarshalled.contactId,
+        agentId: unmarshalled.agentId,
+        status: unmarshalled.status,
+        createdAt: unmarshalled.sk,
+        completedAt: unmarshalled.completedAt,
+        connectedToAgentTimestamp: unmarshalled.connectedToAgentTimestamp,
+        geminiModel: unmarshalled.result?.geminiModel || unmarshalled.input?.model,
+        processingTime: unmarshalled.result?.processingTime,
+      };
+    });
+
+    res.json({ items });
+  } catch (error) {
+    console.error('Error fetching QM Automation statistics:', error);
+    res.status(500).json({ error: 'Failed to fetch QM Automation statistics', message: error.message });
+  }
+});
+
+/**
+ * QM Automation Agent별 목록 조회 (gsi_agentId GSI 사용)
+ *
+ * GET /api/agent/v1/qm-automation/agent/:agentId/history?limit=100
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ */
+app.get('/api/agent/v1/qm-automation/agent/:agentId/history', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const { limit = 100 } = req.query;
+
+    if (!agentId) {
+      return res.status(400).json({ error: 'agentId is required' });
+    }
+
+    const credentialsHeader = req.headers['x-aws-credentials'];
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+
+    let credentials;
+    if (credentialsHeader) {
+      credentials = parseCredentials(credentialsHeader);
+    } else {
+      const credentialProvider = defaultProvider();
+      credentials = await credentialProvider();
+    }
+
+    const dynamoClient = new DynamoDBClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const tableName = `aicc-${prefix}-ddb-gemini-response`;
+    const indexName = `aicc-${prefix}-ddb-gemini-response-gsi-agentId`;
+
+    const command = new QueryCommand({
+      TableName: tableName,
+      IndexName: indexName,
+      KeyConditionExpression: 'agentId = :agentId',
+      ExpressionAttributeValues: {
+        ':agentId': { S: agentId },
+      },
+      ScanIndexForward: false,
+      Limit: parseInt(limit, 10),
+    });
+
+    const response = await dynamoClient.send(command);
+
+    if (!response.Items || response.Items.length === 0) {
+      return res.json({ items: [] });
+    }
+
+    const items = response.Items.map(item => {
+      const unmarshalled = unmarshallItem(item);
+      return {
+        requestId: unmarshalled.requestId,
+        contactId: unmarshalled.contactId,
+        agentId: unmarshalled.agentId,
+        status: unmarshalled.status,
+        createdAt: unmarshalled.sk,
+        completedAt: unmarshalled.completedAt,
+        geminiModel: unmarshalled.result?.geminiModel || unmarshalled.input?.model,
+        processingTime: unmarshalled.result?.processingTime,
+      };
+    });
+
+    res.json({ items });
+  } catch (error) {
+    console.error('Error fetching agent QM history:', error);
+    res.status(500).json({ error: 'Failed to fetch agent QM history', message: error.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
@@ -713,6 +1039,12 @@ app.listen(PORT, () => {
 - POST /api/search/contact-flow  - Contact Flow 이름으로 검색
 - POST /api/search/dnis          - DNIS로 검색
 - POST /api/search/lambda-error  - Lambda 에러 로그 검색
+
+[QM Automation APIs]
+- GET  /api/agent/v1/qm-automation/list?contactId=xxx     - Contact별 QM 목록
+- GET  /api/agent/v1/qm-automation/status?requestId=xxx   - QM 상세 조회
+- GET  /api/agent/v1/qm-automation/statistics?month=YYYYMM - 월별 QM 통계
+- GET  /api/agent/v1/qm-automation/agent/:agentId/history  - Agent별 QM 이력
 
 [Health]
 - GET  /health                   - Health check

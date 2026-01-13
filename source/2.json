@@ -1,0 +1,124 @@
+{
+    "pk": {
+        "S": "requestId#64d2e1fd-f603-4b74-b05c-741e5b8cdd3a"
+    },
+    "sk": {
+        "S": "2026-01-13T04:13:21.322Z"
+    },
+    "agentId": {
+        "S": "f14dd476-b76e-48f9-baa7-ac473bba40e4"
+    },
+    "completedAt": {
+        "S": "2026-01-13T04:14:21.639Z"
+    },
+    "connectedToAgentTimestamp": {
+        "S": "2026-01-13T04:06:00.268Z"
+    },
+    "connectedToAgentYYYYMM": {
+        "S": "QM#202601"
+    },
+    "contactId": {
+        "S": "dd1ceeb2-f71f-4ca1-9102-4b9db932f769"
+    },
+    "input": {
+        "M": {
+            "action": {
+                "S": "prompt"
+            },
+            "contactId": {
+                "S": "dd1ceeb2-f71f-4ca1-9102-4b9db932f769"
+            },
+            "inputTokens": {
+                "N": "2320"
+            },
+            "maxOutputTokens": {
+                "N": "65535"
+            },
+            "model": {
+                "S": "gemini-2.5-pro"
+            },
+            "prompt": {
+                "S": "...(생략)..."
+            },
+            "streaming": {
+                "BOOL": false
+            },
+            "temperature": {
+                "N": "0"
+            },
+            "thinkingBudget": {
+                "N": "24576"
+            },
+            "toolResult": {
+                "M": {}
+            },
+            "type": {
+                "S": "QM_Automation"
+            },
+            "useAudioAnalysis": {
+                "BOOL": false
+            },
+            "useContextCaching": {
+                "BOOL": false
+            },
+            "useThinking": {
+                "BOOL": true
+            },
+            "useTools": {
+                "BOOL": false
+            }
+        }
+    },
+    "requestId": {
+        "S": "64d2e1fd-f603-4b74-b05c-741e5b8cdd3a"
+    },
+    "result": {
+        "M": {
+            "geminiModel": {
+                "S": "gemini-2.5-pro"
+            },
+            "geminiResponse": {
+                "S": "...(생략)..."
+            },
+            "message": {
+                "S": "GCP Authentication Success"
+            },
+            "outputTokens": {
+                "N": "1813"
+            },
+            "processingTime": {
+                "N": "60"
+            },
+            "projectId": {
+                "S": "ke-pss-aicc-dev"
+            },
+            "promptLength": {
+                "N": "4241"
+            },
+            "responseLength": {
+                "N": "3496"
+            },
+            "serviceAccount": {
+                "S": "pss-aicc-dev-sa@ke-pss-aicc-dev.iam.gserviceaccount.com"
+            },
+            "thinkingText": {
+                "S": "...(생략)..."
+            },
+            "timestamp": {
+                "N": "1768277661639"
+            },
+            "toolResult": {
+                "M": {}
+            },
+            "totalTokens": {
+                "N": "8568"
+            }
+        }
+    },
+    "status": {
+        "S": "COMPLETED"
+    },
+    "ttl": {
+        "N": "1768281201"
+    }
+}

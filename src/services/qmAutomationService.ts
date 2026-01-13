@@ -2,6 +2,7 @@
  * QM Automation Service
  *
  * QM Automation API와 통신하는 서비스
+ * 로컬 server.js API를 통해 DynamoDB gemini-response 테이블에서 데이터 조회
  */
 
 import {
@@ -15,16 +16,17 @@ import { AWSConfig } from '@/types/contact.types';
 
 // API Base URL - 환경에 따라 변경 가능
 const getApiBaseUrl = (environment: string): string => {
-  switch (environment) {
-    case 'dev':
-      return 'https://dev-api.example.com';
-    case 'stg':
-      return 'https://stg-api.example.com';
-    case 'prd':
-      return 'https://api.example.com';
-    default:
-      return 'http://localhost:8080';
-  }
+  // switch (environment) {
+  //   case 'dev':
+  //     return 'https://dev-api.example.com';
+  //   case 'stg':
+  //     return 'https://stg-api.example.com';
+  //   case 'prd':
+  //     return 'https://api.example.com';
+  //   default:
+  //     return 'http://localhost:8080';
+  // }
+  return 'http://localhost:8080';
 };
 
 /**
@@ -67,6 +69,11 @@ export async function getQMAutomationStatus(
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'x-aws-region': config.region,
+        'x-environment': config.environment,
+        ...(config.credentials && {
+          'x-aws-credentials': JSON.stringify(config.credentials),
+        }),
       },
     }
   );
@@ -80,8 +87,8 @@ export async function getQMAutomationStatus(
 }
 
 /**
- * Contact ID로 QM Automation 목록 조회 (Mock)
- * 실제 API가 제공되면 교체 필요
+ * Contact ID로 QM Automation 목록 조회 (서버 API 사용)
+ * server.js의 /api/agent/v1/qm-automation/list 엔드포인트 호출
  */
 export async function getQMAutomationListByContactId(
   contactId: string,
@@ -96,12 +103,16 @@ export async function getQMAutomationListByContactId(
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'x-aws-region': config.region,
+          'x-environment': config.environment,
+          ...(config.credentials && {
+            'x-aws-credentials': JSON.stringify(config.credentials),
+          }),
         },
       }
     );
 
     if (!response.ok) {
-      // API가 아직 구현되지 않은 경우 빈 배열 반환
       if (response.status === 404) {
         return [];
       }
@@ -110,11 +121,10 @@ export async function getQMAutomationListByContactId(
     }
 
     const data = await response.json();
-    return data.items || data;
+    return data.items || [];
   } catch (error) {
-    // 네트워크 오류 또는 API 미구현 시 빈 배열 반환
-    console.warn('QM Automation list API not available:', error);
-    return [];
+    console.error('Error fetching QM Automation list:', error);
+    throw error;
   }
 }
 
@@ -142,6 +152,11 @@ export async function getQMAutomationListByMonth(
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'x-aws-region': config.region,
+          'x-environment': config.environment,
+          ...(config.credentials && {
+            'x-aws-credentials': JSON.stringify(config.credentials),
+          }),
         },
       }
     );
@@ -184,6 +199,11 @@ export async function getQMAutomationListByAgent(
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'x-aws-region': config.region,
+          'x-environment': config.environment,
+          ...(config.credentials && {
+            'x-aws-credentials': JSON.stringify(config.credentials),
+          }),
         },
       }
     );

@@ -14,6 +14,8 @@ import ModuleDetailViewer from './pages/ModuleDetailViewer';
 import LogAnalysis from './pages/LogAnalysis';
 import Settings from './pages/Settings';
 import XRayTraceViewer from './pages/XRayTraceViewer';
+import QMAutomationList from './pages/QMAutomationList';
+import QMAutomationDetail from './pages/QMAutomationDetail';
 
 // Components
 import Layout from './components/Layout/Layout';
@@ -112,6 +114,8 @@ function App() {
                       <Route path="/contact-flow/:contactId?" element={<ContactFlowViewer />} />
                       <Route path="/contact-flow/:contactId/flow/:flowName" element={<FlowDetailViewer />} />
                       <Route path="/contact-flow/:contactId/flow/:flowName/module/:moduleName" element={<ModuleDetailViewer />} />
+                      <Route path="/qm-automation/:contactId" element={<QMAutomationList />} />
+                      <Route path="/qm-automation/:contactId/detail/:requestId" element={<QMAutomationDetail />} />
                       <Route path="/logs/:contactId?" element={<LogAnalysis />} />
                       <Route path="/xray-trace" element={<XRayTraceViewer />} />
                       <Route path="/settings" element={<Settings />} />

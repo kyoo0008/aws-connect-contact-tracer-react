@@ -24,6 +24,7 @@ import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
   Settings as SettingsIcon,
+  Assessment as QMIcon,
 } from '@mui/icons-material';
 import ReactFlow, {
   Node,
@@ -461,6 +462,11 @@ const ContactFlowViewerContent: React.FC = () => {
             <Tooltip title="Refresh">
               <IconButton onClick={() => refetch()}>
                 <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="QM Automation">
+              <IconButton onClick={() => navigate(`/qm-automation/${contactId}`)}>
+                <QMIcon />
               </IconButton>
             </Tooltip>
             <Tooltip title="View Transcript">

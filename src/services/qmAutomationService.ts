@@ -1,0 +1,309 @@
+/**
+ * QM Automation Service
+ *
+ * QM Automation API와 통신하는 서비스
+ */
+
+import {
+  QMAutomationRequestBody,
+  QMAutomationResponse,
+  QMAutomationStatusResponse,
+  QMAutomationListItem,
+  QMStatus,
+} from '@/types/qmAutomation.types';
+import { AWSConfig } from '@/types/contact.types';
+
+// API Base URL - 환경에 따라 변경 가능
+const getApiBaseUrl = (environment: string): string => {
+  switch (environment) {
+    case 'dev':
+      return 'https://dev-api.example.com';
+    case 'stg':
+      return 'https://stg-api.example.com';
+    case 'prd':
+      return 'https://api.example.com';
+    default:
+      return 'http://localhost:8080';
+  }
+};
+
+/**
+ * QM Automation 분석 요청
+ */
+export async function requestQMAutomation(
+  requestBody: QMAutomationRequestBody,
+  config: AWSConfig
+): Promise<QMAutomationResponse> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || `Failed to request QM automation: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * QM Automation 상태 조회
+ */
+export async function getQMAutomationStatus(
+  requestId: string,
+  config: AWSConfig
+): Promise<QMAutomationStatusResponse> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const response = await fetch(
+    `${apiBaseUrl}/api/agent/v1/qm-automation/status?requestId=${encodeURIComponent(requestId)}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || `Failed to get QM automation status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Contact ID로 QM Automation 목록 조회 (Mock)
+ * 실제 API가 제공되면 교체 필요
+ */
+export async function getQMAutomationListByContactId(
+  contactId: string,
+  config: AWSConfig
+): Promise<QMAutomationListItem[]> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/agent/v1/qm-automation/list?contactId=${encodeURIComponent(contactId)}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      // API가 아직 구현되지 않은 경우 빈 배열 반환
+      if (response.status === 404) {
+        return [];
+      }
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || `Failed to get QM automation list: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.items || data;
+  } catch (error) {
+    // 네트워크 오류 또는 API 미구현 시 빈 배열 반환
+    console.warn('QM Automation list API not available:', error);
+    return [];
+  }
+}
+
+/**
+ * 월별 QM Automation 목록 조회 (GSI1 활용)
+ */
+export async function getQMAutomationListByMonth(
+  yearMonth: string, // YYYYMM format
+  config: AWSConfig,
+  limit?: number
+): Promise<QMAutomationListItem[]> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  try {
+    const params = new URLSearchParams({
+      month: yearMonth,
+    });
+    if (limit) {
+      params.append('limit', limit.toString());
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/api/agent/v1/qm-automation/statistics?${params.toString()}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return [];
+      }
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || `Failed to get QM automation statistics: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.items || data;
+  } catch (error) {
+    console.warn('QM Automation statistics API not available:', error);
+    return [];
+  }
+}
+
+/**
+ * 상담사별 QM Automation 목록 조회 (GSI2 활용)
+ */
+export async function getQMAutomationListByAgent(
+  agentId: string,
+  config: AWSConfig,
+  limit?: number
+): Promise<QMAutomationListItem[]> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  try {
+    const params = new URLSearchParams();
+    if (limit) {
+      params.append('limit', limit.toString());
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/api/agent/v1/qm-automation/agent/${encodeURIComponent(agentId)}/history?${params.toString()}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return [];
+      }
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || `Failed to get agent QM history: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.items || data;
+  } catch (error) {
+    console.warn('QM Automation agent history API not available:', error);
+    return [];
+  }
+}
+
+/**
+ * QM Automation 상태를 한글로 변환
+ */
+export function getStatusLabel(status: QMStatus): string {
+  switch (status) {
+    case 'PENDING':
+      return '대기 중';
+    case 'PROCESSING':
+      return '처리 중';
+    case 'AUDIO_ANALYSIS_PROCESSING':
+      return '오디오 분석 중';
+    case 'COMPLETED':
+      return '완료';
+    case 'FAILED':
+    case 'ERROR':
+      return '실패';
+    default:
+      return status;
+  }
+}
+
+/**
+ * QM Automation 상태 색상 반환
+ */
+export function getStatusColor(status: QMStatus): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' {
+  switch (status) {
+    case 'PENDING':
+      return 'default';
+    case 'PROCESSING':
+    case 'AUDIO_ANALYSIS_PROCESSING':
+      return 'info';
+    case 'COMPLETED':
+      return 'success';
+    case 'FAILED':
+    case 'ERROR':
+      return 'error';
+    default:
+      return 'default';
+  }
+}
+
+/**
+ * QM 평가 점수 추출 (geminiResponse에서 파싱)
+ */
+export function extractScoreFromResponse(geminiResponse: string): number | null {
+  // 패턴: "100점 만점에 XX점" 또는 "총점: XX점"
+  const patterns = [
+    /(\d+)점\s*만점에\s*(\d+)점/,
+    /총점[:\s]*(\d+)점/,
+    /점수[:\s]*(\d+)점/,
+    /(\d+)\s*\/\s*100/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = geminiResponse.match(pattern);
+    if (match) {
+      // 첫 번째 패턴의 경우 두 번째 그룹이 실제 점수
+      if (pattern === patterns[0] && match[2]) {
+        return parseInt(match[2], 10);
+      }
+      // 나머지 패턴은 첫 번째 그룹이 점수
+      return parseInt(match[1], 10);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Polling을 통한 QM Automation 완료 대기
+ */
+export async function pollQMAutomationUntilComplete(
+  requestId: string,
+  config: AWSConfig,
+  options: {
+    maxAttempts?: number;
+    intervalMs?: number;
+    onStatusChange?: (status: QMStatus) => void;
+  } = {}
+): Promise<QMAutomationStatusResponse> {
+  const { maxAttempts = 60, intervalMs = 2000, onStatusChange } = options;
+
+  let attempts = 0;
+  let lastStatus: QMStatus | null = null;
+
+  while (attempts < maxAttempts) {
+    const response = await getQMAutomationStatus(requestId, config);
+
+    if (response.status !== lastStatus) {
+      lastStatus = response.status;
+      onStatusChange?.(response.status);
+    }
+
+    if (response.status === 'COMPLETED' || response.status === 'FAILED' || response.status === 'ERROR') {
+      return response;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    attempts++;
+  }
+
+  throw new Error('QM Automation polling timeout');
+}

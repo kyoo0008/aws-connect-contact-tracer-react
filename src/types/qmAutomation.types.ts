@@ -48,9 +48,10 @@ export interface AgentInterruption {
 }
 
 export interface AudioAnalyzeResult {
-  customer_dissatisfaction: CustomerDissatisfaction;
-  agent_interruption: AgentInterruption;
-  summary: string;
+  customer_dissatisfaction?: CustomerDissatisfaction;
+  agent_interruption?: AgentInterruption;
+  summary?: string;
+  body?: string;
 }
 
 export interface QMAutomationResult {
@@ -68,6 +69,7 @@ export interface QMAutomationResult {
   totalTokens: number;
   functionCalls?: FunctionCall[];
   audioAnalyzeResult?: AudioAnalyzeResult;
+  thinkingText?: string;
 }
 
 export interface QMAutomationItem {
@@ -153,6 +155,15 @@ export interface QMAutomationInput {
     functionCalls?: FunctionCall[];
     functionCallResults?: FunctionCallResultData[];
     toolWorkerRequestId?: string;
+    processingTime?: number;
+    geminiModel?: string;
+    toolPrompt?: string;
+    thinkingText?: string;
+    tokenUsage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+    };
   };
 }
 
@@ -178,6 +189,8 @@ export interface QMAutomationListItem {
   geminiModel?: string;
   totalScore?: number;
   processingTime?: number;
+  input?: QMAutomationInput;
+  result?: QMAutomationResult;
 }
 
 export interface QMAutomationListResponse {

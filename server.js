@@ -703,7 +703,7 @@ function unmarshallItem(item) {
     else if (value.N !== undefined) result[key] = parseFloat(value.N);
     else if (value.BOOL !== undefined) result[key] = value.BOOL;
     else if (value.NULL !== undefined) result[key] = null;
-    else if (value.L !== undefined) result[key] = value.L.map(v => unmarshallItem({ _: v })._ );
+    else if (value.L !== undefined) result[key] = value.L.map(v => unmarshallItem({ _: v })._);
     else if (value.M !== undefined) result[key] = unmarshallItem(value.M);
     else result[key] = value;
   }
@@ -775,6 +775,8 @@ app.get('/api/agent/v1/qm-automation/list', async (req, res) => {
         completedAt: unmarshalled.completedAt,
         geminiModel: unmarshalled.result?.geminiModel || unmarshalled.input?.model,
         processingTime: unmarshalled.result?.processingTime,
+        input: unmarshalled.input,
+        result: unmarshalled.result,
       };
     });
 

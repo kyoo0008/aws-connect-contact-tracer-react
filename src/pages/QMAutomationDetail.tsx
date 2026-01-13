@@ -100,9 +100,11 @@ const QMAutomationDetail: React.FC = () => {
     },
   });
 
-  const score = qmDetail?.result?.geminiResponse
-    ? extractScoreFromResponse(qmDetail.result.geminiResponse)
-    : null;
+  // const score = qmDetail?.result?.geminiResponse
+  //   ? extractScoreFromResponse(qmDetail.result.geminiResponse)
+  //   : null;
+
+  const score = null; // To-do : 점수 추출 로직 개선 필요
 
   // Validation checks
   if (!contactId || !requestId) {
@@ -250,15 +252,40 @@ const QMAutomationDetail: React.FC = () => {
                   <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                     <TimeIcon color="info" />
                     <Typography variant="subtitle2" color="text.secondary">
-                      처리 시간
+                      총 처리 시간
                     </Typography>
                   </Stack>
                   <Typography variant="h4" fontWeight={600}>
-                    {qmDetail.result.processingTime?.toFixed(2) || '-'}
+                    {(() => {
+                      const qmTime = qmDetail.result.processingTime || 0;
+                      const toolTime = qmDetail.input?.toolResult?.processingTime || 0;
+                      let audioTime = 0;
+                      try {
+                        if (qmDetail.result.audioAnalyzeResult?.body) {
+                          audioTime = JSON.parse(qmDetail.result.audioAnalyzeResult.body).processingTime || 0;
+                        }
+                      } catch (e) { }
+                      return (qmTime + toolTime + audioTime).toFixed(2);
+                    })()}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    초
-                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      QM: {qmDetail.result.processingTime?.toFixed(1) || '0'}s
+                    </Typography>
+                    {qmDetail.input?.toolResult?.processingTime && (
+                      <Typography variant="caption" color="text.secondary">
+                        / Tool: {qmDetail.input.toolResult.processingTime.toFixed(1)}s
+                      </Typography>
+                    )}
+                    {qmDetail.result.audioAnalyzeResult?.body && (
+                      <Typography variant="caption" color="text.secondary">
+                        / Audio: {(() => {
+                          try { return JSON.parse(qmDetail.result.audioAnalyzeResult.body).processingTime?.toFixed(1); }
+                          catch { return '0'; }
+                        })()}s
+                      </Typography>
+                    )}
+                  </Stack>
                 </CardContent>
               </Card>
             </Grid>
@@ -270,15 +297,40 @@ const QMAutomationDetail: React.FC = () => {
                   <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                     <TokenIcon color="secondary" />
                     <Typography variant="subtitle2" color="text.secondary">
-                      토큰 사용량
+                      총 토큰 사용량
                     </Typography>
                   </Stack>
                   <Typography variant="h4" fontWeight={600}>
-                    {qmDetail.result.totalTokens?.toLocaleString() || '-'}
+                    {(() => {
+                      const qmTokens = qmDetail.result.totalTokens || 0;
+                      const toolTokens = qmDetail.input?.toolResult?.tokenUsage?.totalTokens || 0;
+                      let audioTokens = 0;
+                      try {
+                        if (qmDetail.result.audioAnalyzeResult?.body) {
+                          audioTokens = JSON.parse(qmDetail.result.audioAnalyzeResult.body).totalTokens || 0;
+                        }
+                      } catch (e) { }
+                      return (qmTokens + toolTokens + audioTokens).toLocaleString();
+                    })()}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    입력: {qmDetail.input?.inputTokens?.toLocaleString() || '-'} / 출력: {qmDetail.result.outputTokens?.toLocaleString() || '-'}
-                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
+                    <Typography variant="caption" color="text.secondary">
+                      QM: {(qmDetail.result.totalTokens || 0).toLocaleString()}
+                    </Typography>
+                    {qmDetail.input?.toolResult?.tokenUsage?.totalTokens && (
+                      <Typography variant="caption" color="text.secondary">
+                        / Tool: {qmDetail.input.toolResult.tokenUsage.totalTokens.toLocaleString()}
+                      </Typography>
+                    )}
+                    {qmDetail.result.audioAnalyzeResult?.body && (
+                      <Typography variant="caption" color="text.secondary">
+                        / Audio: {(() => {
+                          try { return JSON.parse(qmDetail.result.audioAnalyzeResult.body).totalTokens?.toLocaleString() || '0'; }
+                          catch { return '0'; }
+                        })()}
+                      </Typography>
+                    )}
+                  </Stack>
                 </CardContent>
               </Card>
             </Grid>
@@ -296,9 +348,16 @@ const QMAutomationDetail: React.FC = () => {
                   <Typography variant="h6" fontWeight={600}>
                     {qmDetail.result.geminiModel || '-'}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {dayjs(qmDetail.completedAt).format('YYYY-MM-DD HH:mm:ss')}
-                  </Typography>
+                  <Stack direction="column" spacing={0} sx={{ mt: 0.5 }}>
+                    {qmDetail.input?.toolResult?.geminiModel && qmDetail.input.toolResult.geminiModel !== qmDetail.result.geminiModel && (
+                      <Typography variant="caption" color="text.secondary">
+                        Tool: {qmDetail.input.toolResult.geminiModel}
+                      </Typography>
+                    )}
+                    <Typography variant="caption" color="text.secondary">
+                      {dayjs(qmDetail.completedAt).format('YYYY-MM-DD HH:mm:ss')}
+                    </Typography>
+                  </Stack>
                 </CardContent>
               </Card>
             </Grid>
@@ -312,101 +371,296 @@ const QMAutomationDetail: React.FC = () => {
               sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
             >
               <Tab label="QM 평가 결과" />
-              <Tab label="Function Calls" disabled={!qmDetail.input?.toolResult?.functionCalls?.length} />
+              <Tab label="Function Calls" disabled={!qmDetail.input?.toolResult} />
               <Tab label="오디오 분석" disabled={!qmDetail.result.audioAnalyzeResult} />
             </Tabs>
 
             <Box sx={{ p: 3 }}>
               {/* QM Result Tab */}
               <TabPanel value={tabValue} index={0}>
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: 3,
-                    bgcolor: 'grey.50',
-                    maxHeight: '60vh',
-                    overflow: 'auto',
-                    whiteSpace: 'pre-wrap',
-                    fontFamily: 'monospace',
-                    fontSize: '0.875rem',
-                    lineHeight: 1.6,
-                  }}
-                >
-                  {qmDetail.result.geminiResponse}
-                </Paper>
+                <Stack spacing={3}>
+                  {/* Input Prompt Section */}
+                  {qmDetail.input?.prompt && (
+                    <Paper variant="outlined" sx={{ p: 2 }}>
+                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                        <InfoIcon color="info" />
+                        <Typography variant="subtitle1" fontWeight={600}>
+                          QM 분석 프롬프트
+                        </Typography>
+                      </Stack>
+                      <Box
+                        sx={{
+                          p: 2,
+                          bgcolor: 'grey.50',
+                          borderRadius: 1,
+                          maxHeight: '200px',
+                          overflow: 'auto',
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {qmDetail.input.prompt}
+                      </Box>
+                    </Paper>
+                  )}
+
+                  {/* Evaluation Meta Data */}
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                      평가 메타데이터
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={6} sm={3}>
+                        <Typography variant="caption" color="text.secondary">처리 시간</Typography>
+                        <Typography variant="body2">
+                          {qmDetail.result.processingTime?.toFixed(2) || '-'}s
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Typography variant="caption" color="text.secondary">총 토큰</Typography>
+                        <Typography variant="body2">
+                          {qmDetail.result.totalTokens?.toLocaleString() || '-'}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Typography variant="caption" color="text.secondary">입력 토큰</Typography>
+                        <Typography variant="body2">
+                          {qmDetail.input?.inputTokens?.toLocaleString() || '-'}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Typography variant="caption" color="text.secondary">출력 토큰</Typography>
+                        <Typography variant="body2">
+                          {qmDetail.result.outputTokens?.toLocaleString() || '-'}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
+                        <Typography variant="body2">
+                          {((qmDetail.result.totalTokens || 0) - ((qmDetail.input?.inputTokens || 0) + (qmDetail.result.outputTokens || 0))).toLocaleString()}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+
+                  {/* Thinking Process Section */}
+                  {qmDetail.result.thinkingText && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                        Thinking Process
+                      </Typography>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 3,
+                          bgcolor: 'grey.50',
+                          maxHeight: '40vh',
+                          overflow: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {qmDetail.result.thinkingText}
+                      </Paper>
+                    </Box>
+                  )}
+
+                  {/* Result Section */}
+                  <Box>
+                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                      평가 결과
+                    </Typography>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 3,
+                        bgcolor: 'grey.50',
+                        maxHeight: '60vh',
+                        overflow: 'auto',
+                        whiteSpace: 'pre-wrap',
+                        fontFamily: 'monospace',
+                        fontSize: '0.875rem',
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      {qmDetail.result.geminiResponse}
+                    </Paper>
+                  </Box>
+                </Stack>
               </TabPanel>
 
               {/* Function Calls Tab */}
               <TabPanel value={tabValue} index={1}>
-                {qmDetail.input?.toolResult?.functionCalls && qmDetail.input?.toolResult?.functionCalls.length > 0 ? (
-                  <Stack spacing={2}>
-                    {qmDetail.input?.toolResult?.functionCalls.map((fc: FunctionCall, index: number) => {
-                      // functionCallResults에서 해당 functionCall의 결과 찾기
-                      const fcResult = qmDetail.input?.toolResult?.functionCallResults?.find(
-                        (result: FunctionCallResultData) => result.functionCallId === fc.id
-                      );
-                      return (
-                        <Accordion key={fc.id || index} defaultExpanded>
-                          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                            <Stack direction="row" alignItems="center" spacing={2}>
-                              <FunctionIcon color="primary" />
-                              <Typography fontWeight={600}>{fc.name}</Typography>
-                              {fcResult && (
-                                <Chip
-                                  size="small"
-                                  icon={fcResult.success ? <CheckIcon /> : <ErrorIcon />}
-                                  label={fcResult.success ? '성공' : '실패'}
-                                  color={fcResult.success ? 'success' : 'error'}
-                                />
-                              )}
-                            </Stack>
-                          </AccordionSummary>
-                          <AccordionDetails>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} md={6}>
-                                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                  Arguments (요청)
-                                </Typography>
-                                <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-                                  <pre style={{ margin: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                    {JSON.stringify(fc.args, null, 2)}
-                                  </pre>
-                                </Paper>
-                              </Grid>
-                              {fcResult && (
+                <Stack spacing={3}>
+                  {/* Tool Prompt Section */}
+                  {qmDetail.input?.toolResult?.toolPrompt && (
+                    <Paper variant="outlined" sx={{ p: 2 }}>
+                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                        <InfoIcon color="info" />
+                        <Typography variant="subtitle1" fontWeight={600}>
+                          Tool 분석 프롬프트
+                        </Typography>
+                      </Stack>
+                      <Box
+                        sx={{
+                          p: 2,
+                          bgcolor: 'grey.50',
+                          borderRadius: 1,
+                          maxHeight: '200px',
+                          overflow: 'auto',
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {qmDetail.input.toolResult.toolPrompt}
+                      </Box>
+                    </Paper>
+                  )}
+
+                  {/* Tool Meta Data */}
+                  {qmDetail.input?.toolResult && (
+                    <Paper variant="outlined" sx={{ p: 2 }}>
+                      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                        Tool 실행 메타데이터
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">처리 시간</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.toolResult?.processingTime?.toFixed(2) || '-'}s
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">총 토큰</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.toolResult?.tokenUsage?.totalTokens?.toLocaleString() || '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">입력 토큰</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.toolResult?.tokenUsage?.inputTokens?.toLocaleString() || '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">출력 토큰</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.toolResult?.tokenUsage?.outputTokens?.toLocaleString() || '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
+                          <Typography variant="body2">
+                            {((qmDetail.input?.toolResult?.tokenUsage?.totalTokens || 0) - ((qmDetail.input?.toolResult?.tokenUsage?.inputTokens || 0) + (qmDetail.input?.toolResult?.tokenUsage?.outputTokens || 0))).toLocaleString()}
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                    </Paper>
+                  )}
+                  {/* Tool Thinking Process Section */}
+                  {qmDetail.input?.toolResult?.thinkingText && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                        Tool Thinking Process
+                      </Typography>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 3,
+                          bgcolor: 'grey.50',
+                          maxHeight: '40vh',
+                          overflow: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {qmDetail.input.toolResult.thinkingText}
+                      </Paper>
+                    </Box>
+                  )}
+
+
+
+                  {/* Function Calls List */}
+                  {qmDetail.input?.toolResult?.functionCalls && qmDetail.input?.toolResult?.functionCalls.length > 0 ? (
+                    <Stack spacing={2}>
+                      {qmDetail.input?.toolResult?.functionCalls.map((fc: FunctionCall, index: number) => {
+                        // functionCallResults에서 해당 functionCall의 결과 찾기
+                        const fcResult = qmDetail.input?.toolResult?.functionCallResults?.find(
+                          (result: FunctionCallResultData) => result.functionCallId === fc.id
+                        );
+                        return (
+                          <Accordion key={fc.id || index} defaultExpanded>
+                            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                              <Stack direction="row" alignItems="center" spacing={2}>
+                                <FunctionIcon color="primary" />
+                                <Typography fontWeight={600}>{fc.name}</Typography>
+                                {fcResult && (
+                                  <Chip
+                                    size="small"
+                                    icon={fcResult.success ? <CheckIcon /> : <ErrorIcon />}
+                                    label={fcResult.success ? '성공' : '실패'}
+                                    color={fcResult.success ? 'success' : 'error'}
+                                  />
+                                )}
+                              </Stack>
+                            </AccordionSummary>
+                            <AccordionDetails>
+                              <Grid container spacing={2}>
                                 <Grid item xs={12} md={6}>
                                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                    Result (응답)
+                                    Arguments (요청)
                                   </Typography>
-                                  <Paper
-                                    variant="outlined"
-                                    sx={{
-                                      p: 2,
-                                      bgcolor: fcResult.data?.errorMessage ? 'error.50' : 'success.50',
-                                      borderColor: fcResult.data?.errorMessage ? 'error.main' : 'success.main',
-                                    }}
-                                  >
+                                  <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
                                     <pre style={{ margin: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                      {JSON.stringify(fcResult.data || fcResult.error, null, 2)}
+                                      {JSON.stringify(fc.args, null, 2)}
                                     </pre>
                                   </Paper>
                                 </Grid>
-                              )}
-                            </Grid>
-                          </AccordionDetails>
-                        </Accordion>
-                      );
-                    })}
-                  </Stack>
-                ) : (
-                  <Typography color="text.secondary">Function Call 데이터가 없습니다.</Typography>
-                )}
+                                {fcResult && (
+                                  <Grid item xs={12} md={6}>
+                                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                      Result (응답)
+                                    </Typography>
+                                    <Paper
+                                      variant="outlined"
+                                      sx={{
+                                        p: 2,
+                                        bgcolor: fcResult.data?.errorMessage ? 'error.50' : 'success.50',
+                                        borderColor: fcResult.data?.errorMessage ? 'error.main' : 'success.main',
+                                      }}
+                                    >
+                                      <pre style={{ margin: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                        {JSON.stringify(fcResult.data || fcResult.error, null, 2)}
+                                      </pre>
+                                    </Paper>
+                                  </Grid>
+                                )}
+                              </Grid>
+                            </AccordionDetails>
+                          </Accordion>
+                        );
+                      })}
+                    </Stack>
+                  ) : (
+                    <Typography color="text.secondary">Function Call 데이터가 없습니다.</Typography>
+                  )}
+                </Stack>
               </TabPanel>
 
               {/* Audio Analysis Tab */}
               <TabPanel value={tabValue} index={2}>
                 {qmDetail.result.audioAnalyzeResult ? (
-                  <AudioAnalysisView result={qmDetail.result.audioAnalyzeResult} />
+                  <AudioAnalysisView
+                    result={qmDetail.result.audioAnalyzeResult}
+                    prompt={qmDetail.input?.audioAnalysisPrompt}
+                  />
                 ) : (
                   <Typography color="text.secondary">오디오 분석 데이터가 없습니다.</Typography>
                 )}
@@ -456,19 +710,140 @@ const QMAutomationDetail: React.FC = () => {
 };
 
 // Audio Analysis Sub-component
-const AudioAnalysisView: React.FC<{ result: AudioAnalyzeResult }> = ({ result }) => {
-  const customerDissatisfaction = result.customer_dissatisfaction;
-  const agentInterruption = result.agent_interruption;
+const AudioAnalysisView: React.FC<{ result: AudioAnalyzeResult; prompt?: string }> = ({
+  result,
+  prompt,
+}) => {
+  // Parse body if available
+  const parsedBody = React.useMemo(() => {
+    if (!result.body) return null;
+    try {
+      return JSON.parse(result.body);
+    } catch (e) {
+      console.error('Failed to parse audio analysis body', e);
+      return null;
+    }
+  }, [result.body]);
+
+  // Try to parse audioAnalysisResponse if it is a JSON string
+  const analysisResponse = React.useMemo(() => {
+    if (!parsedBody?.audioAnalysisResponse) return null;
+    try {
+      if (typeof parsedBody.audioAnalysisResponse === 'string') {
+        // Check if it looks like JSON
+        if (parsedBody.audioAnalysisResponse.trim().startsWith('{')) {
+          return JSON.parse(parsedBody.audioAnalysisResponse);
+        }
+        return parsedBody.audioAnalysisResponse;
+      }
+      return parsedBody.audioAnalysisResponse;
+    } catch (e) {
+      return parsedBody.audioAnalysisResponse;
+    }
+  }, [parsedBody]);
+
+  // Merge structured data from result or parsed body/response
+  const customerDissatisfaction =
+    result.customer_dissatisfaction || analysisResponse?.customer_dissatisfaction;
+  const agentInterruption =
+    result.agent_interruption || analysisResponse?.agent_interruption;
+  const summary = result.summary || analysisResponse?.summary;
 
   return (
     <Stack spacing={3}>
+      {/* Input Prompt Section */}
+      {prompt && (
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+            <InfoIcon color="info" />
+            <Typography variant="subtitle1" fontWeight={600}>
+              분석 프롬프트
+            </Typography>
+          </Stack>
+          <Box
+            sx={{
+              p: 2,
+              bgcolor: 'grey.50',
+              borderRadius: 1,
+              maxHeight: '200px',
+              overflow: 'auto',
+              fontFamily: 'monospace',
+              fontSize: '0.875rem',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {prompt}
+          </Box>
+        </Paper>
+      )}
+
+      {/* Analysis Metadata from Parsed Body */}
+      {parsedBody && (
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+            분석 메타데이터
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">처리 시간</Typography>
+              <Typography variant="body2">{parsedBody.processingTime?.toFixed(2)}s</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">총 토큰</Typography>
+              <Typography variant="body2">{parsedBody.totalTokens?.toLocaleString()}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">입력 토큰</Typography>
+              <Typography variant="body2">{parsedBody.inputTokens?.toLocaleString()}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">출력 토큰</Typography>
+              <Typography variant="body2">{parsedBody.outputTokens?.toLocaleString()}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
+              <Typography variant="body2">
+                {((parsedBody.totalTokens || 0) - ((parsedBody.inputTokens || 0) + (parsedBody.outputTokens || 0))).toLocaleString()}
+              </Typography>
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
+
       {/* Summary */}
-      <Paper variant="outlined" sx={{ p: 2 }}>
-        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-          분석 요약
-        </Typography>
-        <Typography variant="body2">{result.summary || '요약 정보가 없습니다.'}</Typography>
-      </Paper>
+      {(summary || result.summary) && (
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+            분석 요약
+          </Typography>
+          <Typography variant="body2">{summary || result.summary}</Typography>
+        </Paper>
+      )}
+
+      {/* Raw Response Text if we couldn't parse specific fields but have response */}
+      {analysisResponse && !customerDissatisfaction && !agentInterruption && !summary && (
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+            분석 결과 (Raw)
+          </Typography>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 2,
+              bgcolor: 'grey.50',
+              maxHeight: '400px',
+              overflow: 'auto',
+              fontFamily: 'monospace',
+              fontSize: '0.875rem',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {typeof analysisResponse === 'string'
+              ? analysisResponse
+              : JSON.stringify(analysisResponse, null, 2)}
+          </Paper>
+        </Paper>
+      )}
 
       {/* Customer Dissatisfaction */}
       {customerDissatisfaction && (
@@ -544,7 +919,7 @@ const AudioAnalysisView: React.FC<{ result: AudioAnalyzeResult }> = ({ result })
           </Stack>
           {agentInterruption.detected && agentInterruption.instances && agentInterruption.instances.length > 0 && (
             <List dense>
-              {agentInterruption.instances.map((instance, index) => (
+              {agentInterruption.instances.map((instance: any, index: number) => (
                 <ListItem key={index}>
                   <ListItemIcon>
                     <AudioIcon fontSize="small" />

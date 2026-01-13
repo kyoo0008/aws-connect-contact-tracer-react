@@ -269,7 +269,7 @@ const QMAutomationList: React.FC = () => {
                 <TableCell>Request ID</TableCell>
                 <TableCell>상태</TableCell>
                 <TableCell>모델</TableCell>
-                <TableCell>처리 시간</TableCell>
+                <TableCell>총 처리 시간</TableCell>
                 <TableCell>생성일시</TableCell>
                 <TableCell>완료일시</TableCell>
               </TableRow>
@@ -305,7 +305,23 @@ const QMAutomationList: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
-                      {item.processingTime ? `${item.processingTime.toFixed(2)}초` : '-'}
+                      {(() => {
+                        const qmTime = Number(item.result?.processingTime ?? item.processingTime ?? 0);
+                        const toolTime = Number(item.input?.toolResult?.processingTime ?? 0);
+
+                        let audioTime = 0;
+                        if (item.result?.audioAnalyzeResult?.body) {
+                          try {
+                            const body = JSON.parse(item.result.audioAnalyzeResult.body);
+                            audioTime = Number(body.processingTime ?? 0);
+                          } catch (e) {
+                            // ignore parsing error
+                          }
+                        }
+
+                        const totalTime = qmTime + toolTime + audioTime;
+                        return totalTime > 0 ? `${totalTime.toFixed(2)}초` : '-';
+                      })()}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -388,13 +404,15 @@ const QMAutomationList: React.FC = () => {
             <FormControlLabel
               control={
                 <Switch
+                  readOnly={true}
+                  disabled={true}
                   checked={requestOptions.useContextCaching}
                   onChange={(e) =>
                     setRequestOptions({ ...requestOptions, useContextCaching: e.target.checked })
                   }
                 />
               }
-              label="Context Caching 사용 (비용 절감)"
+              label="Context Caching 사용"
             />
           </Stack>
         </DialogContent>

@@ -275,7 +275,11 @@ const QMAutomationList: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {qmList.map((item: QMAutomationListItem) => (
+              {[...qmList].sort((a, b) => {
+                const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return dateB - dateA;
+              }).map((item: QMAutomationListItem) => (
                 <TableRow
                   key={item.requestId}
                   hover

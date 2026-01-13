@@ -52,6 +52,7 @@ import {
 import {
   QMAutomationStatusResponse,
   FunctionCall,
+  FunctionCallResultData,
   AudioAnalyzeResult,
 } from '@/types/qmAutomation.types';
 import dayjs from 'dayjs';
@@ -276,7 +277,7 @@ const QMAutomationDetail: React.FC = () => {
                     {qmDetail.result.totalTokens?.toLocaleString() || '-'}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    입력: {qmDetail.result.inputTokens?.toLocaleString() || '-'} / 출력: {qmDetail.result.outputTokens?.toLocaleString() || '-'}
+                    입력: {qmDetail.input?.inputTokens?.toLocaleString() || '-'} / 출력: {qmDetail.result.outputTokens?.toLocaleString() || '-'}
                   </Typography>
                 </CardContent>
               </Card>
@@ -311,7 +312,7 @@ const QMAutomationDetail: React.FC = () => {
               sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
             >
               <Tab label="QM 평가 결과" />
-              <Tab label="Function Calls" disabled={!qmDetail.result.functionCalls?.length} />
+              <Tab label="Function Calls" disabled={!qmDetail.input?.toolResult?.functionCalls?.length} />
               <Tab label="오디오 분석" disabled={!qmDetail.result.audioAnalyzeResult} />
             </Tabs>
 
@@ -337,52 +338,65 @@ const QMAutomationDetail: React.FC = () => {
 
               {/* Function Calls Tab */}
               <TabPanel value={tabValue} index={1}>
-                {qmDetail.result.functionCalls && qmDetail.result.functionCalls.length > 0 ? (
+                {qmDetail.input?.toolResult?.functionCalls && qmDetail.input?.toolResult?.functionCalls.length > 0 ? (
                   <Stack spacing={2}>
-                    {qmDetail.result.functionCalls.map((fc: FunctionCall, index: number) => (
-                      <Accordion key={fc.id || index} defaultExpanded>
-                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                          <Stack direction="row" alignItems="center" spacing={2}>
-                            <FunctionIcon color="primary" />
-                            <Typography fontWeight={600}>{fc.name}</Typography>
-                            {fc.functionCallResult && (
-                              <Chip
-                                size="small"
-                                icon={fc.functionCallResult.success ? <CheckIcon /> : <ErrorIcon />}
-                                label={fc.functionCallResult.success ? '성공' : '실패'}
-                                color={fc.functionCallResult.success ? 'success' : 'error'}
-                              />
-                            )}
-                          </Stack>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                          <Grid container spacing={2}>
-                            <Grid item xs={12} md={6}>
-                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                Arguments
-                              </Typography>
-                              <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-                                <pre style={{ margin: 0, fontSize: '0.75rem', overflow: 'auto' }}>
-                                  {JSON.stringify(fc.args, null, 2)}
-                                </pre>
-                              </Paper>
-                            </Grid>
-                            {fc.functionCallResult && (
+                    {qmDetail.input?.toolResult?.functionCalls.map((fc: FunctionCall, index: number) => {
+                      // functionCallResults에서 해당 functionCall의 결과 찾기
+                      const fcResult = qmDetail.input?.toolResult?.functionCallResults?.find(
+                        (result: FunctionCallResultData) => result.functionCallId === fc.id
+                      );
+                      return (
+                        <Accordion key={fc.id || index} defaultExpanded>
+                          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Stack direction="row" alignItems="center" spacing={2}>
+                              <FunctionIcon color="primary" />
+                              <Typography fontWeight={600}>{fc.name}</Typography>
+                              {fcResult && (
+                                <Chip
+                                  size="small"
+                                  icon={fcResult.success ? <CheckIcon /> : <ErrorIcon />}
+                                  label={fcResult.success ? '성공' : '실패'}
+                                  color={fcResult.success ? 'success' : 'error'}
+                                />
+                              )}
+                            </Stack>
+                          </AccordionSummary>
+                          <AccordionDetails>
+                            <Grid container spacing={2}>
                               <Grid item xs={12} md={6}>
                                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                  Result
+                                  Arguments (요청)
                                 </Typography>
                                 <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-                                  <pre style={{ margin: 0, fontSize: '0.75rem', overflow: 'auto' }}>
-                                    {JSON.stringify(fc.functionCallResult.data || fc.functionCallResult.error, null, 2)}
+                                  <pre style={{ margin: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                    {JSON.stringify(fc.args, null, 2)}
                                   </pre>
                                 </Paper>
                               </Grid>
-                            )}
-                          </Grid>
-                        </AccordionDetails>
-                      </Accordion>
-                    ))}
+                              {fcResult && (
+                                <Grid item xs={12} md={6}>
+                                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                    Result (응답)
+                                  </Typography>
+                                  <Paper
+                                    variant="outlined"
+                                    sx={{
+                                      p: 2,
+                                      bgcolor: fcResult.data?.errorMessage ? 'error.50' : 'success.50',
+                                      borderColor: fcResult.data?.errorMessage ? 'error.main' : 'success.main',
+                                    }}
+                                  >
+                                    <pre style={{ margin: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                      {JSON.stringify(fcResult.data || fcResult.error, null, 2)}
+                                    </pre>
+                                  </Paper>
+                                </Grid>
+                              )}
+                            </Grid>
+                          </AccordionDetails>
+                        </Accordion>
+                      );
+                    })}
                   </Stack>
                 ) : (
                   <Typography color="text.secondary">Function Call 데이터가 없습니다.</Typography>
@@ -443,6 +457,9 @@ const QMAutomationDetail: React.FC = () => {
 
 // Audio Analysis Sub-component
 const AudioAnalysisView: React.FC<{ result: AudioAnalyzeResult }> = ({ result }) => {
+  const customerDissatisfaction = result.customer_dissatisfaction;
+  const agentInterruption = result.agent_interruption;
+
   return (
     <Stack spacing={3}>
       {/* Summary */}
@@ -450,94 +467,98 @@ const AudioAnalysisView: React.FC<{ result: AudioAnalyzeResult }> = ({ result })
         <Typography variant="subtitle1" fontWeight={600} gutterBottom>
           분석 요약
         </Typography>
-        <Typography variant="body2">{result.summary}</Typography>
+        <Typography variant="body2">{result.summary || '요약 정보가 없습니다.'}</Typography>
       </Paper>
 
       {/* Customer Dissatisfaction */}
-      <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-          {result.customer_dissatisfaction.detected ? (
-            <WarningIcon color="warning" />
-          ) : (
-            <CheckIcon color="success" />
-          )}
-          <Typography variant="subtitle1" fontWeight={600}>
-            고객 불만족
-          </Typography>
-          <Chip
-            size="small"
-            label={result.customer_dissatisfaction.detected ? '감지됨' : '감지 안됨'}
-            color={result.customer_dissatisfaction.detected ? 'warning' : 'success'}
-          />
-        </Stack>
-        {result.customer_dissatisfaction.detected && (
-          <List dense>
-            <ListItem>
-              <ListItemIcon>
-                <InfoIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText
-                primary="심각도"
-                secondary={result.customer_dissatisfaction.severity || '-'}
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemIcon>
-                <InfoIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText
-                primary="사유"
-                secondary={result.customer_dissatisfaction.reason || '-'}
-              />
-            </ListItem>
-            {result.customer_dissatisfaction.timestamp_range && (
+      {customerDissatisfaction && (
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+            {customerDissatisfaction.detected ? (
+              <WarningIcon color="warning" />
+            ) : (
+              <CheckIcon color="success" />
+            )}
+            <Typography variant="subtitle1" fontWeight={600}>
+              고객 불만족
+            </Typography>
+            <Chip
+              size="small"
+              label={customerDissatisfaction.detected ? '감지됨' : '감지 안됨'}
+              color={customerDissatisfaction.detected ? 'warning' : 'success'}
+            />
+          </Stack>
+          {customerDissatisfaction.detected && (
+            <List dense>
               <ListItem>
                 <ListItemIcon>
-                  <TimeIcon fontSize="small" />
+                  <InfoIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText
-                  primary="발생 구간"
-                  secondary={result.customer_dissatisfaction.timestamp_range}
+                  primary="심각도"
+                  secondary={customerDissatisfaction.severity || '-'}
                 />
               </ListItem>
-            )}
-          </List>
-        )}
-      </Paper>
+              <ListItem>
+                <ListItemIcon>
+                  <InfoIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText
+                  primary="사유"
+                  secondary={customerDissatisfaction.reason || '-'}
+                />
+              </ListItem>
+              {customerDissatisfaction.timestamp_range && (
+                <ListItem>
+                  <ListItemIcon>
+                    <TimeIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="발생 구간"
+                    secondary={customerDissatisfaction.timestamp_range}
+                  />
+                </ListItem>
+              )}
+            </List>
+          )}
+        </Paper>
+      )}
 
       {/* Agent Interruption */}
-      <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-          {result.agent_interruption.detected ? (
-            <WarningIcon color="warning" />
-          ) : (
-            <CheckIcon color="success" />
+      {agentInterruption && (
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+            {agentInterruption.detected ? (
+              <WarningIcon color="warning" />
+            ) : (
+              <CheckIcon color="success" />
+            )}
+            <Typography variant="subtitle1" fontWeight={600}>
+              상담사 끼어들기
+            </Typography>
+            <Chip
+              size="small"
+              label={agentInterruption.detected ? '감지됨' : '감지 안됨'}
+              color={agentInterruption.detected ? 'warning' : 'success'}
+            />
+          </Stack>
+          {agentInterruption.detected && agentInterruption.instances && agentInterruption.instances.length > 0 && (
+            <List dense>
+              {agentInterruption.instances.map((instance, index) => (
+                <ListItem key={index}>
+                  <ListItemIcon>
+                    <AudioIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={instance.timestamp}
+                    secondary={instance.description}
+                  />
+                </ListItem>
+              ))}
+            </List>
           )}
-          <Typography variant="subtitle1" fontWeight={600}>
-            상담사 끼어들기
-          </Typography>
-          <Chip
-            size="small"
-            label={result.agent_interruption.detected ? '감지됨' : '감지 안됨'}
-            color={result.agent_interruption.detected ? 'warning' : 'success'}
-          />
-        </Stack>
-        {result.agent_interruption.detected && result.agent_interruption.instances.length > 0 && (
-          <List dense>
-            {result.agent_interruption.instances.map((instance, index) => (
-              <ListItem key={index}>
-                <ListItemIcon>
-                  <AudioIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary={instance.timestamp}
-                  secondary={instance.description}
-                />
-              </ListItem>
-            ))}
-          </List>
-        )}
-      </Paper>
+        </Paper>
+      )}
     </Stack>
   );
 };

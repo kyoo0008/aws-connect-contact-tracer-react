@@ -131,12 +131,40 @@ export interface QMAutomationResponse {
   toolFunctionCalls?: FunctionCall[];
 }
 
+export interface QMAutomationInput {
+  action?: string;
+  type?: string;
+  contactId?: string;
+  model?: string;
+  prompt?: string;
+  streaming?: boolean;
+  useTools?: boolean;
+  useThinking?: boolean;
+  thinkingBudget?: number;
+  temperature?: number;
+  maxOutputTokens?: number;
+  useAudioAnalysis?: boolean;
+  audioAnalysisPrompt?: string;
+  audioOriginalKey?: string;
+  audioPresignedUrl?: string;
+  useContextCaching?: boolean;
+  inputTokens?: number;
+  toolResult?: {
+    functionCalls?: FunctionCall[];
+    functionCallResults?: FunctionCallResultData[];
+    toolWorkerRequestId?: string;
+  };
+}
+
 export interface QMAutomationStatusResponse {
   requestId: string;
+  contactId?: string;
+  agentId?: string;
   status: QMStatus;
   createdAt?: string;
   completedAt?: string;
   result?: QMAutomationResult;
+  input?: QMAutomationInput;
   error?: string;
 }
 

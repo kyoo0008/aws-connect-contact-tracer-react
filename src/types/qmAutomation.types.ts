@@ -191,6 +191,7 @@ export interface QMAutomationListItem {
   processingTime?: number;
   input?: QMAutomationInput;
   result?: QMAutomationResult;
+  connectedToAgentTimestamp?: string;
 }
 
 export interface QMAutomationListResponse {

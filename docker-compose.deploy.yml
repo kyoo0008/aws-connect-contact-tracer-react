@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: xxxhistxxx/ke-aicc-frontend:latest  # QA 권한이 적용된 이미지
+    pull_policy: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: always
+
+  backend:
+    image: xxxhistxxx/ke-aicc-backend:latest
+    pull_policy: always
+    ports:
+      - "8080:8080"
+    # AWS 자격 증명이 필요하다면 유지 (사용자 환경에 따라 경로 수정 필요할 수 있음)
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
+    environment:
+      - AWS_SDK_LOAD_CONFIG=1
+    restart: always

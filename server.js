@@ -1006,6 +1006,131 @@ app.get('/api/agent/v1/qm-automation/agent/:agentId/history', async (req, res) =
   }
 });
 
+/**
+ * QM Automation 검색 (기간 조회)
+ *
+ * POST /api/agent/v1/qm-automation/search
+ * Body: { startDate: "YYYY-MM-DD", endDate: "YYYY-MM-DD" }
+ */
+app.post('/api/agent/v1/qm-automation/search', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'startDate and endDate are required' });
+    }
+
+    const credentialsHeader = req.headers['x-aws-credentials'];
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+
+    let credentials;
+    if (credentialsHeader) {
+      credentials = parseCredentials(credentialsHeader);
+    } else {
+      const credentialProvider = defaultProvider();
+      credentials = await credentialProvider();
+    }
+
+    const dynamoClient = new DynamoDBClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const tableName = `aicc-${prefix}-ddb-gemini-response`;
+    const indexName = `aicc-${prefix}-ddb-gemini-response-gsi-yearmm`;
+
+    // 1. 기간 내의 모든 YYYYMM 목록 생성
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    // end date를 해당일의 23:59:59.999로 설정하여 포함되도록 함
+    end.setHours(23, 59, 59, 999);
+
+    const months = [];
+    const current = new Date(start);
+    current.setDate(1); // 1일로 설정하여 달 루프
+
+    while (current <= end) {
+      const yyyy = current.getFullYear();
+      const mm = String(current.getMonth() + 1).padStart(2, '0');
+      months.push(`${yyyy}${mm}`);
+      current.setMonth(current.getMonth() + 1);
+    }
+
+    // 마지막 달이 루프 조건에 의해 빠질 수 있으므로 확인 (end 날짜의 달)
+    const endYyyy = end.getFullYear();
+    const endMm = String(end.getMonth() + 1).padStart(2, '0');
+    const endMonthStr = `${endYyyy}${endMm}`;
+    if (!months.includes(endMonthStr) && start <= end) {
+      months.push(endMonthStr);
+    }
+
+    // 2. 각 달에 대해 병렬 쿼리 실행
+    const promises = months.map(async month => {
+      const params = {
+        TableName: tableName,
+        IndexName: indexName,
+        KeyConditionExpression: 'connectedToAgentYYYYMM = :yearMonth',
+        ExpressionAttributeValues: {
+          ':yearMonth': { S: `QM#${month}` },
+        },
+        ScanIndexForward: false, // DESC
+      };
+
+      try {
+        const response = await dynamoClient.send(new QueryCommand(params));
+        return response.Items || [];
+      } catch (e) {
+        console.error(`Error querying month ${month}:`, e);
+        return [];
+      }
+    });
+
+    const results = await Promise.all(promises);
+    const allItems = results.flat();
+
+    // 3. 필터링 및 정렬
+    const items = allItems.map(item => {
+      const unmarshalled = unmarshallItem(item);
+      return {
+        requestId: unmarshalled.requestId,
+        contactId: unmarshalled.contactId,
+        agentId: unmarshalled.agentId,
+        status: unmarshalled.status,
+        createdAt: unmarshalled.sk, // stored as ISO string in SK? User said connectedToAgentTimestamp is SK, but mapping logic usually puts sk as sort key. 
+        // Let's trust unmarshalled.sk is the timestamp if mapping logic is correct.
+        // If unmarshalled.sk is just the sort key value, and user says sort key is connectedToAgentTimestamp, then unmarshalled.sk IS the timestamp.
+        completedAt: unmarshalled.completedAt,
+        geminiModel: unmarshalled.result?.geminiModel || unmarshalled.input?.model,
+        processingTime: unmarshalled.result?.processingTime,
+        result: unmarshalled.result,
+        input: unmarshalled.input,
+        connectedToAgentTimestamp: unmarshalled.connectedToAgentTimestamp, // GSI SK
+      };
+    }).filter(item => {
+      // 날짜 필터링 (DB에서 못하고 가져온 후 수행)
+      // 비교할 대상은 createdAT (sk) 또는 connectedToAgentTimestamp
+      // User said: connectedToAgentTimestamp is SK. 
+      // Safe to use item.createdAt or item.connectedToAgentTimestamp. 
+      const itemDate = new Date(item.connectedToAgentTimestamp || item.createdAt);
+      return itemDate >= start && itemDate <= end;
+    });
+
+    // 최신순 정렬
+    items.sort((a, b) => {
+      const dateA = new Date(a.connectedToAgentTimestamp || a.createdAt).getTime();
+      const dateB = new Date(b.connectedToAgentTimestamp || b.createdAt).getTime();
+      return dateB - dateA;
+    });
+
+    res.json({ items });
+  } catch (error) {
+    console.error('Error searching QM Automation list:', error);
+    res.status(500).json({ error: 'Failed to search QM Automation list', message: error.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

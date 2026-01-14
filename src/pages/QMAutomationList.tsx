@@ -29,6 +29,9 @@ import {
   FormControl,
   InputLabel,
   LinearProgress,
+  TextField,
+  InputAdornment,
+  TablePagination,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -36,11 +39,13 @@ import {
   Add as AddIcon,
   Settings as SettingsIcon,
   PlayArrow as PlayIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useConfig } from '@/contexts/ConfigContext';
 import {
   getQMAutomationListByContactId,
+  getQMAutomationListSearch,
   requestQMAutomation,
   getStatusLabel,
   getStatusColor,
@@ -51,7 +56,8 @@ import {
   QMAutomationRequestBody,
   QMStatus,
 } from '@/types/qmAutomation.types';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
 const QMAutomationList: React.FC = () => {
   const { contactId } = useParams<{ contactId: string }>();
@@ -61,8 +67,9 @@ const QMAutomationList: React.FC = () => {
 
   // State for new request dialog
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [inputContactId, setInputContactId] = useState(contactId || '');
   const [requestOptions, setRequestOptions] = useState<QMAutomationRequestBody>({
-    contactId: contactId,
+    contactId: contactId || '',
     model: 'gemini-2.5-pro',
     useDefaultPrompt: true,
     useTools: true,
@@ -74,6 +81,14 @@ const QMAutomationList: React.FC = () => {
   const [pollingRequestId, setPollingRequestId] = useState<string | null>(null);
   const [pollingStatus, setPollingStatus] = useState<QMStatus | null>(null);
 
+  // Search Date Range State (Default: Last 30 days)
+  const [startDate, setStartDate] = useState<Dayjs | null>(dayjs().subtract(30, 'day'));
+  const [endDate, setEndDate] = useState<Dayjs | null>(dayjs());
+
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
   // Fetch QM Automation list
   const {
     data: qmList,
@@ -81,12 +96,21 @@ const QMAutomationList: React.FC = () => {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['qm-automation-list', contactId],
+    queryKey: ['qm-automation-list', contactId, startDate?.format('YYYY-MM-DD'), endDate?.format('YYYY-MM-DD')],
     queryFn: async () => {
-      if (!contactId) throw new Error('Contact ID is required');
-      return getQMAutomationListByContactId(contactId, config);
+      if (contactId) {
+        return getQMAutomationListByContactId(contactId, config);
+      } else {
+        // Search by Date Range
+        if (!startDate || !endDate) return [];
+        return getQMAutomationListSearch(
+          config,
+          startDate.format('YYYY-MM-DD'),
+          endDate.format('YYYY-MM-DD')
+        );
+      }
     },
-    enabled: !!contactId && isConfigured,
+    enabled: isConfigured,
   });
 
   // Mutation for creating new QM request
@@ -106,7 +130,7 @@ const QMAutomationList: React.FC = () => {
           onStatusChange: (status) => setPollingStatus(status),
         });
         // Refresh list after completion
-        queryClient.invalidateQueries({ queryKey: ['qm-automation-list', contactId] });
+        queryClient.invalidateQueries({ queryKey: ['qm-automation-list'] });
       } catch (error) {
         console.error('Polling error:', error);
       } finally {
@@ -124,20 +148,32 @@ const QMAutomationList: React.FC = () => {
   };
 
   const handleRowClick = (requestId: string) => {
-    navigate(`/qm-automation/${contactId}/detail/${requestId}`);
+    navigate(`/qm-automation/${contactId || 'detail'}/detail/${requestId}`);
   };
 
-  // Validation checks
-  if (!contactId) {
-    return (
-      <Container sx={{ mt: 4 }}>
-        <Alert severity="error">Contact ID가 제공되지 않았습니다.</Alert>
-        <Button onClick={() => navigate('/')} startIcon={<BackIcon />} sx={{ mt: 2 }}>
-          Dashboard로 돌아가기
-        </Button>
-      </Container>
-    );
-  }
+  const handleSearch = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (inputContactId.trim()) {
+      navigate(`/qm-automation/${inputContactId.trim()}`);
+    }
+  };
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  // Sync input with URL param
+  React.useEffect(() => {
+    if (contactId) {
+      setInputContactId(contactId);
+      setRequestOptions(prev => ({ ...prev, contactId }));
+    }
+  }, [contactId]);
 
   if (!isConfigured || !config.credentials) {
     return (
@@ -167,36 +203,76 @@ const QMAutomationList: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Header */}
+      {/* Header & Search */}
       <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Stack direction="row" alignItems="center" spacing={2}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+          <Stack direction="row" alignItems="center" spacing={2} sx={{ flex: 1 }}>
             <IconButton onClick={() => navigate(-1)}>
               <BackIcon />
             </IconButton>
             <Box>
               <Typography variant="h5" fontWeight={600}>
-                QM Automation
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Contact ID: {contactId}
+                QM Evaluation
               </Typography>
             </Box>
+
+            {/* Search Controls Container */}
+            <Stack direction="row" spacing={2} alignItems="center" sx={{ ml: 4, flex: 1 }}>
+              {!contactId && (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <DatePicker
+                    label="Start Date"
+                    value={startDate}
+                    format="YYYY-MM-DD"
+                    onChange={(newValue) => setStartDate(newValue)}
+                    slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
+                  />
+                  <Typography>-</Typography>
+                  <DatePicker
+                    label="End Date"
+                    value={endDate}
+                    format="YYYY-MM-DD"
+                    onChange={(newValue) => setEndDate(newValue)}
+                    slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
+                  />
+                </Stack>
+              )}
+
+              <Box component="form" onSubmit={handleSearch} sx={{ flex: 1, maxWidth: 300 }}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="Contact ID 검색..."
+                  value={inputContactId}
+                  onChange={(e) => setInputContactId(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Box>
+            </Stack>
           </Stack>
+
           <Stack direction="row" spacing={1}>
             <Tooltip title="새로고침">
               <IconButton onClick={() => refetch()}>
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => setDialogOpen(true)}
-              disabled={!!pollingRequestId}
-            >
-              새 QM 분석
-            </Button>
+            {contactId && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setDialogOpen(true)}
+                disabled={!!pollingRequestId}
+              >
+                새 QM 분석
+              </Button>
+            )}
           </Stack>
         </Stack>
       </Paper>
@@ -248,101 +324,123 @@ const QMAutomationList: React.FC = () => {
             QM 분석 기록이 없습니다
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            새 QM 분석을 요청하여 상담 품질을 평가해보세요.
+            기간을 조정하거나 새 QM 분석을 요청하세요.
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<PlayIcon />}
-            onClick={() => setDialogOpen(true)}
-          >
-            첫 번째 QM 분석 시작
-          </Button>
+          {contactId && (
+            <Button
+              variant="contained"
+              startIcon={<PlayIcon />}
+              onClick={() => setDialogOpen(true)}
+            >
+              첫 번째 QM 분석 시작
+            </Button>
+          )}
         </Paper>
       )}
 
       {/* QM List Table */}
       {!isLoading && qmList && qmList.length > 0 && (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'grey.100' }}>
-                <TableCell>Request ID</TableCell>
-                <TableCell>상태</TableCell>
-                <TableCell>모델</TableCell>
-                <TableCell>총 처리 시간</TableCell>
-                <TableCell>생성일시</TableCell>
-                <TableCell>완료일시</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {[...qmList].sort((a, b) => {
-                const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-                return dateB - dateA;
-              }).map((item: QMAutomationListItem) => (
-                <TableRow
-                  key={item.requestId}
-                  hover
-                  onClick={() => handleRowClick(item.requestId)}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                      {item.requestId.substring(0, 8)}...
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={getStatusLabel(item.status)}
-                      color={getStatusColor(item.status)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {item.geminiModel || '-'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {(() => {
-                        const qmTime = Number(item.result?.processingTime ?? item.processingTime ?? 0);
-                        const toolTime = Number(item.input?.toolResult?.processingTime ?? 0);
-
-                        let audioTime = 0;
-                        if (item.result?.audioAnalyzeResult?.body) {
-                          try {
-                            const body = JSON.parse(item.result.audioAnalyzeResult.body);
-                            audioTime = Number(body.processingTime ?? 0);
-                          } catch (e) {
-                            // ignore parsing error
-                          }
-                        }
-
-                        const totalTime = qmTime + toolTime + audioTime;
-                        return totalTime > 0 ? `${totalTime.toFixed(2)}초` : '-';
-                      })()}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {item.createdAt
-                        ? dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss')
-                        : '-'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {item.completedAt
-                        ? dayjs(item.completedAt).format('YYYY-MM-DD HH:mm:ss')
-                        : '-'}
-                    </Typography>
-                  </TableCell>
+        <>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.100' }}>
+                  <TableCell>Request ID</TableCell>
+                  <TableCell>Contact ID</TableCell>
+                  <TableCell>상태</TableCell>
+                  <TableCell>모델</TableCell>
+                  <TableCell>상담 연결 일시</TableCell>
+                  <TableCell>총 처리 시간</TableCell>
+                  <TableCell>최근 평가 수정 일시</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {[...qmList]
+                  .sort((a, b) => {
+                    const dateA = a.connectedToAgentTimestamp || a.createdAt ? new Date(a.connectedToAgentTimestamp || a.createdAt).getTime() : 0;
+                    const dateB = b.connectedToAgentTimestamp || b.createdAt ? new Date(b.connectedToAgentTimestamp || b.createdAt).getTime() : 0;
+                    return dateB - dateA;
+                  })
+                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                  .map((item: QMAutomationListItem) => (
+                    <TableRow
+                      key={item.requestId}
+                      hover
+                      onClick={() => handleRowClick(item.requestId)}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                          {item.requestId.substring(0, 8)}...
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                          {item.contactId ? `${item.contactId.substring(0, 8)}...` : '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={getStatusLabel(item.status)}
+                          color={getStatusColor(item.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {item.geminiModel || '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {item.connectedToAgentTimestamp
+                            ? dayjs(item.connectedToAgentTimestamp).format('YYYY-MM-DD HH:mm:ss')
+                            : '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {(() => {
+                            const qmTime = Number(item.result?.processingTime ?? item.processingTime ?? 0);
+                            const toolTime = Number(item.input?.toolResult?.processingTime ?? 0);
+
+                            let audioTime = 0;
+                            if (item.result?.audioAnalyzeResult?.body) {
+                              try {
+                                const body = JSON.parse(item.result.audioAnalyzeResult.body);
+                                audioTime = Number(body.processingTime ?? 0);
+                              } catch (e) {
+                                // ignore parsing error
+                              }
+                            }
+
+                            const totalTime = qmTime + toolTime + audioTime;
+                            return totalTime > 0 ? `${totalTime.toFixed(2)}초` : '-';
+                          })()}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {item.completedAt
+                            ? dayjs(item.completedAt).format('YYYY-MM-DD HH:mm:ss')
+                            : (item.createdAt ? dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss') : '-')}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <TablePagination
+            rowsPerPageOptions={[5, 10, 25]}
+            component="div"
+            count={qmList.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
+        </>
       )}
 
       {/* New Request Dialog */}

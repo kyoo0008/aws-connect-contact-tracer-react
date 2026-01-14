@@ -7,6 +7,8 @@ COPY package.json package-lock.json ./
 RUN npm install
 
 COPY . .
+ARG ROLE
+ENV REACT_APP_ROLE=$ROLE
 RUN npm run build
 
 # Production Stage

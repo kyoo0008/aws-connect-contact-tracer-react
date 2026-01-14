@@ -129,6 +129,87 @@ export async function getQMAutomationListByContactId(
 }
 
 /**
+ * QM Automation 전체 목록 조회 (Scan & Sort by SK desc)
+ */
+export async function getQMAutomationListAll(
+  config: AWSConfig,
+  limit: number = 20
+): Promise<QMAutomationListItem[]> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/agent/v1/qm-automation/scan?limit=${limit}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-aws-region': config.region,
+          'x-environment': config.environment,
+          ...(config.credentials && {
+            'x-aws-credentials': JSON.stringify(config.credentials),
+          }),
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return [];
+      }
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || `Failed to scan QM automation list: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.items || [];
+  } catch (error) {
+    console.error('Error scanning QM Automation list:', error);
+    throw error;
+  }
+}
+
+/**
+ * QM Automation 기간 검색 (Start ~ End)
+ */
+export async function getQMAutomationListSearch(
+  config: AWSConfig,
+  startDate: string,
+  endDate: string
+): Promise<QMAutomationListItem[]> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/agent/v1/qm-automation/search`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-aws-region': config.region,
+          'x-environment': config.environment,
+          ...(config.credentials && {
+            'x-aws-credentials': JSON.stringify(config.credentials),
+          }),
+        },
+        body: JSON.stringify({ startDate, endDate }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || `Failed to search QM automation list: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.items || [];
+  } catch (error) {
+    console.error('Error searching QM Automation list:', error);
+    throw error;
+  }
+}
+
+/**
  * 월별 QM Automation 목록 조회 (GSI1 활용)
  */
 export async function getQMAutomationListByMonth(

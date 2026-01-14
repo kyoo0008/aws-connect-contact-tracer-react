@@ -114,7 +114,7 @@ function App() {
                       <Route path="/contact-flow/:contactId?" element={<ContactFlowViewer />} />
                       <Route path="/contact-flow/:contactId/flow/:flowName" element={<FlowDetailViewer />} />
                       <Route path="/contact-flow/:contactId/flow/:flowName/module/:moduleName" element={<ModuleDetailViewer />} />
-                      <Route path="/qm-automation/:contactId" element={<QMAutomationList />} />
+                      <Route path="/qm-automation/:contactId?" element={<QMAutomationList />} />
                       <Route path="/qm-automation/:contactId/detail/:requestId" element={<QMAutomationDetail />} />
                       <Route path="/logs/:contactId?" element={<LogAnalysis />} />
                       <Route path="/xray-trace" element={<XRayTraceViewer />} />

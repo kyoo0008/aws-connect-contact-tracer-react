@@ -80,12 +80,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     navigate('/');
   };
 
+  const role = process.env.REACT_APP_ROLE || 'ADMIN';
+
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
     { text: 'Contact Flow', icon: <FlowIcon />, path: '/contact-flow' },
-    { text: 'Log Analysis', icon: <LogsIcon />, path: '/logs' },
+    { text: 'QM Evaluation', icon: <LogsIcon />, path: '/qm-automation' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
-  ];
+  ].filter(item => {
+    if (role === 'QA_DEV') {
+      return ['QM Evaluation', 'Settings'].includes(item.text);
+    }
+    return true;
+  });
 
   const drawer = (
     <div>
@@ -169,7 +176,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Contact Tracer
           </Typography>
-          
+
           <Tooltip title="Notifications">
             <IconButton color="inherit" onClick={handleNotificationOpen}>
               <Badge badgeContent={3} color="error">
@@ -177,7 +184,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               </Badge>
             </IconButton>
           </Tooltip>
-          
+
           <Tooltip title="Account">
             <IconButton
               onClick={handleProfileMenuOpen}
@@ -191,7 +198,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </Tooltip>
         </Toolbar>
       </AppBar>
-      
+
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
@@ -219,7 +226,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           Logout
         </MenuItem>
       </Menu>
-      
+
       <Menu
         anchorEl={notificationAnchor}
         open={Boolean(notificationAnchor)}
@@ -237,7 +244,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Typography variant="body2">High abandon rate alert</Typography>
         </MenuItem>
       </Menu>
-      
+
       <Box
         component="nav"
         sx={{ width: { sm: currentDrawerWidth }, flexShrink: { sm: 0 } }}
@@ -278,7 +285,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           {drawer}
         </Drawer>
       </Box>
-      
+
       <Box
         component="main"
         sx={{

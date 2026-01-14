@@ -193,18 +193,7 @@ const QMAutomationDetail: React.FC = () => {
         </Alert>
       )}
 
-      {/* Processing State */}
-      {qmDetail && (qmDetail.status === 'PENDING' || qmDetail.status === 'PROCESSING' || qmDetail.status === 'AUDIO_ANALYSIS_PROCESSING') && (
-        <Paper elevation={1} sx={{ p: 4, textAlign: 'center' }}>
-          <CircularProgress size={48} sx={{ mb: 2 }} />
-          <Typography variant="h6" gutterBottom>
-            {qmDetail.status === 'AUDIO_ANALYSIS_PROCESSING' ? '오디오 분석 중...' : 'QM 분석 진행 중...'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            분석이 완료되면 자동으로 결과가 표시됩니다.
-          </Typography>
-        </Paper>
-      )}
+
 
       {/* Error State */}
       {qmDetail && (qmDetail.status === 'FAILED' || qmDetail.status === 'ERROR') && (
@@ -218,150 +207,170 @@ const QMAutomationDetail: React.FC = () => {
         </Alert>
       )}
 
-      {/* Completed State */}
-      {qmDetail && qmDetail.status === 'COMPLETED' && qmDetail.result && (
+      {/* Main Content */}
+      {qmDetail && !['FAILED', 'ERROR'].includes(qmDetail.status) && (
         <>
+          {/* Processing Banner */}
+          {(qmDetail.status === 'PENDING' || qmDetail.status === 'PROCESSING' || qmDetail.status === 'AUDIO_ANALYSIS_PROCESSING') && (
+            <Paper elevation={1} sx={{ p: 2, mb: 3, bgcolor: 'info.50', borderColor: 'info.main' }} variant="outlined">
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <CircularProgress size={24} />
+                <Box>
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {qmDetail.status === 'AUDIO_ANALYSIS_PROCESSING' ? '오디오 분석 중...' : 'QM 분석 진행 중...'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    분석이 완료되면 자동으로 결과가 표시됩니다.
+                  </Typography>
+                </Box>
+              </Stack>
+            </Paper>
+          )}
+
           {/* Summary Cards */}
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            {/* Score Card */}
-            {score !== null && (
+          {/* Summary Cards */}
+          {qmDetail.result && (
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              {/* Score Card */}
+              {score !== null && (
+                <Grid item xs={12} sm={6} md={3}>
+                  <Card>
+                    <CardContent>
+                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                        <AIIcon color="primary" />
+                        <Typography variant="subtitle2" color="text.secondary">
+                          평가 점수
+                        </Typography>
+                      </Stack>
+                      <Typography variant="h3" fontWeight={700} color={score >= 80 ? 'success.main' : score >= 60 ? 'warning.main' : 'error.main'}>
+                        {score}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        / 100점
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
+
+              {/* Processing Time */}
+              <Grid item xs={12} sm={6} md={3}>
+                <Card>
+                  <CardContent>
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                      <TimeIcon color="info" />
+                      <Typography variant="subtitle2" color="text.secondary">
+                        총 처리 시간
+                      </Typography>
+                    </Stack>
+                    <Typography variant="h4" fontWeight={600}>
+                      {(() => {
+                        const qmTime = qmDetail.result.processingTime || 0;
+                        const toolTime = qmDetail.input?.toolResult?.processingTime || 0;
+                        let audioTime = 0;
+                        try {
+                          if (qmDetail.result.audioAnalyzeResult?.body) {
+                            audioTime = JSON.parse(qmDetail.result.audioAnalyzeResult.body).processingTime || 0;
+                          }
+                        } catch (e) { }
+                        return (qmTime + toolTime + audioTime).toFixed(2);
+                      })()}
+                    </Typography>
+                    <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        QM: {qmDetail.result.processingTime?.toFixed(1) || '0'}s
+                      </Typography>
+                      {qmDetail.input?.toolResult?.processingTime && (
+                        <Typography variant="caption" color="text.secondary">
+                          / Tool: {qmDetail.input.toolResult.processingTime.toFixed(1)}s
+                        </Typography>
+                      )}
+                      {qmDetail.result.audioAnalyzeResult?.body && (
+                        <Typography variant="caption" color="text.secondary">
+                          / Audio: {(() => {
+                            try { return JSON.parse(qmDetail.result.audioAnalyzeResult.body).processingTime?.toFixed(1); }
+                            catch { return '0'; }
+                          })()}s
+                        </Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Token Usage */}
+              <Grid item xs={12} sm={6} md={3}>
+                <Card>
+                  <CardContent>
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                      <TokenIcon color="secondary" />
+                      <Typography variant="subtitle2" color="text.secondary">
+                        총 토큰 사용량
+                      </Typography>
+                    </Stack>
+                    <Typography variant="h4" fontWeight={600}>
+                      {(() => {
+                        const qmTokens = qmDetail.result.totalTokens || 0;
+                        const toolTokens = qmDetail.input?.toolResult?.tokenUsage?.totalTokens || 0;
+                        let audioTokens = 0;
+                        try {
+                          if (qmDetail.result.audioAnalyzeResult?.body) {
+                            audioTokens = JSON.parse(qmDetail.result.audioAnalyzeResult.body).totalTokens || 0;
+                          }
+                        } catch (e) { }
+                        return (qmTokens + toolTokens + audioTokens).toLocaleString();
+                      })()}
+                    </Typography>
+                    <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
+                      <Typography variant="caption" color="text.secondary">
+                        QM: {(qmDetail.result.totalTokens || 0).toLocaleString()}
+                      </Typography>
+                      {qmDetail.input?.toolResult?.tokenUsage?.totalTokens && (
+                        <Typography variant="caption" color="text.secondary">
+                          / Tool: {qmDetail.input.toolResult.tokenUsage.totalTokens.toLocaleString()}
+                        </Typography>
+                      )}
+                      {qmDetail.result.audioAnalyzeResult?.body && (
+                        <Typography variant="caption" color="text.secondary">
+                          / Audio: {(() => {
+                            try { return JSON.parse(qmDetail.result.audioAnalyzeResult.body).totalTokens?.toLocaleString() || '0'; }
+                            catch { return '0'; }
+                          })()}
+                        </Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Model Info */}
               <Grid item xs={12} sm={6} md={3}>
                 <Card>
                   <CardContent>
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                       <AIIcon color="primary" />
                       <Typography variant="subtitle2" color="text.secondary">
-                        평가 점수
+                        모델
                       </Typography>
                     </Stack>
-                    <Typography variant="h3" fontWeight={700} color={score >= 80 ? 'success.main' : score >= 60 ? 'warning.main' : 'error.main'}>
-                      {score}
+                    <Typography variant="h6" fontWeight={600}>
+                      {qmDetail.result.geminiModel || '-'}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      / 100점
-                    </Typography>
+                    <Stack direction="column" spacing={0} sx={{ mt: 0.5 }}>
+                      {qmDetail.input?.toolResult?.geminiModel && qmDetail.input.toolResult.geminiModel !== qmDetail.result.geminiModel && (
+                        <Typography variant="caption" color="text.secondary">
+                          Tool: {qmDetail.input.toolResult.geminiModel}
+                        </Typography>
+                      )}
+                      <Typography variant="caption" color="text.secondary">
+                        {dayjs(qmDetail.completedAt).format('YYYY-MM-DD HH:mm:ss')}
+                      </Typography>
+                    </Stack>
                   </CardContent>
                 </Card>
               </Grid>
-            )}
-
-            {/* Processing Time */}
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                    <TimeIcon color="info" />
-                    <Typography variant="subtitle2" color="text.secondary">
-                      총 처리 시간
-                    </Typography>
-                  </Stack>
-                  <Typography variant="h4" fontWeight={600}>
-                    {(() => {
-                      const qmTime = qmDetail.result.processingTime || 0;
-                      const toolTime = qmDetail.input?.toolResult?.processingTime || 0;
-                      let audioTime = 0;
-                      try {
-                        if (qmDetail.result.audioAnalyzeResult?.body) {
-                          audioTime = JSON.parse(qmDetail.result.audioAnalyzeResult.body).processingTime || 0;
-                        }
-                      } catch (e) { }
-                      return (qmTime + toolTime + audioTime).toFixed(2);
-                    })()}
-                  </Typography>
-                  <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
-                    <Typography variant="caption" color="text.secondary">
-                      QM: {qmDetail.result.processingTime?.toFixed(1) || '0'}s
-                    </Typography>
-                    {qmDetail.input?.toolResult?.processingTime && (
-                      <Typography variant="caption" color="text.secondary">
-                        / Tool: {qmDetail.input.toolResult.processingTime.toFixed(1)}s
-                      </Typography>
-                    )}
-                    {qmDetail.result.audioAnalyzeResult?.body && (
-                      <Typography variant="caption" color="text.secondary">
-                        / Audio: {(() => {
-                          try { return JSON.parse(qmDetail.result.audioAnalyzeResult.body).processingTime?.toFixed(1); }
-                          catch { return '0'; }
-                        })()}s
-                      </Typography>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
             </Grid>
-
-            {/* Token Usage */}
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                    <TokenIcon color="secondary" />
-                    <Typography variant="subtitle2" color="text.secondary">
-                      총 토큰 사용량
-                    </Typography>
-                  </Stack>
-                  <Typography variant="h4" fontWeight={600}>
-                    {(() => {
-                      const qmTokens = qmDetail.result.totalTokens || 0;
-                      const toolTokens = qmDetail.input?.toolResult?.tokenUsage?.totalTokens || 0;
-                      let audioTokens = 0;
-                      try {
-                        if (qmDetail.result.audioAnalyzeResult?.body) {
-                          audioTokens = JSON.parse(qmDetail.result.audioAnalyzeResult.body).totalTokens || 0;
-                        }
-                      } catch (e) { }
-                      return (qmTokens + toolTokens + audioTokens).toLocaleString();
-                    })()}
-                  </Typography>
-                  <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
-                    <Typography variant="caption" color="text.secondary">
-                      QM: {(qmDetail.result.totalTokens || 0).toLocaleString()}
-                    </Typography>
-                    {qmDetail.input?.toolResult?.tokenUsage?.totalTokens && (
-                      <Typography variant="caption" color="text.secondary">
-                        / Tool: {qmDetail.input.toolResult.tokenUsage.totalTokens.toLocaleString()}
-                      </Typography>
-                    )}
-                    {qmDetail.result.audioAnalyzeResult?.body && (
-                      <Typography variant="caption" color="text.secondary">
-                        / Audio: {(() => {
-                          try { return JSON.parse(qmDetail.result.audioAnalyzeResult.body).totalTokens?.toLocaleString() || '0'; }
-                          catch { return '0'; }
-                        })()}
-                      </Typography>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* Model Info */}
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                    <AIIcon color="primary" />
-                    <Typography variant="subtitle2" color="text.secondary">
-                      모델
-                    </Typography>
-                  </Stack>
-                  <Typography variant="h6" fontWeight={600}>
-                    {qmDetail.result.geminiModel || '-'}
-                  </Typography>
-                  <Stack direction="column" spacing={0} sx={{ mt: 0.5 }}>
-                    {qmDetail.input?.toolResult?.geminiModel && qmDetail.input.toolResult.geminiModel !== qmDetail.result.geminiModel && (
-                      <Typography variant="caption" color="text.secondary">
-                        Tool: {qmDetail.input.toolResult.geminiModel}
-                      </Typography>
-                    )}
-                    <Typography variant="caption" color="text.secondary">
-                      {dayjs(qmDetail.completedAt).format('YYYY-MM-DD HH:mm:ss')}
-                    </Typography>
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
+          )}
 
           {/* Tabs */}
           <Paper elevation={1}>
@@ -372,7 +381,7 @@ const QMAutomationDetail: React.FC = () => {
             >
               <Tab label="QM 평가 결과" />
               <Tab label="Function Calls" disabled={!qmDetail.input?.toolResult} />
-              <Tab label="오디오 분석" disabled={!qmDetail.result.audioAnalyzeResult} />
+              <Tab label="오디오 분석" disabled={!qmDetail.result?.audioAnalyzeResult} />
             </Tabs>
 
             <Box sx={{ p: 3 }}>
@@ -406,46 +415,48 @@ const QMAutomationDetail: React.FC = () => {
                   )}
 
                   {/* Evaluation Meta Data */}
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                      평가 메타데이터
-                    </Typography>
-                    <Grid container spacing={2}>
-                      <Grid item xs={6} sm={3}>
-                        <Typography variant="caption" color="text.secondary">처리 시간</Typography>
-                        <Typography variant="body2">
-                          {qmDetail.result.processingTime?.toFixed(2) || '-'}s
-                        </Typography>
+                  {qmDetail.result && (
+                    <Paper variant="outlined" sx={{ p: 2 }}>
+                      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                        평가 메타데이터
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">처리 시간</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.result.processingTime?.toFixed(2) || '-'}s
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">총 토큰</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.result.totalTokens?.toLocaleString() || '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">입력 토큰</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.inputTokens?.toLocaleString() || '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">출력 토큰</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.result.outputTokens?.toLocaleString() || '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
+                          <Typography variant="body2">
+                            {((qmDetail.result.totalTokens || 0) - ((qmDetail.input?.inputTokens || 0) + (qmDetail.result.outputTokens || 0))).toLocaleString()}
+                          </Typography>
+                        </Grid>
                       </Grid>
-                      <Grid item xs={6} sm={3}>
-                        <Typography variant="caption" color="text.secondary">총 토큰</Typography>
-                        <Typography variant="body2">
-                          {qmDetail.result.totalTokens?.toLocaleString() || '-'}
-                        </Typography>
-                      </Grid>
-                      <Grid item xs={6} sm={3}>
-                        <Typography variant="caption" color="text.secondary">입력 토큰</Typography>
-                        <Typography variant="body2">
-                          {qmDetail.input?.inputTokens?.toLocaleString() || '-'}
-                        </Typography>
-                      </Grid>
-                      <Grid item xs={6} sm={3}>
-                        <Typography variant="caption" color="text.secondary">출력 토큰</Typography>
-                        <Typography variant="body2">
-                          {qmDetail.result.outputTokens?.toLocaleString() || '-'}
-                        </Typography>
-                      </Grid>
-                      <Grid item xs={6} sm={3}>
-                        <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
-                        <Typography variant="body2">
-                          {((qmDetail.result.totalTokens || 0) - ((qmDetail.input?.inputTokens || 0) + (qmDetail.result.outputTokens || 0))).toLocaleString()}
-                        </Typography>
-                      </Grid>
-                    </Grid>
-                  </Paper>
+                    </Paper>
+                  )}
 
                   {/* Thinking Process Section */}
-                  {qmDetail.result.thinkingText && (
+                  {qmDetail.result?.thinkingText && (
                     <Box sx={{ mb: 3 }}>
                       <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                         Thinking Process
@@ -473,21 +484,27 @@ const QMAutomationDetail: React.FC = () => {
                     <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                       평가 결과
                     </Typography>
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 3,
-                        bgcolor: 'grey.50',
-                        maxHeight: '60vh',
-                        overflow: 'auto',
-                        whiteSpace: 'pre-wrap',
-                        fontFamily: 'monospace',
-                        fontSize: '0.875rem',
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      {qmDetail.result.geminiResponse}
-                    </Paper>
+                    {qmDetail.result?.geminiResponse ? (
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 3,
+                          bgcolor: 'grey.50',
+                          maxHeight: '60vh',
+                          overflow: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {qmDetail.result.geminiResponse}
+                      </Paper>
+                    ) : (
+                      <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', bgcolor: 'grey.50' }}>
+                        <Typography color="text.secondary">분석 결과 대기 중...</Typography>
+                      </Paper>
+                    )}
                   </Box>
                 </Stack>
               </TabPanel>
@@ -656,7 +673,7 @@ const QMAutomationDetail: React.FC = () => {
 
               {/* Audio Analysis Tab */}
               <TabPanel value={tabValue} index={2}>
-                {qmDetail.result.audioAnalyzeResult ? (
+                {qmDetail.result?.audioAnalyzeResult ? (
                   <AudioAnalysisView
                     result={qmDetail.result.audioAnalyzeResult}
                     prompt={qmDetail.input?.audioAnalysisPrompt}
@@ -669,43 +686,46 @@ const QMAutomationDetail: React.FC = () => {
           </Paper>
 
           {/* Metadata */}
-          <Paper elevation={1} sx={{ p: 2, mt: 3 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              상세 정보
-            </Typography>
-            <Divider sx={{ my: 1 }} />
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="caption" color="text.secondary">
-                  GCP Project ID
-                </Typography>
-                <Typography variant="body2">{qmDetail.result.projectId}</Typography>
+          {qmDetail.result && (
+            <Paper elevation={1} sx={{ p: 2, mt: 3 }}>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                상세 정보
+              </Typography>
+              <Divider sx={{ my: 1 }} />
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="caption" color="text.secondary">
+                    GCP Project ID
+                  </Typography>
+                  <Typography variant="body2">{qmDetail.result.projectId}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="caption" color="text.secondary">
+                    Service Account
+                  </Typography>
+                  <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                    {qmDetail.result.serviceAccount}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="caption" color="text.secondary">
+                    프롬프트 길이
+                  </Typography>
+                  <Typography variant="body2">{qmDetail.result.promptLength?.toLocaleString()} 자</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="caption" color="text.secondary">
+                    응답 길이
+                  </Typography>
+                  <Typography variant="body2">{qmDetail.result.responseLength?.toLocaleString()} 자</Typography>
+                </Grid>
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="caption" color="text.secondary">
-                  Service Account
-                </Typography>
-                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                  {qmDetail.result.serviceAccount}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="caption" color="text.secondary">
-                  프롬프트 길이
-                </Typography>
-                <Typography variant="body2">{qmDetail.result.promptLength?.toLocaleString()} 자</Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="caption" color="text.secondary">
-                  응답 길이
-                </Typography>
-                <Typography variant="body2">{qmDetail.result.responseLength?.toLocaleString()} 자</Typography>
-              </Grid>
-            </Grid>
-          </Paper>
+            </Paper>
+          )}
         </>
-      )}
-    </Box>
+      )
+      }
+    </Box >
   );
 };
 

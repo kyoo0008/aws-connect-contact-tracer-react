@@ -133,7 +133,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <ListItem disablePadding>
           <Tooltip title={isNavCollapsed ? "Help & Docs" : ''} placement="right">
             <ListItemButton
-              onClick={() => window.open('https://docs.aws.amazon.com/connect/', '_blank')}
+              selected={location.pathname === '/help'}
+              onClick={() => navigate('/help')}
               sx={{ justifyContent: isNavCollapsed ? 'center' : 'initial' }}
             >
               <ListItemIcon sx={{ minWidth: 0, mr: isNavCollapsed ? 0 : 3, justifyContent: 'center' }}>

@@ -16,6 +16,7 @@ import Settings from './pages/Settings';
 import XRayTraceViewer from './pages/XRayTraceViewer';
 import QMAutomationList from './pages/QMAutomationList';
 import QMAutomationDetail from './pages/QMAutomationDetail';
+import Help from './pages/Help';
 
 // Components
 import Layout from './components/Layout/Layout';
@@ -119,6 +120,7 @@ function App() {
                       <Route path="/logs/:contactId?" element={<LogAnalysis />} />
                       <Route path="/xray-trace" element={<XRayTraceViewer />} />
                       <Route path="/settings" element={<Settings />} />
+                      <Route path="/help" element={<Help />} />
                     </Routes>
                   </Layout>
                 </Router>

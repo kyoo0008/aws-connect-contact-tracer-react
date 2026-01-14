@@ -16,6 +16,7 @@ const { defaultProvider } = require('@aws-sdk/credential-provider-node');
 const { ConnectClient, DescribeUserCommand, SearchUsersCommand } = require('@aws-sdk/client-connect');
 const { CloudWatchLogsClient, StartQueryCommand, GetQueryResultsCommand } = require('@aws-sdk/client-cloudwatch-logs');
 const { DynamoDBClient, QueryCommand } = require('@aws-sdk/client-dynamodb');
+const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { fromIni } = require('@aws-sdk/credential-provider-ini');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -709,6 +710,67 @@ function unmarshallItem(item) {
   }
   return result;
 }
+
+/**
+ * QM Automation 요청 (Lambda 호출)
+ *
+ * POST /api/agent/v1/qm-automation
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ */
+app.post('/api/agent/v1/qm-automation', async (req, res) => {
+  try {
+    const requestBody = req.body;
+
+    const credentialsHeader = req.headers['x-aws-credentials'];
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+
+    let credentials;
+    if (credentialsHeader) {
+      credentials = parseCredentials(credentialsHeader);
+    } else {
+      const credentialProvider = defaultProvider();
+      credentials = await credentialProvider();
+    }
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    // Construct ALB-like event payload
+    const payload = {
+      httpMethod: 'POST',
+      path: '/api/agent/v1/qm-automation',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse', // Synchronous invocation
+      Payload: JSON.stringify(payload),
+    });
+
+    const response = await lambdaClient.send(command);
+
+    // Return the RequestId for polling
+    res.json({
+      requestId: response.ResponseMetadata.RequestId,
+      status: 'PENDING',
+      message: 'QM Analysis started successfully'
+    });
+
+  } catch (error) {
+    console.error('Error invoking QM Automation Lambda:', error);
+    res.status(500).json({ error: 'Failed to invoke QM Automation', message: error.message });
+  }
+});
 
 /**
  * QM Automation 목록 조회 (contactId GSI 사용)

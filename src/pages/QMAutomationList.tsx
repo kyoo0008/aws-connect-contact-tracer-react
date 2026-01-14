@@ -60,6 +60,61 @@ import {
 import dayjs, { Dayjs } from 'dayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
+const DEFAULT_TOOL_DEFINITIONS_JSON = JSON.stringify([
+  {
+    "functionDeclarations": [
+      {
+        "name": "DOB_Authenticate",
+        "description": "상담사가 고객에게 본인 확인을 요청/질문한 경우 1회 호출합니다. 본인 확인 질문/요청 시점에 호출하세요. 확인 완료 여부와 무관합니다. 예: 생년월일 확인 부탁드립니다, 본인 확인을 위해 생년월일 말씀해주세요, 고객님 성함과 생년월일 확인 부탁드려요",
+        "parameters": {
+          "type": "OBJECT",
+          "properties": {
+            "transcript_authenticated": {
+              "type": "BOOLEAN",
+              "description": "본인 확인 요청 여부 (true: 요청함, false: 요청하지 않음)"
+            },
+            "transcript_agent_confirmation": {
+              "type": "STRING",
+              "description": "상담사가 본인 확인을 요청한 발화 내용"
+            }
+          },
+          "required": [
+            "transcript_authenticated"
+          ]
+        },
+        "enabled": true
+      },
+      {
+        "name": "PNR_Itinerary_Detected",
+        "description": "상담 전체를 분석하여 최종 확정된 여정만 호출합니다. 중복 호출 금지. \\n            - 왕복: 가는 편 1회 + 오는 편 1회 = 최대 2회 \\n            - 편도: 1회만 호출 \\n            - 출발지(from), 도착지(to), 날짜(date)가 모두 명확한 경우에만 호출 \\n            - 대화 중 언급된 모든 날짜/장소가 아닌, 최종 확정된 여정만 호출 \\n \\n            **중요: 파라미터는 반드시 아래 형식으로 추출** \\n            - transcript_from, transcript_to: IATA 3-letter 공항코드 (예: ICN, LAX, NRT) \\n            - transcript_date: DDMMYY 형식 (예: 301225) \\n            - 대화에서 년도가 언급되지 않은 경우 #{currentYear}년을 기준으로 합니다. (오늘: #{currentDateKorean})",
+        "parameters": {
+          "type": "OBJECT",
+          "properties": {
+            "transcript_from": {
+              "type": "STRING",
+              "description": "IATA 3-letter 공항코드 (예: ICN, GMP, LAX, JFK). 도시명이 언급된 경우 해당 주요 공항코드로 변환"
+            },
+            "transcript_to": {
+              "type": "STRING",
+              "description": "IATA 3-letter 공항코드 (예: ICN, GMP, LAX, JFK). 도시명이 언급된 경우 해당 주요 공항코드로 변환"
+            },
+            "transcript_date": {
+              "type": "STRING",
+              "description": "출발 날짜를 DDMMYY 형식으로 (예: 301225). 상대적 표현(내일, 다음주)은 절대 날짜로 변환 필요"
+            }
+          },
+          "required": [
+            "transcript_from",
+            "transcript_to",
+            "transcript_date"
+          ]
+        },
+        "enabled": false
+      }
+    ]
+  }
+], null, 2);
+
 const QMAutomationList: React.FC = () => {
   const { contactId } = useParams<{ contactId: string }>();
   const navigate = useNavigate();
@@ -73,12 +128,17 @@ const QMAutomationList: React.FC = () => {
     contactId: contactId || '',
     model: 'gemini-2.5-pro',
     useDefaultPrompt: true,
+    prompt: '',
+    useThinking: true,
+    thinkingBudget: 24576,
     useTools: true,
+    useDefaultToolDefinitions: true,
     useAudioAnalysis: false,
     useContextCaching: false,
     temperature: 0,
     maxOutputTokens: 65535,
   });
+  const [toolDefinitionsJson, setToolDefinitionsJson] = useState(DEFAULT_TOOL_DEFINITIONS_JSON);
   const [pollingRequestId, setPollingRequestId] = useState<string | null>(null);
   const [pollingStatus, setPollingStatus] = useState<QMStatus | null>(null);
 
@@ -169,9 +229,21 @@ const QMAutomationList: React.FC = () => {
   });
 
   const handleCreateRequest = () => {
+    let finalToolDefinitions = undefined;
+    // IF Use Default Tool Definitions is FALSE (meaning Custom), we parse the JSON
+    if (requestOptions.useTools && !requestOptions.useDefaultToolDefinitions) {
+      try {
+        finalToolDefinitions = JSON.parse(toolDefinitionsJson);
+      } catch (e) {
+        alert('Tool Definitions JSON 형식이 올바르지 않습니다.');
+        return;
+      }
+    }
+
     createQMMutation.mutate({
       ...requestOptions,
-      contactId,
+      contactId: requestOptions.contactId,
+      toolDefinitions: finalToolDefinitions,
     });
   };
 
@@ -511,6 +583,15 @@ const QMAutomationList: React.FC = () => {
         <DialogTitle>새 QM 분석 요청</DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 1 }}>
+            <TextField
+              label="Contact ID"
+              fullWidth
+              value={requestOptions.contactId}
+              onChange={(e) =>
+                setRequestOptions({ ...requestOptions, contactId: e.target.value })
+              }
+            />
+
             <FormControl fullWidth>
               <InputLabel>모델</InputLabel>
               <Select
@@ -526,29 +607,122 @@ const QMAutomationList: React.FC = () => {
               </Select>
             </FormControl>
 
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={requestOptions.useDefaultPrompt}
-                  onChange={(e) =>
-                    setRequestOptions({ ...requestOptions, useDefaultPrompt: e.target.checked })
-                  }
-                />
-              }
-              label="기본 QM 프롬프트 사용"
-            />
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Temperature"
+                type="number"
+                inputProps={{ min: 0, max: 1, step: 0.1 }}
+                fullWidth
+                value={requestOptions.temperature}
+                onChange={(e) =>
+                  setRequestOptions({ ...requestOptions, temperature: Number(e.target.value) })
+                }
+              />
+              <TextField
+                label="Max Output Tokens"
+                type="number"
+                inputProps={{ min: 0, max: 65535 }}
+                fullWidth
+                value={requestOptions.maxOutputTokens}
+                onChange={(e) =>
+                  setRequestOptions({ ...requestOptions, maxOutputTokens: Number(e.target.value) })
+                }
+              />
+            </Stack>
 
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={requestOptions.useTools}
+            <Box>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={requestOptions.useDefaultPrompt}
+                    onChange={(e) =>
+                      setRequestOptions({ ...requestOptions, useDefaultPrompt: e.target.checked })
+                    }
+                  />
+                }
+                label="기본 QM 프롬프트 사용"
+              />
+              {!requestOptions.useDefaultPrompt && (
+                <TextField
+                  label="Prompt"
+                  multiline
+                  rows={4}
+                  fullWidth
+                  sx={{ mt: 1 }}
+                  value={requestOptions.prompt}
                   onChange={(e) =>
-                    setRequestOptions({ ...requestOptions, useTools: e.target.checked })
+                    setRequestOptions({ ...requestOptions, prompt: e.target.value })
                   }
                 />
-              }
-              label="Tool/Function Calling 사용"
-            />
+              )}
+            </Box>
+
+            <Box>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={requestOptions.useThinking}
+                    onChange={(e) =>
+                      setRequestOptions({ ...requestOptions, useThinking: e.target.checked })
+                    }
+                  />
+                }
+                label="Thinking Process 사용"
+              />
+              {requestOptions.useThinking && (
+                <TextField
+                  label="Thinking Budget"
+                  type="number"
+                  fullWidth
+                  sx={{ mt: 1 }}
+                  value={requestOptions.thinkingBudget}
+                  onChange={(e) =>
+                    setRequestOptions({ ...requestOptions, thinkingBudget: Number(e.target.value) })
+                  }
+                />
+              )}
+            </Box>
+
+            <Box>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={requestOptions.useTools}
+                    onChange={(e) =>
+                      setRequestOptions({ ...requestOptions, useTools: e.target.checked })
+                    }
+                  />
+                }
+                label="Tool/Function Calling 사용"
+              />
+              {requestOptions.useTools && (
+                <Box sx={{ pl: 2, mt: 1, borderLeft: '2px solid #eee' }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={requestOptions.useDefaultToolDefinitions}
+                        onChange={(e) =>
+                          setRequestOptions({ ...requestOptions, useDefaultToolDefinitions: e.target.checked })
+                        }
+                      />
+                    }
+                    label="기본 Tool Definitions 사용"
+                  />
+                  {!requestOptions.useDefaultToolDefinitions && (
+                    <TextField
+                      label="Tool Definitions (JSON)"
+                      multiline
+                      rows={10}
+                      fullWidth
+                      sx={{ mt: 1 }}
+                      value={toolDefinitionsJson}
+                      onChange={(e) => setToolDefinitionsJson(e.target.value)}
+                      placeholder='[{"functionDeclarations": [...]}]'
+                    />
+                  )}
+                </Box>
+              )}
+            </Box>
 
             <FormControlLabel
               control={

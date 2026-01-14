@@ -7,6 +7,7 @@
     "@aws-sdk/client-cloudwatch-logs": "^3.932.0",
     "@aws-sdk/client-connect": "^3.932.0",
     "@aws-sdk/client-dynamodb": "^3.932.0",
+    "@aws-sdk/client-lambda": "^3.968.0",
     "@aws-sdk/client-s3": "^3.450.0",
     "@aws-sdk/client-xray": "^3.450.0",
     "@aws-sdk/credential-provider-ini": "^3.932.0",

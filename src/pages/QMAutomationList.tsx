@@ -32,6 +32,7 @@ import {
   TextField,
   InputAdornment,
   TablePagination,
+  TableSortLabel,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -88,6 +89,33 @@ const QMAutomationList: React.FC = () => {
   // Pagination state
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  // Sorting state
+  type Order = 'asc' | 'desc';
+  type OrderBy = 'connectedToAgentTimestamp' | 'totalProcessingTime' | 'updatedAt';
+  const [order, setOrder] = useState<Order>('desc');
+  const [orderBy, setOrderBy] = useState<OrderBy>('connectedToAgentTimestamp');
+
+  const handleRequestSort = (property: OrderBy) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const getProcessingTime = (item: QMAutomationListItem) => {
+    const qmTime = Number(item.result?.processingTime ?? item.processingTime ?? 0);
+    const toolTime = Number(item.input?.toolResult?.processingTime ?? 0);
+    let audioTime = 0;
+    if (item.result?.audioAnalyzeResult?.body) {
+      try {
+        const body = JSON.parse(item.result.audioAnalyzeResult.body);
+        audioTime = Number(body.processingTime ?? 0);
+      } catch (e) {
+        // ignore parsing error
+      }
+    }
+    return qmTime + toolTime + audioTime;
+  };
 
   // Fetch QM Automation list
   const {
@@ -147,8 +175,9 @@ const QMAutomationList: React.FC = () => {
     });
   };
 
-  const handleRowClick = (requestId: string) => {
-    navigate(`/qm-automation/${contactId || 'detail'}/detail/${requestId}`);
+  const handleRowClick = (requestId: string, itemContactId?: string) => {
+    const targetContactId = contactId || itemContactId || 'view';
+    navigate(`/qm-automation/${targetContactId}/detail/${requestId}`);
   };
 
   const handleSearch = (e?: React.FormEvent) => {
@@ -349,24 +378,58 @@ const QMAutomationList: React.FC = () => {
                   <TableCell>Contact ID</TableCell>
                   <TableCell>상태</TableCell>
                   <TableCell>모델</TableCell>
-                  <TableCell>상담 연결 일시</TableCell>
-                  <TableCell>총 처리 시간</TableCell>
-                  <TableCell>최근 평가 수정 일시</TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'connectedToAgentTimestamp'}
+                      direction={orderBy === 'connectedToAgentTimestamp' ? order : 'asc'}
+                      onClick={() => handleRequestSort('connectedToAgentTimestamp')}
+                    >
+                      상담 연결 일시
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'totalProcessingTime'}
+                      direction={orderBy === 'totalProcessingTime' ? order : 'asc'}
+                      onClick={() => handleRequestSort('totalProcessingTime')}
+                    >
+                      총 처리 시간
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'updatedAt'}
+                      direction={orderBy === 'updatedAt' ? order : 'asc'}
+                      onClick={() => handleRequestSort('updatedAt')}
+                    >
+                      최근 평가 수정 일시
+                    </TableSortLabel>
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {[...qmList]
                   .sort((a, b) => {
-                    const dateA = a.connectedToAgentTimestamp || a.createdAt ? new Date(a.connectedToAgentTimestamp || a.createdAt).getTime() : 0;
-                    const dateB = b.connectedToAgentTimestamp || b.createdAt ? new Date(b.connectedToAgentTimestamp || b.createdAt).getTime() : 0;
-                    return dateB - dateA;
+                    let comparison = 0;
+                    if (orderBy === 'connectedToAgentTimestamp') {
+                      const dateA = new Date(a.connectedToAgentTimestamp || 0).getTime();
+                      const dateB = new Date(b.connectedToAgentTimestamp || 0).getTime();
+                      comparison = dateA - dateB;
+                    } else if (orderBy === 'updatedAt') {
+                      const dateA = new Date(a.completedAt || a.createdAt || 0).getTime();
+                      const dateB = new Date(b.completedAt || b.createdAt || 0).getTime();
+                      comparison = dateA - dateB;
+                    } else if (orderBy === 'totalProcessingTime') {
+                      comparison = getProcessingTime(a) - getProcessingTime(b);
+                    }
+                    return order === 'desc' ? -comparison : comparison;
                   })
                   .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                   .map((item: QMAutomationListItem) => (
                     <TableRow
                       key={item.requestId}
                       hover
-                      onClick={() => handleRowClick(item.requestId)}
+                      onClick={() => handleRowClick(item.requestId, item.contactId)}
                       sx={{ cursor: 'pointer' }}
                     >
                       <TableCell>

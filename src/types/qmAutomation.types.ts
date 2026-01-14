@@ -177,6 +177,7 @@ export interface QMAutomationStatusResponse {
   result?: QMAutomationResult;
   input?: QMAutomationInput;
   error?: string;
+  connectedToAgentTimestamp?: string;
 }
 
 export interface QMAutomationListItem {

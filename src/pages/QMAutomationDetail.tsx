@@ -157,9 +157,24 @@ const QMAutomationDetail: React.FC = () => {
               <Typography variant="h5" fontWeight={600}>
                 QM 분석 상세
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                Request ID: {requestId}
-              </Typography>
+              <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                  Request ID: {requestId}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                  Contact ID: {contactId}
+                </Typography>
+                {qmDetail && (
+                  <>
+                    <Typography variant="body2" color="text.secondary">
+                      상담 연결: {qmDetail.connectedToAgentTimestamp ? dayjs(qmDetail.connectedToAgentTimestamp).format('YYYY-MM-DD HH:mm:ss') : '-'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      최근 수정: {qmDetail.completedAt ? dayjs(qmDetail.completedAt).format('YYYY-MM-DD HH:mm:ss') : (qmDetail.createdAt ? dayjs(qmDetail.createdAt).format('YYYY-MM-DD HH:mm:ss') : '-')}
+                    </Typography>
+                  </>
+                )}
+              </Stack>
             </Box>
           </Stack>
           <Stack direction="row" spacing={1} alignItems="center">
@@ -381,7 +396,7 @@ const QMAutomationDetail: React.FC = () => {
             >
               <Tab label="QM 평가 결과" />
               <Tab label="Function Calls" disabled={!qmDetail.input?.toolResult} />
-              <Tab label="오디오 분석" disabled={!qmDetail.result?.audioAnalyzeResult} />
+              {/* <Tab label="오디오 분석" disabled={!qmDetail.result?.audioAnalyzeResult} /> */}
             </Tabs>
 
             <Box sx={{ p: 3 }}>

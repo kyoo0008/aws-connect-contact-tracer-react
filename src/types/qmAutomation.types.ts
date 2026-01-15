@@ -71,6 +71,7 @@ export interface QMAutomationResult {
   audioAnalyzeResult?: AudioAnalyzeResult;
   thinkingText?: string;
   errorDetails?: any; // 에러 상세 정보 (Lambda 에러 응답)
+  evaluationResult?: EvaluationResult; // QM 평가 상세 결과
 }
 
 export interface QMAutomationItem {
@@ -200,4 +201,95 @@ export interface QMAutomationListResponse {
   items: QMAutomationListItem[];
   total: number;
   hasMore: boolean;
+}
+
+// Evaluation Result Types for QM Analysis
+export interface EvaluationItemStatus {
+  status: 'PASS' | 'FAIL' | 'N/A';
+  reason: string;
+}
+
+export interface EvaluationItemWithCushion extends EvaluationItemStatus {
+  cushion_words_used?: string[];
+}
+
+export interface EvaluationEvent {
+  timestamp?: string;
+  timestamp_start?: string;
+  timestamp_end?: string;
+  type?: string;
+  detected_sentence?: string;
+  correction?: string;
+  analysis?: string;
+  content_context?: string;
+  apology_used?: boolean;
+  judgment?: string;
+  category?: string;
+  customer_reaction?: string;
+  agent_response_quality?: string;
+}
+
+export interface EvaluationEventList {
+  events: EvaluationEvent[];
+}
+
+export interface GreetingDetails {
+  opening: EvaluationItemStatus;
+  response: EvaluationItemStatus;
+  additional_inquiry_check: EvaluationItemStatus;
+  closing: EvaluationItemStatus;
+  feedback_message: string;
+}
+
+export interface LanguageUseDetails {
+  language_quality_score: EvaluationEventList;
+  inappropriate_vocabulary: EvaluationEventList;
+  Unpolite_Tone_Manner: EvaluationEventList;
+  bad_habits: EvaluationEventList;
+  feedback_message: string;
+}
+
+export interface SpeedDetails {
+  Interruption_Analysis: {
+    summary: {
+      total_interruptions: number;
+      grade: string;
+    };
+    events: EvaluationEvent[];
+  };
+  pacing_understanding: {
+    summary: {
+      re_explanation_requests: number;
+      assessment: string;
+    };
+    issues: EvaluationEvent[];
+  };
+  feedback_message: string;
+}
+
+export interface VoiceProductionDetails {
+  Tone_Manner: EvaluationItemStatus;
+  handling_negativity: EvaluationItemWithCushion;
+  active_listening: EvaluationItemStatus;
+  feedback_message: string;
+}
+
+export interface EvaluationDetails {
+  greeting: GreetingDetails;
+  Language_Use: LanguageUseDetails;
+  Speed: SpeedDetails;
+  VoiceProduction: VoiceProductionDetails;
+}
+
+export interface EvaluationSummary {
+  greeting_result: string;
+  Language_Use_result: string;
+  Speed_result: string;
+  VoiceProduction_result: string;
+  score: string;
+}
+
+export interface EvaluationResult {
+  details: EvaluationDetails;
+  summary: EvaluationSummary;
 }

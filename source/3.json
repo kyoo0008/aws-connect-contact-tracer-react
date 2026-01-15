@@ -1,44 +1,50 @@
 {
     "pk": {
-        "S": "requestId#fc2f64fb-e428-4bab-aa46-99fbe49f36d5"
+        "S": "requestId#e56fc0ea-c1ee-447a-b309-33fc747e4feb"
     },
     "sk": {
-        "S": "2026-01-13T07:11:23.128Z"
+        "S": "2026-01-15T07:18:02.565Z"
     },
     "agentId": {
         "S": "f14dd476-b76e-48f9-baa7-ac473bba40e4"
     },
     "completedAt": {
-        "S": "2026-01-13T07:12:55.931Z"
+        "S": "2026-01-15T07:20:31.989Z"
     },
     "connectedToAgentTimestamp": {
-        "S": "2026-01-13T04:06:00.268Z"
+        "S": "2026-01-15T05:49:39.314Z"
     },
     "connectedToAgentYYYYMM": {
         "S": "QM#202601"
     },
     "contactId": {
-        "S": "dd1ceeb2-f71f-4ca1-9102-4b9db932f769"
+        "S": "9e5214d8-d3da-4816-9a8e-5e263527112d"
     },
     "input": {
         "M": {
             "action": {
                 "S": "prompt"
             },
+            "audioOriginalKey": {
+                "S": "CALL_RECORDINGS/2026/01/15/9e5214d8-d3da-4816-9a8e-5e263527112d_20260114T09:59_UTC.wav"
+            },
+            "audioPresignedUrl": {
+                "S": "https://aicc-dev-an2-s3-acn-storage.s3.ap-northeast-2.amazonaws.com/CALL_RECORDINGS/2026/01/15/9e5214d8-d3da-4816-9a8e-5e263527112d_20260114T09%3A59_UTC.wav?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=ASIAZI2LDQYCCZDAGDKH%2F20260115%2Fap-northeast-2%2Fs3%2Faws4_request&X-Amz-Date=20260115T071802Z&X-Amz-Expires=900&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEGcaDmFwLW5vcnRoZWFzdC0yIkgwRgIhAPB89wnZstc1UysGhY1P1rangKiO0aqYph1x1109AH5pAiEA%2FVIMnYNp%2FK1%2FV1sL2S3Hd7pqNTKTVxtosK5Ygeaeb8oqogMIMBAAGgw2Mzc0MjMyODk4NjAiDAc9j4lQ6B0vK2vm6yr%2FAo1tXyejnSe2nLAOZDWJ9Xsr%2BF15rHFVuWrZgKWT98vWjctCWsl1XLuk5PltKWwa1TECSvkntnFWw4WX9eMQe58uN%2FwlIMl%2FAtiS1fDFBaIhzlKKqQ22Yb32TQvFnedqN%2B0MKr4%2B0AOtFcnuOt%2BcsNj1ILAQSik1CkuExV5EN5UiHKFW68LUcwrtbPgDJ%2FcUeJKFQ4ja7q7VORuXJAypRp7F4T7LxMjjR22WvgBoeZ%2BFXeV8NNhRNAVz0vyUaHfgKi59ekynDmqgKEs3V4t4a21on7CDn1FewDsxAwUWfDXGxdVwOjvPjPWctkEw9zq9Ugt%2BkwWsRfOoYLHka7PpJR%2Fzsop5vSXeGalCHcku3UXcs8BIquVeQIseVXMmXSvf54UGSDKqxWtCIe6vRyVV3E%2BS%2FGwtnc1aiSdnQtiZHaSt7kssZvGQGkzrzPz9mGZhWrd%2BLidYVyAwv5bY2k6DTY7z%2Fak3aZvARMyb7f8S9K20qOFQ8mGtzcwcZ2QZhf2pMPyoossGOpwBsBUg2PrHRCMIg0zYbLOq2tes5RhZvlSA2rctyEtSPG%2B%2FGYS5GrxIjhv%2FS9jow5U42GGW59KW0SGg0uVQUczgfq0veXlmL8NBx%2Fgh6nIFh8WNTDFU9nIwg1EFTQ1iR19VBNCYzvabnPFutxdPm2ZU2y0u%2Bt5FwIC%2Btwq4pLPb%2BvdOxMDiymWfmxIUU7TOQCPRn3lKxiWdYew6f5J2&X-Amz-Signature=7dc209760199963806c81c65916a49e294b6f313c2fb0ac00620c45ad3f98fdd&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject"
+            },
             "contactId": {
-                "S": "dd1ceeb2-f71f-4ca1-9102-4b9db932f769"
+                "S": "9e5214d8-d3da-4816-9a8e-5e263527112d"
             },
             "inputTokens": {
-                "N": "11079"
+                "N": "20879"
             },
             "maxOutputTokens": {
                 "N": "65535"
             },
             "model": {
-                "S": "gemini-2.5-flash"
+                "S": "gemini-2.5-pro"
             },
             "prompt": {
-                "S": "\n# 역할 (Role)\n당신은 '글로벌서비스센터'의 수석 QA(Quality Assurance) 전문가입니다.\n\n# 목표 (Goal)\n제공된 JSON 형식의 [상담콜 데이터]를 분석하여 상담사의 서비스 품질을 평가하십시오.\n단순한 내용 요약이 아닌, 아래 정의된 **[평가 기준]**과 **[매뉴얼 표준]**에 따라 체계적이고 객관적으로 분석하고, 상담사의 강점과 개선점을 명확히 파악하여 서비스 품질 향상에 기여하는 종합 평가 보고서를 작성하는 것입니다.따라 체계적이고 객관적으로 분석하고, 상담사의 강점과 개선점을 명확히 파악하여 서비스 품질 향상에 기여하는 종합 평가 보고서를 작성하는 것입니다. 모든 평가는 JSON 데이터 내의 구체적인 Content(발화)를 증거로 제시해야 합니다.\n\n# 입력 데이터 (Input Data)\n[상담콜 데이터]는 다음과 같은 구조화된 형식의 텍스트 파일로 제공됩니다. 각 발화는 화자(AGENT/CUSTOMER), 내용(Message), 발화 시작 시간(BeginOffsetMillis), 발화 종료 시간(EndOffsetMillis)을 포함합니다.\n예시:\nAGENT : 안녕하십니까? 김다미입니다.(BeginOffsetMillis: 12, EndOffsetMillis: 2152, id: cd782b03-1020-4563-a4f2-40b522264729)\nCUSTOMER : 아 네, 안녕하세요. 저희 항공권 가족들 거를 마일리지로 예약을 했는데요.(BeginOffsetMillis: 2777, EndOffsetMillis: 8837, Id: 3ba6ad1f-ee3d-4b10-b6ea-c6a4788b514b)\n\n# 평가 기준 (Evaluation Criteria)\n상담 내용을 다음 3가지 대분류로 분석하고, 각 항목의 **[필수]** 조건 누락 시 감점을 적용하십시오.\n\n## 1. 인사 및 관계 형성 (배점: 10점)\n* **[필수] 첫인사:** \"안녕하십니까 [이름] 입니다\"로 인사말과 본인 이름을 말했는가?\n    * 주의: 첫인사때 인사말과 이름 이외의 내용은 말하지 않습니다.\n* **호응:** 고객의 첫 마디에 적절히 반응했는가?\n* **[필수] 끝인사 표준 프로세스:**\n    * 상담 종료 전, \"추가로 궁금하신 사항 있으십니까?\"(또는 유사 표현)로 재문의 확인.\n    * 고객이 \"없습니다\" 답할 시, **\"감사합니다. 상담원 [이름]이었습니다.\"**라고 본인 이름을 포함하여 명확히 끝인사.\n    * 주의: 위 순서나 멘트 누락 시 감점이되, 첫인사와 끝인사에서 상담원[이름]이 다르거나 누락되어도 감점에서 제외해야함\n\n## 2. 서비스 마인드 (배점: 30점)\n* **친절도:**\n    * 전반적으로 상냥하고 친근한 어감으로 상담을 진행했는가?\n    * 고객에게 만석, 규정 안내 등 부정적인 답변을 할 때, \"죄송합니다만\", \"번거로우시겠지만\"과 같은 쿠션 멘트를 사용하여 안타까운 어감을 적절히 연출했는가?\n    * 고객의 상황(경로자, 항공 여행 비숙련자 등)을 고려하여 말의 속도를 적절히 조절했는가?\n    * \"네네\"와 같이 기계적인 호응이 아닌, \"네 고객님, 그러셨군요\" 등 상황에 맞는 다양한 호응어를 사용하여 경청하는 태도를 보였는가?\n    * 고객의 말씀을 중간에 끊지 않고 끝까지 경청했는가? 만약 부득이하게 말을 중단시켜야 했다면 \"말씀 중에 죄송합니다\"라고 정중히 양해를 구했는가?\n    * [중요] 고객 발화 중단 여부: 고객의 발화가 종료되는 시점(CUSTOMER의 EndOffsetMillis) 이전에 상담사의 발화가 시작(AGENT의 BeginOffsetMillis)되는 경우가 있는지 정량적으로 분석하고 평가에 반영한다. 만약 부득이하게 말을 중단시켜야 했다면 \"말씀 중에 죄송합니다\"라고 정중히 양해를 구했는가?\n\n* **정중함:**\n    * '다까체'와 '요조체'의 비율을 적절히 혼용하여, 전문성과 친밀감을 균형 있게 전달했는가? (특히 부정적 답변, 사과, 양해를 구할 때는 '다까체' 사용을 권장)\n    * \"잠깐만요\", \"~거든요\", \"~하시구요\" 같은 반토막말이나 정돈되지 않은 표현 대신 \"잠시만 기다려 주십시오\", \"~합니다\" 와 같이 정중하고 정돈된 표현을 사용했는가?\n    * 외래어(cancel, confirm 등)나 항공 전문 용어(rerouting, booking class 등) 사용을 최소화하고, 고객이 이해하기 쉬운 용어로 설명했는가?\n    * 대기 요청 시 \"잠시만 기다려 주십시오\" 등 정중한 양해어를 사용하고, 대기 후에는 \"기다려 주셔서 감사합니다\"라고 감사를 표했는가?\n    * 상담사 본인 또는 회사의 귀책으로 고객이 불만을 제기했을 때, 즉각적이고 진심 어린 사과를 했는가?\n\n## 3. 상담진행 능력 (배점: 60점)\n* **효율성/적극성:**\n    * 고객의 질문 의도(Needs)를 신속하고 정확하게 파악하여 대화를 효율적으로 이끌었는가?\n    * 고객이 제공한 정보를 다시 묻는 등 비효율적인 대화는 없었는가?\n\n* **정확성:**\n    * 상품, 규정, 절차 등을 논리정연하고 정확하게 설명했는가?\n    * 고객에게 안내한 정보나 시스템에 처리한 업무가 정확했는가?\n* **필수 안내 (SOP 준수):**\n    * 상담 과정에서 표준 업무 절차(SOP)를 준수했는가?\n    * 예약/변경/취소 시, 착오 방지를 위해 날짜(월/일), 시간, 출발/도착지, 좌석 등급(Booking Class)을 명확하게 재확인했는가?\n    * **★ 날짜 안내 필수 지침:** \"오늘\", \"내일\", \"이번 주 금요일\" 등 모호하거나 추론이 필요한 상대적 표현은 **절대 인정하지 않음.** 반드시 **\"3월 5일\", \"12월 25일\"과 같이 정확한 [월/일] 기반의 날짜**로 안내했는지 검증할 것. 위반 시 감점.\n\n* **정보 보호 및 본인 확인 (Critical Fail 항목):** 아래 절차 위반 시 해당 항목 0점 및 강력 경고.\n    1.  **예약 정보 안내 시:**\n        * 양해어: \"개인정보보호를 위해 탑승객 본인이 아닌 경우 정보제공이 제한될 수 있습니다. 탑승객 본인이십니까?\" 발화 필수.\n        * [상황 A] 탑승객 본인: ①예약번호 또는 여정(날짜/구간/시간), ②이름, ③전화번호 또는 이메일 확인.\n        * [상황 B] 제3자(대리인):\n                * \"탑승객으로부터 업무처리위임을 받으셨습니까?\" 확인\n                * \"전화 주시는 분 성함과 연락처\", \"탑승객과의 관계\" 확인.\n                * [중요] \"예약정보 안내 사실이 탑승객 휴대폰으로 알림톡(문자) 발송됨\"을 구두로 안내했는가?\n    2.  **스카이패스(회원정보) 안내 시:**\n        * 양해어: \"고객님의 정보 보호를 위해 몇 가지 확인하겠습니다.\" 발화 필수.\n        * [상황 A] 회원 본인: ①회원번호+이름 또는 ②이름+생년월일 확인.\n        * [상황 B] 제3자(대리인): 정보 제공 불가 안내 필수. (\"죄송합니다. 스카이패스 회원 정보는 회원 본인에게만 제공이 가능합니다.\")\n    \n\n# 출력 형식 (Output Format)\n아래 형식을 엄수하여 작성하십시오. 증거(발화 인용)가 없는 평가는 인정되지 않습니다.\n\n---\n### [상담콜 품질 평가 보고서]\n\n**1. 종합 평가**\n* **총점:** 100점 만점에 [  ]점\n* **요약:** (상담 흐름, 핵심 강점, 주요 개선점 1~2문장)\n\n**2. 항목별 상세 분석**\n\n**1) 인사 및 관계 형성 ([  ]/10점)**\n* **잘한 점:** (발화 인용)\n* **개선할 점:** (프로세스 위반 시 구체적 지적)\n_\n**2) 서비스 마인드 ([  ]/30점)**\n* **잘한 점:** (우수 발화 인용)\n* **개선할 점:** (반토막말, 쿠션어 누락 등 구체적 발화 인용 및 수정 제안)\n\n**3) 상담진행 능력 ([  ]/60점)**\n* **잘한 점:** (SOP 준수 사례)\n* **개선할 점:**\n    * (일반 상담 능력 지적)\n    * **[날짜 정확성 점검]:** (예: 상담사가 \"내일 출발하시는...\"이라고 안내함. → \"3월 15일 출발하시는...\"으로 명확한 날짜 안내 필요.)\n    * **[정보 보호 점검]:** (본인 확인 절차 준수 여부. 위반 시 **굵은 글씨** 경고)\n\n**3. 총평 및 코칭 제언**\n* (상담사의 가장 큰 강점 칭찬)\n* (가장 시급한 개선 항목 1~2가지 선정 및 구체적 가이드 - 특히 날짜 안내의 정확성 위주)\n\n상담 내용 데이터는 다음과 같습니다 : AGENT : 안녕하십니까? 박동주입니다.(BeginOffsetMillis: 57, EndOffsetMillis: 2097, Id: 92d2a71d-b7e3-4dc2-b1b7-bb5d78f49544)\nCUSTOMER : 아 네, 안녕하세요. 제가 그 예약번호 아까 제가 통화했던 분이랑 혹시 다시 연결은 어려운 거죠?(BeginOffsetMillis: 4147, EndOffsetMillis: 11277, Id: 2c0caf99-bd4c-4f78-a605-41655d8f399f)\nAGENT : 음 네, 그렇습니다. 고객님 혹시 예약번호 또는 정확한 사정이 어떻게 됩니까?(BeginOffsetMillis: 11367, EndOffsetMillis: 15847, Id: b2df8dbe-f325-4001-bd77-557c08db0594)\nCUSTOMER : 아 네.(BeginOffsetMillis: 14377, EndOffsetMillis: 14837, Id: e0f7218e-3f54-450f-9dcc-2abd8cbb4456)\nCUSTOMER : 아 네, 예약 번호 말씀드리면 5K7LNX.(BeginOffsetMillis: 17337, EndOffsetMillis: 22007, Id: 0329f5ab-ee41-4fcf-8ee8-c9a6e9b10d5a)\nAGENT : 확인해 보겠습니다. 개인정보 보호를 위해 탑승자가 아닌 경우 정보 제공 제한될 수 있습니다. 전화주신 박희영 고객님 탑승자 본인이십니까?(BeginOffsetMillis: 23287, EndOffsetMillis: 30807, Id: b5e27257-d8b3-4890-902a-9cf59a8db0b4)\nCUSTOMER : 네, 맞습니다.(BeginOffsetMillis: 32217, EndOffsetMillis: 33247, Id: 36efba33-78ce-4084-9b03-967c74a755e0)\nAGENT : 동반 탑승객분 있으시면 성함 말씀해 주시겠습니까?(BeginOffsetMillis: 33667, EndOffsetMillis: 36417, Id: 208871c1-8343-419e-96d6-0f9a4625356a)\nCUSTOMER : 이희용이요.(BeginOffsetMillis: 38217, EndOffsetMillis: 39527, Id: ceae6351-127a-4af5-b195-68e54cdb86ba)\nAGENT : 잠시만 기다려 주십시오, 고객님.(BeginOffsetMillis: 40897, EndOffsetMillis: 42437, Id: d8887e53-13b4-4816-ba15-23936dd64ff2)\nAGENT : 지금 호놀룰루 인천이 예약부도 위약금 나와서 변경하셔야 될 때 변경 수수료, 그다음 운임차 세금차액터 발생되고 이전 상담 확인해 봤을 때에는 고객님께서 폐쇄공포증으로 인해서 플라스티지를 이용 원하셨으나 지금 프레스티지가 없어서 상담을 받아주셨던 거죠, 고객님?(BeginOffsetMillis: 49767, EndOffsetMillis: 68087, Id: 41610d57-b960-4a37-8845-e28992e052df)\nCUSTOMER : 네 네, 맞습니다.(BeginOffsetMillis: 69577, EndOffsetMillis: 70787, Id: dafcc42c-2753-4e5f-9df1-3c1e93bb38e8)\nAGENT : 네, 확인되고 있고요. 정확하게 이제 어떻게 하실 예정인지 확인 부탁드려도 될까요?(BeginOffsetMillis: 71837, EndOffsetMillis: 77727, Id: ce41b5b4-3b36-4b2a-8a9f-3b44ae3ac5e2)\nCUSTOMER : 아 네. 네. 지금 그래서 뭔가 뭐 취소되거나 이런 게 나오면 내일자 출발로요. 그러면 좀 바로 저 제가 더 어 더 페이를 하더라도 연락을 주실 수 있을까요? 그 일단은 이코노미로 바꿔 놓고(BeginOffsetMillis: 79597, EndOffsetMillis: 99447, Id: 95943112-63de-414b-ac38-5929eaee86c9)\nAGENT : 네.(BeginOffsetMillis: 88617, EndOffsetMillis: 88927, Id: c128a85d-7d10-4d41-960b-3da8a3f5f472)\nCUSTOMER : 그렇게 좀 요청드려야 될 거 같아가지고.(BeginOffsetMillis: 99567, EndOffsetMillis: 102847, Id: b48fc6ec-5461-4832-a114-e73a0286214d)\nAGENT : 일단은 고객님께서 이코노 이코노미로 바꾸실 때 변경 수수료 운임차 세금차액 발생되고 그 예약 부도 위약금 한 분당 ₩300, 000씩 내주셔야 USB $300씩 내주셔야 하고요. 그다음에 추가적으로 지금 출발 24시간 전까지 대기 기다려 보실 수 있도록 전 직원이 대기 예약을 해놓은 상황입니다. 그래서 유상 가장 확약이 될 확률이 높은 프레스티지 플렉스로 대기업 되어 있으나 출발 24시간 전까지 확약되지 않을 시(BeginOffsetMillis: 103687, EndOffsetMillis: 133307, Id: c492fa9b-b2ef-405c-a681-e2371b19bade)\nCUSTOMER : 대기로, 네.(BeginOffsetMillis: 104727, EndOffsetMillis: 106087, Id: d96441cc-8df0-44a3-896e-2c3754b5e48e)\nCUSTOMER : 네 네.(BeginOffsetMillis: 115977, EndOffsetMillis: 116327, Id: 3ec36aa9-4257-4603-91d9-bcf090045eed)\nAGENT : 대개는 자동으로 취소됩니다. 고객님. 확약되시면 예약 시에 남겨주신 휴대폰 번호 혹은 이메일 주소로 확인 문자가 가기 때문에 무조건 구매 시한 안으로 저희 측에 전화 주셔서 동일하게 변경 수수료 운임차 세금 차이 되시고 고객님께서 변경 가능하거든요, 고객님.(BeginOffsetMillis: 133647, EndOffsetMillis: 149317, Id: b087e5c2-8699-4c85-a758-f41bd2bf2aac)\nCUSTOMER : 네 네.(BeginOffsetMillis: 150937, EndOffsetMillis: 151407, Id: eb96705e-69ac-43e8-afd7-ba5225be114b)\nAGENT : 일단 제가 일반석이라도 변경해 드릴까요, 고객님?(BeginOffsetMillis: 151807, EndOffsetMillis: 154447, Id: 3c96579c-13d0-42fe-b697-206d06cc2636)\nCUSTOMER : 네.(BeginOffsetMillis: 152787, EndOffsetMillis: 153097, Id: b80de363-3cb2-4f81-8fdf-52de22e67d76)\nCUSTOMER : 네. 그러니까 지금 아까 말씀하신 다른 그 뭐 프레스티지 플러스나 뭐 그냥 프레스티지나 이게 지금은 안되고 그래서 이코노미로 일단은 변경을 해 놓고 그리고 다른 데에도 대기를 걸어주셔서 그래서 그게 나오면 이제 바로 저한테 문자가 온다는 말씀이신 거죠?(BeginOffsetMillis: 156237, EndOffsetMillis: 174927, Id: c1b0d200-7151-4e8e-ba72-aeaab682eb29)\nAGENT : 네, 맞습니다. 마이 프레스티지 확인 안 되시면 일반석 이용하시거나 동일하게 이용 원치 않으시는 경우 예약부도 위약금 한 번도 발생하지 않도록 출발 시간 전까지는 변경 혹은 환불해 주셔야 합니다.(BeginOffsetMillis: 174867, EndOffsetMillis: 186567, Id: fe50bf56-8d7a-41f8-852f-18cfd912b2dd)\nCUSTOMER : 아 네 네. 어 근데 죄송한데 아까 처음에 말씀하시는 그 프레스티지 확약되지 않는다는 게 그게 어떤 거 말씀하신 거예요?(BeginOffsetMillis: 188637, EndOffsetMillis: 196297, Id: a862b133-8305-412c-9b55-92ca53d33c5c)\nAGENT : 네.(BeginOffsetMillis: 194787, EndOffsetMillis: 195007, Id: 9ce0696d-90d9-497d-8593-49f2c9acc08e)\nAGENT : 대기가 출발 24시간 전까지 확약되지 않으면 대기가 자동으로 취소되기 때문에 오늘 오전 11:30밖에 기다려보실 수가 없어요.(BeginOffsetMillis: 196337, EndOffsetMillis: 205157, Id: 620d0848-3ca7-4189-839b-e6e107bdde1e)\nCUSTOMER : 네.(BeginOffsetMillis: 201417, EndOffsetMillis: 201557, Id: 8d76f7f8-a443-4def-a1db-53d3cab5e99d)\nAGENT : 그 대기 예약을요.(BeginOffsetMillis: 207497, EndOffsetMillis: 208607, Id: ff134832-c69a-44d9-9945-72dc66f25fcf)\nCUSTOMER : 아 그러니까 현지 시간으로요?(BeginOffsetMillis: 207837, EndOffsetMillis: 209547, Id: 9d23664f-8d68-45a2-a220-60541cd270f3)\nAGENT : 네 네.(BeginOffsetMillis: 209737, EndOffsetMillis: 210127, Id: 513d8871-a29d-4574-833c-f897c0019613)\nCUSTOMER : 현지 시간은 지금 오후 13:00인데요.(BeginOffsetMillis: 211847, EndOffsetMillis: 214037, Id: 55598517-7156-4851-8d95-ed7d43e61e49)\nAGENT : 아 죄송합니다. 호놀룰루 기준 시간 확인하겠습니다.(BeginOffsetMillis: 214627, EndOffsetMillis: 217617, Id: bea95496-4510-42e1-80a6-e514255e1f9f)\nCUSTOMER : 네 네.(BeginOffsetMillis: 219177, EndOffsetMillis: 219607, Id: 7e0ccee7-97f4-4db5-acc0-ba0586409765)\nAGENT : 내일 호노요일 현지 시간 기준으로는 1월 6일 오후 12:51이신 거죠?(BeginOffsetMillis: 225227, EndOffsetMillis: 230377, Id: 11e922ce-d81b-49a5-afb1-b9d59896fe90)\nCUSTOMER : 네 네.(BeginOffsetMillis: 231897, EndOffsetMillis: 232367, Id: f7b2d09b-a06a-4dc7-9ab2-ccae427ec515)\nAGENT : 어.(BeginOffsetMillis: 232377, EndOffsetMillis: 232667, Id: db78db07-7431-4533-983b-a51acf46e27d)\nAGENT : 잠시만요, 고객님.(BeginOffsetMillis: 236567, EndOffsetMillis: 237827, Id: 6a5226b0-ccaf-4ee9-a71f-39087f082124)\nCUSTOMER : 네. 아 제가 진짜 더 돈을 내더라도 좀.(BeginOffsetMillis: 239457, EndOffsetMillis: 243527, Id: 2a832227-0dd7-4115-b804-e2f255ad03d6)\nCUSTOMER : 잘 확인 좀 부탁드릴게요.(BeginOffsetMillis: 244167, EndOffsetMillis: 246727, Id: 2999bd20-f67f-47e7-a0ea-6fad1ba14559)\nAGENT : 잠시만요.(BeginOffsetMillis: 247337, EndOffsetMillis: 248167, Id: 8859d00e-1c30-4836-a126-3058dd9c3615)\nAGENT : 어 원래는 대기가 출발 24시간 전까지 확약되지 않을 시 대기가 자동으로 취소되는 게 맞습니다. 근데 이제 전 직원이 고객님께서 그 폐쇄공포증을 언급해 주셔서 대기 예약을 억지로 넣어둔 것 같아요. 근데 사실 이 대기약을 넣어둔다고 해서 출발 24시간 이미 이내 시점이기 때문에 이 대기가 자동으로 취소되는 경우도 있고요. 확약될 거라고 확답 드리기가 어려워서 일단은 지금 기다려 보시는 방법밖에는 없습니다 고객님.(BeginOffsetMillis: 249047, EndOffsetMillis: 278007, Id: 83a66af2-53f6-4d55-889d-c723b4a2dc5c)\nCUSTOMER : 그 확약이 보통 언제쯤 이게 나와요?(BeginOffsetMillis: 280067, EndOffsetMillis: 282727, Id: 20f21258-3e97-450f-9ece-feab1cced796)\nAGENT : 대기에서 확인되시면 바로 예약 시에 남겨주신 휴대폰 번호와 이메일 주소로 확인 문자가 가기는 합니다. 일반적으로. 지금은 원래는 24시간 네 네. 이내인데도 대기를 해 놓은 거라서(BeginOffsetMillis: 283727, EndOffsetMillis: 295847, Id: 411117f9-9f5b-4282-9b91-5b329d1ae716)\nCUSTOMER : 아 그래요.(BeginOffsetMillis: 291177, EndOffsetMillis: 292127, Id: 2e76712a-4c4f-4d60-b13a-83aaf091999b)\nAGENT : 일단은 기다려보시는 방법밖엔 없을 것 같고 만약 확약 안되시더라도 일반석은 이용하실 예정이시죠 고객님?(BeginOffsetMillis: 296807, EndOffsetMillis: 303557, Id: 7fb8e956-862a-4637-a1ba-babcaf1c32a0)\nCUSTOMER : 네.(BeginOffsetMillis: 301417, EndOffsetMillis: 301727, Id: d66880e6-6d68-45d7-97ca-967c03318f4b)\nCUSTOMER : 네 네.(BeginOffsetMillis: 304937, EndOffsetMillis: 305447, Id: 07ab54ce-d989-4724-a196-088d458dd299)\nAGENT : 일단 변경 진행해도 괜찮으세요, 고객님.(BeginOffsetMillis: 306397, EndOffsetMillis: 308927, Id: ba216324-a8b4-41b5-ac34-be649796d4ed)\nCUSTOMER : 일단은 어쩔 수 없잖아 지금.(BeginOffsetMillis: 313327, EndOffsetMillis: 315847, Id: 56dcf3a1-2b41-4df9-b3d7-1ee26dba3400)\nCUSTOMER : 근데 이코노미석은 자유- 자리가 지금 여유가 많다그래서 말씀드리고 예약 변경하는 게 좋을 거 같아서.(BeginOffsetMillis: 317687, EndOffsetMillis: 326937, Id: c83c92db-bcf6-402e-bb58-162b5e983fae)\nCUSTOMER : 아니 그 아 죄송해요. 그러면은 지금 일단 이거를 대기를 해놓으셨고 제가 지금 해야 되는 절차가 어떻게 되는 거예요?(BeginOffsetMillis: 328297, EndOffsetMillis: 336407, Id: 80984ff9-07fe-45e3-b044-c63df39bb235)\nAGENT : 일단 대기는 이미 진행이 완료되어서 확약이 된다라고 하면 예약 시에 남겨주신 휴대폰 번호와 이메일 주소로 확인 문자 가기 때문에 구매 시한이 길지 않을 거라 즉시적으로 저희 쪽에 전화 주셔서 변경 요청해 주시면 되는데 변경하셨을 때에는 일단 지금 일반석으로 변경하시나 아니면 일단 기다렸다가 프레스티지 확인되셔서 변경하시나 변경 수수료, 운임차액, 세금차액, 예약 부도 위약금 한 분당 USD $300씩 내주셔야 돼요.(BeginOffsetMillis: 337517, EndOffsetMillis: 366467, Id: b4602798-4d1f-468a-9515-4d2f6ff8cbdb)\nCUSTOMER : 네.(BeginOffsetMillis: 347497, EndOffsetMillis: 347807, Id: d4e28de6-1b51-476a-8210-c059e604e81b)\nCUSTOMER : 네.(BeginOffsetMillis: 353497, EndOffsetMillis: 353687, Id: 11e1160e-2b0f-4e3d-b362-ac47b5a14dc3)\nCUSTOMER : 아 어차피 이래도 저래도 똑같은 거죠. 그니까.(BeginOffsetMillis: 367387, EndOffsetMillis: 370947, Id: fcaf1a21-d547-4304-8237-9648780a031b)\nCUSTOMER : 그니까 제가 가만히 있다가 그 프레스티지 변경 확약이 와가지고 변경을 하는 것과 제가 지금 일단 이코노미로 변경을 해 놓고 그 프레스티지 확약이 오면 그때 변경을 하는 것과 이게 어떠- 어떻게 제가 해야 될까 싶어가지고.(BeginOffsetMillis: 371547, EndOffsetMillis: 389067, Id: c0a928d1-f62f-41ff-80ec-c59b8825807d)\nAGENT : 아 예약부도 위약금은 동일하고요. 예약부도 위약금은 한 번 변경하신다 두 번 변경하신다 첫 번째 변경하실 때 무조건 발생되는 거예요. 뭐 두 번 다 발생되지는 않고 다만 지금 일반석으로 변경하시면 뭐 장점이 추후에 이제(BeginOffsetMillis: 388857, EndOffsetMillis: 405607, Id: 1f8eecc2-987f-4edb-a32e-2ac8baf2ec09)\nCUSTOMER : 네.(BeginOffsetMillis: 392777, EndOffsetMillis: 393087, Id: 91ee88a3-9134-4c1c-8c64-c1befdeca009)\nCUSTOMER : 네 네.(BeginOffsetMillis: 399337, EndOffsetMillis: 399887, Id: 0a5176e0-1765-4793-8488-7c58d9471d21)\nCUSTOMER : 아.(BeginOffsetMillis: 400697, EndOffsetMillis: 401167, Id: f13a42a3-3f99-49fc-9a00-9a5a8fc55815)\nAGENT : 고객님께서 일반석이 가격이 오른다거나 아니면 좌석이 없을 수도 있는데 미리 일단 좌석은 확보가 가능하다는 점이 있고 그 다음에 단점은 고객님께서 만약에 지금 변경하셔도 변경 수수료 발생되고요. 변경 일반석으로 변경하시고 프레스티지로 변경하셨을 때 또 변경 수수료가 발생돼요. 각각의 장단점이 있다고 보시면 됩니다.(BeginOffsetMillis: 405897, EndOffsetMillis: 427887, Id: 5156fe5f-fb53-4d0e-9a68-8a8340242dc7)\nCUSTOMER : 그렇죠.(BeginOffsetMillis: 412647, EndOffsetMillis: 413257, Id: 4cb409f5-1f0f-4d05-8d1e-8b0c701d00a4)\nCUSTOMER : 네.(BeginOffsetMillis: 414947, EndOffsetMillis: 415337, Id: 12d500fe-c95e-4030-92f8-375fc6adf29d)\nCUSTOMER : 네.(BeginOffsetMillis: 421257, EndOffsetMillis: 421527, Id: a91ec652-1192-4b3d-bbe1-e83076b5d953)\nCUSTOMER : 아.(BeginOffsetMillis: 427187, EndOffsetMillis: 427847, Id: 241830e3-7b25-4701-804d-b02300cdceb3)\nCUSTOMER : 아 그러면 그때 만약에 확약이 그 프레스티지가 나올 경우에는 변경 수수료가 두 번이 발생하는 거고요.(BeginOffsetMillis: 429017, EndOffsetMillis: 435947, Id: 1702c07b-99c6-46df-a245-fd65b344ef00)\nAGENT : 네 맞아요.(BeginOffsetMillis: 436057, EndOffsetMillis: 437007, Id: ef0eb168-22ec-4a6b-bf05-cc574c2cbb12)\nCUSTOMER : 음 그러면 지금 이코노미 좌석은 넉넉한가요?(BeginOffsetMillis: 438247, EndOffsetMillis: 441767, Id: d3eca159-4d29-406a-9919-e35e467a0d03)\nAGENT : 지금 9좌석 이상 남아있기는 합니다만 좌석은 언제나 변동 가능성이 있기 때문에 추후에 있을 거라고 확답 드릴 수는 없어요.(BeginOffsetMillis: 442647, EndOffsetMillis: 451227, Id: 8a243f7e-b8a0-4809-9f49-70cc57bdc5df)\nCUSTOMER : 아.(BeginOffsetMillis: 450777, EndOffsetMillis: 451287, Id: 479d2421-2ef0-42b0-acf3-25f50ddd49f2)\nCUSTOMER : 그래, 그 응, 아니 9좌석밖에 없으니까. 그러면 일단은 그걸 바꾸고 바꿔- 바꿔 놓고(BeginOffsetMillis: 452257, EndOffsetMillis: 461847, Id: 3b7f3a48-5ad4-4bea-93ea-ab827163efa0)\nAGENT : 어 아 좌석이 있는 건 아니고요. 9좌석 이상 남아있는데 저희가 8좌석까지 남아있는 경우에는 정확한 남은 숫자가 표기되고요. 아 좌석 이상부터는 숫자 구로 표기되기 때문이 9석 이상 남아있다고 말씀드리고 있어요.(BeginOffsetMillis: 459337, EndOffsetMillis: 475157, Id: ef86acb7-ac76-423a-91c1-dd1a2f53750c)\nCUSTOMER : 네.(BeginOffsetMillis: 462937, EndOffsetMillis: 463077, Id: 58d88427-3271-4c7b-95dc-4bb1c961f8f5)\nCUSTOMER : 네.(BeginOffsetMillis: 463977, EndOffsetMillis: 464167, Id: 3299f9aa-46f3-44d2-b20f-dd6221505cdc)\nCUSTOMER : 네.(BeginOffsetMillis: 466217, EndOffsetMillis: 466447, Id: 84923af7-21e6-4872-8e91-6f9704064721)\nCUSTOMER : 아.(BeginOffsetMillis: 470617, EndOffsetMillis: 470997, Id: 5d4a519f-d682-485f-9f1a-909dd8c3d9a0)\nCUSTOMER : 아 네 네 네.(BeginOffsetMillis: 476777, EndOffsetMillis: 477657, Id: fdfbd152-758d-4383-a9ed-8ec8af0f584e)\nAGENT : 네 네.(BeginOffsetMillis: 478057, EndOffsetMillis: 478287, Id: bb302018-cfa0-481e-9d1a-dc4c7dfd2131)\nCUSTOMER : 응.(BeginOffsetMillis: 478637, EndOffsetMillis: 478647, Id: ac6451dd-97a8-4124-bf73-29c7a90fc154)\nCUSTOMER : 그러면은 저 죄송해요. 자꾸 여쭤봐서. 마지막으로 하나만 여쭤보면 그 아까 말씀하신 지금 이 기종이 이코노미랑 그리고 그.(BeginOffsetMillis: 480487, EndOffsetMillis: 490597, Id: 8f35f4cb-7f54-4e44-861f-200dea794beb)\nCUSTOMER : 새로 생긴 그 프레스티지 플러스 이게 있고 프레- 프레스티지가 있는 거죠.(BeginOffsetMillis: 491567, EndOffsetMillis: 495877, Id: c846dbe0-b551-41e3-96f0-71611f57a766)\nAGENT : 지금 신기종 보잉 787-10기종이기 때문에 프레스티지 스위트 2.0 기종이기는 합니다.(BeginOffsetMillis: 497207, EndOffsetMillis: 503717, Id: f81be20c-d766-443a-8071-bb79a70c4ab4)\nCUSTOMER : 아 네. 네. 그- 그러면은 그니까 그렇게 프레스티지랑 그리고 그냥 이코노미 좌석 이렇게만 두 개 있는 거예요?(BeginOffsetMillis: 505977, EndOffsetMillis: 511927, Id: 4e67389a-a39d-421a-8150-dfe461b1902c)\nAGENT : 네 네.(BeginOffsetMillis: 512057, EndOffsetMillis: 512527, Id: 90c9b04b-2fed-46ce-8683-7a697a84454f)\nCUSTOMER : 아 네 네 네. 그러- 그리고 거기에 대기를 걸어 놨고. 보통 보통 진짜 보셨을 때 통상 이게 만약에 빠진다면 오늘 그니까 호놀룰루 현지 시각으로 제가 오늘 자기 전까지 밤 전에 뭔가 좌석이 나올 수가 있- 있을까요? 제가 왜냐면은 언제까지 기다렸다가 이코노미를 그냥 일단은 사야겠다 라고 해야 되는 시점이 궁금해서.(BeginOffsetMillis: 514347, EndOffsetMillis: 541707, Id: 00c3dd57-a903-4787-bcb8-9e15846eace9)\nAGENT : 따로 정해진 건 없어요. 아까 말씀드렸다시피 원래는 출발 24시간 전까지 대기를 기다려보실 수 있는 것은 맞는데 원래는 이 이는 시점에 저희가 따로 대기 예약을 해드리지는 않아요. 불가한 경우도 있고요. 근데 일단 지금으로서는 전 직원이 그래도 고객님 사정을 고려해서 임의적으로 대기예약을 넣어둔 거다 보니까 이게 확약이 언제 될지도 알 수가 없고요. 확약이 될지 안 될지도 알 수가 없고 이 시스템에서 이내 시점에 억지로 놓은 대기예약이다 보니까 차동으로 언제 취소(BeginOffsetMillis: 542127, EndOffsetMillis: 571867, Id: 3b243086-5f5a-42f1-9b5e-10b11716d0eb)\nCUSTOMER : 네.(BeginOffsetMillis: 554787, EndOffsetMillis: 555097, Id: bef039ff-4b39-43e3-98ca-874c981f11b7)\nCUSTOMER : 응.(BeginOffsetMillis: 567107, EndOffsetMillis: 567477, Id: 99207b26-7918-4515-9891-6100b74e035a)\nAGENT : 될지도 저희가 알 수가 없어요.(BeginOffsetMillis: 571917, EndOffsetMillis: 573607, Id: 9e6a0e9f-796b-4489-9808-b16d0ede9785)\nCUSTOMER : 아 언제 취소가 될 수도 있다고요?(BeginOffsetMillis: 576537, EndOffsetMillis: 578487, Id: 0d31b89d-e681-49ca-80bb-8c367b18dafe)\nAGENT : 네네. 계속 말씀드렸을 때 이 대기예약 자체가 원래는 출발 24시간 전까지만 기다려 보실 수 있는데 지금 이 시점에 대기약을 넣어둔 거라서 이게 언제 대기이 취소될지는 저희도 알 수가 없어요.(BeginOffsetMillis: 578857, EndOffsetMillis: 591607, Id: 7c1bf18b-6cbe-4fc3-b695-990e6392037b)\nCUSTOMER : 아.(BeginOffsetMillis: 587097, EndOffsetMillis: 587607, Id: 8c06073e-4306-4159-a907-4bd2faa9b9f9)\nCUSTOMER : 네 네.(BeginOffsetMillis: 589737, EndOffsetMillis: 590327, Id: e015da93-1a43-4b50-9b89-9c561a04c959)\nCUSTOMER : 응.(BeginOffsetMillis: 593427, EndOffsetMillis: 594047, Id: ec4683cc-fd03-407a-9bf7-0299e4fbbc1b)\nAGENT : 네 네.(BeginOffsetMillis: 594797, EndOffsetMillis: 595347, Id: db9b140c-878c-4ae8-b50f-c8033188772a)\nCUSTOMER : 아.(BeginOffsetMillis: 597677, EndOffsetMillis: 597727, Id: acb17218-6dd9-4e0b-814b-b419a1dfc39f)\nCUSTOMER : 알겠습니다. 그러면 제가 조금 기다리다 기다리고 있을게요, 그러면.(BeginOffsetMillis: 601767, EndOffsetMillis: 606967, Id: dce22332-49ec-43bc-a14a-44134e7aa542)\nAGENT : 네 제가 상담내역은 자세히 적어 놓겠습니다. 고객님.(BeginOffsetMillis: 606847, EndOffsetMillis: 610047, Id: e3a8f11e-ad4f-4e1f-b5dd-aa7c47bf22da)\nCUSTOMER : 네, 알겠습니다. 감사합니다.(BeginOffsetMillis: 611937, EndOffsetMillis: 614737, Id: 47cee584-6a1b-4c54-aa92-5cce5a58b0d4)\nAGENT : 네. 네. 감사합니다. 박동주입니다.(BeginOffsetMillis: 613117, EndOffsetMillis: 616117, Id: 153c081d-30b0-4e47-9eb2-e67901d2c47c)\nCUSTOMER : 네.(BeginOffsetMillis: 618017, EndOffsetMillis: 618717, Id: 13016ca4-0bda-4866-abcf-00a6cd6982c8)"
+                "S": "# 역할 (Role)\n당신은 '글로벌서비스센터'의 수석 QA(Quality Assurance) 전문가입니다.\n\n# 목표 (Goal)\n고객 서비스 품질 향상을 위해 통화 녹취와 JSON 형식의 스크립트 데이터를 정밀 분석하여 담사의 서비스 품질을 평가하십시오.\n단순한 내용 요약이 아닌, 아래 정의된 **[평가 기준]**에 따라 체계적이고 객관적으로 분석하고, 상담사의 강점과 개선점을 명확히 파악하여 서비스 품질 향상에 기여하는 종합 평가 보고서를 작성하는 것입니다.따라 체계적이고 객관적으로 분석하고, 상담사의 강점과 개선점을 명확히 파악하여 서비스 품질 향상에 기여하는 종합 평가 보고서를 작성하는 것입니다. 모든 평가는 JSON 데이터 내의 구체적인 `Content`(발화)와 타임스탬프를 증거로 제시해야 합니다.\n\n# 입력 데이터 (Input Data)\n채널 구분: 왼쪽(Left) - 고객(불만/감정/이해 분석), 오른쪽(Right) - 상담원(끼어들기/속도/대응 분석).\n\n시간 기준: 모든 시간 정보는 스크립트 JSON의 BeginOffsetMillis를 최우선 절대적 기준으로 삼습니다.\n\n* 시간 변환 공식: * 초 단위 계산: BeginOffsetMillis / 1000 (예: 205,177ms / 1000 = 205.177초)\n\n* 타임스탬프 변환: 초 단위를 분:초(mm:ss) 형식으로 변환합니다. (예: 205,177ms = 205,177/60 =  03:25s )\n\n* 임의 보정 금지: 음성 파일의 흐름이나 대화 맥락에 의존하여 시간을 추측하지 마십시오. 오직 수치적 계산 결과만을 기재하십시오.\n\n<example>\nAGENT : 안녕하십니까? 김다미입니다.(BeginOffsetMillis: 12, EndOffsetMillis: 2152, id: cd782b03-1020-4563-a4f2-40b522264729)\nCUSTOMER : 아 네, 안녕하세요. 저희 항공권 가족들 거를 마일리지로 예약을 했는데요.(BeginOffsetMillis: 2777, EndOffsetMillis: 8837, Id: 3ba6ad1f-ee3d-4b10-b6ea-c6a4788b514b)\n</example>\n\n# 상담 스크립트\n<transcript>\nAGENT : 안소민입니다.(BeginOffsetMillis: 82, EndOffsetMillis: 1122, Id: 7a68a3fe-ba04-476d-87f9-7f58b70e3d31)\nCUSTOMER : 아 네. 문의 좀 드릴게요. 저기 제주도 가는데 애견 동반이어가지고.(BeginOffsetMillis: 1577, EndOffsetMillis: 6767, Id: 59a3a42e-22f9-4d7b-af2d-6aa01c2b1050)\nAGENT : 네.(BeginOffsetMillis: 3437, EndOffsetMillis: 3977, Id: 6282be90-5b43-42d0-baa1-b52326c9a32f)\nAGENT : 네.(BeginOffsetMillis: 5417, EndOffsetMillis: 5687, Id: e4e9bdb2-f9d3-4e96-b2c5-8cd25d00e48f)\nAGENT : 네.(BeginOffsetMillis: 7017, EndOffsetMillis: 7447, Id: af06658e-f161-475c-8c1e-cbd23a2a44c9)\nCUSTOMER : 네.(BeginOffsetMillis: 7997, EndOffsetMillis: 8307, Id: bc20d8ad-4405-435d-b264-64f3ba02b5c0)\nAGENT : 예약 번호나 일도 말씀해 주십시오.(BeginOffsetMillis: 8857, EndOffsetMillis: 11567, Id: 6aca980c-30ed-4d51-a403-839e71b75ab3)\nCUSTOMER : 네 네.(BeginOffsetMillis: 9697, EndOffsetMillis: 10617, Id: 7d2c8a7d-4bd3-4c7a-a19f-9e43d84ddf2e)\nCUSTOMER : 아 이름 말씀드릴까요?(BeginOffsetMillis: 13027, EndOffsetMillis: 14617, Id: 5c5cfc12-b757-4336-9b0c-d746db21383c)\nAGENT : 일정은 어디서 어디로 가는 일정입니까?(BeginOffsetMillis: 15037, EndOffsetMillis: 17677, Id: 63e1d524-0b75-46df-836a-96e57cc61404)\nCUSTOMER : 음 27일이요. 제주도요.(BeginOffsetMillis: 16987, EndOffsetMillis: 19187, Id: d7d245db-9078-4555-bddb-b98fa24c5957)\nAGENT : 몇 시 비행기입니까?(BeginOffsetMillis: 19527, EndOffsetMillis: 20647, Id: d3753be5-54e7-4674-ac9b-7262598f1564)\nCUSTOMER : 9시요.(BeginOffsetMillis: 21347, EndOffsetMillis: 22217, Id: b42a45ef-dba0-4afc-866c-1c0812f12eb8)\nAGENT : 개인 정보 보호를 위해 탑승객이 아닌 경우 정보 제공 제한될 수 있습니다. 탑승객 본인이십니까?(BeginOffsetMillis: 23027, EndOffsetMillis: 28277, Id: 0436387b-ea6c-4042-8b69-185af19f1d20)\nCUSTOMER : 네.(BeginOffsetMillis: 27647, EndOffsetMillis: 27847, Id: 58cbbe0e-c953-4fa4-bf16-582d496cf6bd)\nCUSTOMER : 네.(BeginOffsetMillis: 28867, EndOffsetMillis: 29367, Id: 25a237f4-e055-4d83-9f21-e011435af2e0)\nAGENT : 전화주신 정명아님이십니까?(BeginOffsetMillis: 29627, EndOffsetMillis: 31697, Id: ccf514bc-50d6-4748-b109-15b2ab4c676f)\nCUSTOMER : 네 네.(BeginOffsetMillis: 31997, EndOffsetMillis: 32627, Id: c5f07a38-7982-4c20-b66c-762503a2b7f8)\nAGENT : 네. 탑승자는 고객님 한 분입니까?(BeginOffsetMillis: 32787, EndOffsetMillis: 35187, Id: 716965ee-70aa-40e4-8aff-59c61bfcfbae)\nCUSTOMER : 4명이요.(BeginOffsetMillis: 35927, EndOffsetMillis: 36647, Id: 1f21def0-7ea9-4b0b-8c2b-b411612fba6a)\nAGENT : 일인분 성함도 말씀 부탁드립니다.(BeginOffsetMillis: 36957, EndOffsetMillis: 39967, Id: 73a319eb-0a4f-4cf0-860d-2ab46806b728)\nCUSTOMER : 저까지 포함 4명.(BeginOffsetMillis: 37197, EndOffsetMillis: 38427, Id: 6f5cd820-e086-49ed-898c-81826c762bf4)\nCUSTOMER : 네. 반대형, 반해경, 반아리네요.(BeginOffsetMillis: 40397, EndOffsetMillis: 43247, Id: fd7054f9-af54-42dd-844b-63bbc6a53109)\nAGENT : 확인 감사합니다. 저희(BeginOffsetMillis: 43467, EndOffsetMillis: 46527, Id: cebd4da0-edb6-48ef-8d6f-dc960af98e08)\nAGENT : 1월 27일 화요일 김포, 제주 오전 9시와 1월 31일 금요일 제주 김포 20:20으로 예약해 주셨고, 반려동물은 비행기 안으로 데려가는 한마리 맞습니까?(BeginOffsetMillis: 46697, EndOffsetMillis: 56997, Id: fc19b0cd-568c-49fc-bcf3-c8d765290b11)\nCUSTOMER : 네.(BeginOffsetMillis: 57507, EndOffsetMillis: 58007, Id: ec4f1cdc-97cd-4874-92b8-2ad56ce6ded9)\nAGENT : 네. 보호자님은 정명아님으로 신청해드릴까요?(BeginOffsetMillis: 58467, EndOffsetMillis: 61297, Id: 8e4ee483-c4d5-4321-ae4f-01940412d7a1)\nCUSTOMER : 네 네.(BeginOffsetMillis: 61817, EndOffsetMillis: 62407, Id: febc5d82-f2d7-4325-abed-6e285336a91e)\nAGENT : 네, 반려동물 종류와 나이 말씀해 주십시오.(BeginOffsetMillis: 62557, EndOffsetMillis: 65447, Id: 88a2be8c-6e0e-4e8d-9f86-dcd11822075b)\nCUSTOMER : 말티즈 8살이요.(BeginOffsetMillis: 66247, EndOffsetMillis: 68117, Id: 9561e908-f500-4685-9ad3-7c5bcac88425)\nAGENT : 네, 케이지에는 소프트 케이지입니까? 하드 케이지입니까?(BeginOffsetMillis: 68307, EndOffsetMillis: 71217, Id: c73f48ee-a009-42a1-a9c2-76f8901a265a)\nCUSTOMER : 어 어떤 다시 말씀해 주시겠어요?(BeginOffsetMillis: 72807, EndOffsetMillis: 75277, Id: 08030e33-0bdc-49bb-9c54-02b4c18b52c2)\nAGENT : 아 소프트 케이지니까 단단한 재질의 플라스틱이나 철제로 된 카드 케이지입니까?(BeginOffsetMillis: 74877, EndOffsetMillis: 80527, Id: 467f983d-df1f-4bcb-876a-c2019db68c55)\nCUSTOMER : 하드야. 아니.(BeginOffsetMillis: 80047, EndOffsetMillis: 81667, Id: 17a05d0a-20b0-4a15-80c3-7cd97ffccb16)\nAGENT : 하대.(BeginOffsetMillis: 81337, EndOffsetMillis: 81667, Id: 113ce8d9-d504-45f7-8e5a-503097174c14)\nCUSTOMER : 단- 단단하지 않은 거야.(BeginOffsetMillis: 82087, EndOffsetMillis: 83607, Id: f8b1e7c5-3b9b-48e1-8403-692cf9059f8a)\nAGENT : 아 금지시고 혹시 가로, 세로, 높이 사이즈 알고 계십니까?(BeginOffsetMillis: 83847, EndOffsetMillis: 88087, Id: 7aa6df7e-a1ce-4845-b9df-8a9251c9f52f)\nCUSTOMER : 응.(BeginOffsetMillis: 85937, EndOffsetMillis: 86107, Id: dcb70197-28e6-4678-b4fb-c8b77c9cd733)\nCUSTOMER : 어 아직 정확하게 모르겠는데.(BeginOffsetMillis: 88567, EndOffsetMillis: 90327, Id: 500d349a-d08e-45b6-8776-58a67b7e9076)\nAGENT : 모르세요? 저 일단 규정은 가로 32cm(BeginOffsetMillis: 89847, EndOffsetMillis: 93727, Id: 798f8959-28f1-43ef-82cb-3900f32d85ca)\nCUSTOMER : 네 네 네.(BeginOffsetMillis: 90857, EndOffsetMillis: 91447, Id: ff323af4-d53d-4f49-b682-255c8b3319c2)\nCUSTOMER : 잠시만요.(BeginOffsetMillis: 94467, EndOffsetMillis: 95407, Id: 251df1dc-d9c4-42f2-a2bd-af5549b7ec93)\nAGENT : 네.(BeginOffsetMillis: 95617, EndOffsetMillis: 96197, Id: 6baad4aa-e190-45c2-a950-bf7a777e5bed)\nCUSTOMER : 가로 32요?(BeginOffsetMillis: 96547, EndOffsetMillis: 97527, Id: f2f1d32b-39d5-4e70-a9f7-9e3ba96453b1)\nAGENT : 네.(BeginOffsetMillis: 97927, EndOffsetMillis: 98217, Id: 846d4cbb-4855-4634-99d9-ce5846d38e6e)\nCUSTOMER : 네.(BeginOffsetMillis: 99117, EndOffsetMillis: 99377, Id: 74d15c89-9f8f-443d-8084-cce6e9ecfdaa)\nAGENT : 그리고 세로 45cm.(BeginOffsetMillis: 99967, EndOffsetMillis: 103007, Id: 45eaa6ff-5642-4e16-a422-d7f25de79b6a)\nCUSTOMER : 네.(BeginOffsetMillis: 103817, EndOffsetMillis: 104287, Id: 6a8843e6-5904-4fbd-9437-e1aa6dd3d2ba)\nAGENT : 높이 25cm까지 반입 가능합니다.(BeginOffsetMillis: 104727, EndOffsetMillis: 107787, Id: c4a10222-ca7f-46d5-a2b2-7cb9306c70f6)\nCUSTOMER : 높이 25야.(BeginOffsetMillis: 108647, EndOffsetMillis: 109687, Id: d946428e-d975-402b-8e8c-15e13d2d5c48)\nAGENT : 네. 그래서 지금은 최대 사이즈로 입력해 놓겠습니다만 출발 전까지 정확한 사이즈 확인하셔서 전화 주신 후에 변경해 주시면 되고요. 사이즈 초과 시에는 운송 거절될 수 있습니다. 그리고 강아지 케이지 포함해서 몇 kg입니까?(BeginOffsetMillis: 109847, EndOffsetMillis: 125757, Id: 4f067207-3840-4159-aa66-3299c5f10e78)\nCUSTOMER : 네 네.(BeginOffsetMillis: 110937, EndOffsetMillis: 111407, Id: 98484079-ef21-47e1-82ec-b50364f73b84)\nCUSTOMER : 네.(BeginOffsetMillis: 114487, EndOffsetMillis: 114787, Id: 66a4b873-073f-4d8d-a0f2-67774b6658a7)\nCUSTOMER : 네 네.(BeginOffsetMillis: 119417, EndOffsetMillis: 119807, Id: 7adc6c2f-cb61-40db-8bac-c3418754c76a)\nCUSTOMER : 아 네 네.(BeginOffsetMillis: 122297, EndOffsetMillis: 123087, Id: 0b6dc7f6-5aec-456e-b5e3-a5615e91fa82)\nCUSTOMER : 음 지금 몸무게는 한 3kg 정도 되고요. 아니다. 3.8 정도 되고 KG까지 하면은 한 4.5?(BeginOffsetMillis: 127447, EndOffsetMillis: 136767, Id: 06afb471-bbaa-4ebb-83ac-0cb70a827a51)\nAGENT : 네.(BeginOffsetMillis: 131587, EndOffsetMillis: 132427, Id: 0ed7a87c-3db4-4161-9bed-8f3e0463b5b5)\nAGENT : 네.(BeginOffsetMillis: 136867, EndOffsetMillis: 137327, Id: c795c21c-c66e-4c5f-a2db-95b04d844896)\nCUSTOMER : 네, 5kg 미만일 것 같아요. 네.(BeginOffsetMillis: 138167, EndOffsetMillis: 140007, Id: 8e59e494-b45f-4aed-bcad-f9cf1f9c3a54)\nAGENT : 아 네. 저희 규정상 말씀드리겠습니다. 반려동물 움직이기 위한 충분한 여유 공간 필요하고 공격성향 안정제나 수면제 등 약물을 투여 임신 상대 암컷 심한 반려동물의 경우 운송 불가하고 는 등 소음 발생 가능성 높을 시 운송 거절될 수 있어 입마개 소지 부탁드리며, 바닥에 배변 패드 설치와 비행기 안에서 운반용기 개방하거나 꺼내지 않거나 먹이로 주신 행위는 제한이 되며 편도 ₩30, 000의 운임이 있습니다. 그리고 항공기 편도당 ₩30, 000(BeginOffsetMillis: 139917, EndOffsetMillis: 169867, Id: 48a0b493-5473-4039-8031-b06a13d43391)\nCUSTOMER : 네.(BeginOffsetMillis: 142697, EndOffsetMillis: 143127, Id: 590b9b8d-8fe2-4d90-afad-c8744f90d827)\nCUSTOMER : ₩30, 000, 000요.(BeginOffsetMillis: 168147, EndOffsetMillis: 168767, Id: bb0f9f88-a333-4e37-910f-f7b27e27f91b)\nAGENT : 이며 항공기 교체 등 사유로 기종 변경될 수 있으며 이로 인해 반려동물 신청이 변경 또는 취소될 수 있습니다. 그리고 정명아님께서는 반려동물 전용석 앉아주셔야 되는데 김포제주공간 전용석은 37 F 창가와 54번의 에 창가가 있습니다. 어디로 지정해드릴까요?(BeginOffsetMillis: 169897, EndOffsetMillis: 189437, Id: 72f175dd-bb22-4f1e-8094-732edb9c1480)\nCUSTOMER : 네.(BeginOffsetMillis: 181657, EndOffsetMillis: 181947, Id: 841d3c46-5f8b-422d-b484-9ad1af458fd5)\nCUSTOMER : 아 혹시 저희가 지금 사인 가족이잖아요. 그 한쪽 같이 네 명이 다 앉을 수 있을까요?(BeginOffsetMillis: 189437, EndOffsetMillis: 196407, Id: 8b9f1478-8ea7-4a92-9ae2-eaf58ebe2a86)\nAGENT : 네.(BeginOffsetMillis: 192777, EndOffsetMillis: 193407, Id: dc8019d9-b591-4078-93b6-0714f900e05c)\nAGENT : 너무 죄송하게도 오픈된 자리가 이렇게 뛰어있는 자리밖에 없어서 지금은 이렇게 배송하시고 공항 오셔서 혹시 나란히 자리 있으면은 공항에서 변경하실 수 있는데 일단 정명원님은 그 전용 사고 앉아주셔야 됩니다.(BeginOffsetMillis: 196407, EndOffsetMillis: 208127, Id: 938b942f-7e54-4b32-9dcd-420bba6854bf)\nCUSTOMER : 아.(BeginOffsetMillis: 204217, EndOffsetMillis: 204707, Id: df48b521-d51d-4ea7-bc5f-79541f2d2db2)\nCUSTOMER : 어.(BeginOffsetMillis: 209177, EndOffsetMillis: 209627, Id: 1bddacf3-0a2b-461c-8091-f1af62c4b0b8)\nCUSTOMER : 그 그 잠깐만요. 어느 쪽이 나올까요?(BeginOffsetMillis: 210377, EndOffsetMillis: 213717, Id: 962e47ad-99bb-4696-8727-567aed565835)\nAGENT : 조금 앞쪽은 37입니다. 둘 다 창가석이고요.(BeginOffsetMillis: 213847, EndOffsetMillis: 216837, Id: 59a539ea-f79c-4da3-86c4-dd1fa081f3a2)\nCUSTOMER : 아 그럼 50(BeginOffsetMillis: 217657, EndOffsetMillis: 218767, Id: 3d46a833-a9ba-46f6-b2db-69592dfb63ab)\nCUSTOMER : 지적으로는(BeginOffsetMillis: 219367, EndOffsetMillis: 220777, Id: 8370f3a7-016e-4640-8942-a2a7f1fda07f)\nCUSTOMER : 뒤쪽이 좀 낫지 않을까요?(BeginOffsetMillis: 221047, EndOffsetMillis: 222707, Id: 13ea1a72-8c65-4bad-98a8-b685baa0bb5b)\nAGENT : 아 네. 그럼 54F로 지정해드리겠습니다.(BeginOffsetMillis: 223017, EndOffsetMillis: 226147, Id: 2aa7179f-f272-4a8f-8c31-a4753aedcd4f)\nCUSTOMER : 응.(BeginOffsetMillis: 225507, EndOffsetMillis: 225807, Id: 48e964fd-15b9-4e99-b354-1f06a7a111fa)\nAGENT : 그리고 돌아오는 제주, 김포는 잠시 기다려 주십시오.(BeginOffsetMillis: 227287, EndOffsetMillis: 230647, Id: 76a635e1-a0ee-4814-96f8-5a2d5e1331a4)\nCUSTOMER : 아, 시간이?(BeginOffsetMillis: 232617, EndOffsetMillis: 233157, Id: 6465fa1f-7bc9-40b9-96b1-a154756eeb89)\nAGENT : 아 아니요. 지금 여기 발려 전용석은 2429조이고요. 여기는 나란히 지정 가능해서 45번에 AB, 복도 끼구 CD 이렇게 규정해드리겠습니다.(BeginOffsetMillis: 233737, EndOffsetMillis: 243827, Id: 31523e98-a606-427a-8a66-388ef5831db7)\nCUSTOMER : 네.(BeginOffsetMillis: 236637, EndOffsetMillis: 236917, Id: ee3b5745-63f3-4005-ba64-8dfc24b0b3c1)\nCUSTOMER : 네.(BeginOffsetMillis: 238637, EndOffsetMillis: 238897, Id: 05326159-212f-4b7b-88fd-3d1857e560e9)\nCUSTOMER : 어.(BeginOffsetMillis: 240697, EndOffsetMillis: 240997, Id: 0481adb3-2bb7-415a-9d44-2547628f5849)\nCUSTOMER : 아 이게 위 그러니까 앞뒤로는 안 되는 거죠. 자리가.(BeginOffsetMillis: 244537, EndOffsetMillis: 249317, Id: f677a66d-bbfb-487f-a037-5da185a09802)\nAGENT : 어 됩니다. 그러면 50(BeginOffsetMillis: 248667, EndOffsetMillis: 250397, Id: b6869854-eae3-47a7-b8a9-2a09ba7099bd)\nCUSTOMER : 아 돼요? 그러면 앞뒤로.(BeginOffsetMillis: 250237, EndOffsetMillis: 252137, Id: 84925ec9-8b9d-40d9-9962-2fdd7b74c5d6)\nAGENT : 뒤쪽으로 가셔야 되는데 괜찮으세요?(BeginOffsetMillis: 251337, EndOffsetMillis: 253577, Id: 26c91ec9-09b9-44a3-a520-b95dd6e6494b)\nCUSTOMER : 창가 쪽.(BeginOffsetMillis: 253847, EndOffsetMillis: 254647, Id: 7fbc735b-2693-42b1-a206-4e491e85907c)\nAGENT : 네.(BeginOffsetMillis: 254777, EndOffsetMillis: 254967, Id: 64806c75-9452-4e69-b702-907f201e1a95)\nAGENT : 상가 쪽 좀 뒤쪽에 있고(BeginOffsetMillis: 255367, EndOffsetMillis: 257337, Id: 57c90d47-c3df-4224-86f2-90c6d0f7a581)\nCUSTOMER : 창가 쪽으로 앞뒤, 예.(BeginOffsetMillis: 255887, EndOffsetMillis: 257807, Id: 4d93ecf8-80e8-4ac4-9270-41e2d97d74bd)\nAGENT : 57GH58GH로 창가 쪽 2명 2명 앞뒤로 지정 완료되었습니다.(BeginOffsetMillis: 258647, EndOffsetMillis: 265557, Id: aa79af50-6fdf-4eb5-9650-40790f6749c9)\nCUSTOMER : 네. 네. 네. 아 그러면 올 거는 올 때는 그렇게 됐는데 그 갈 때는 만약에 자리가 만약에 그 같은 지역으로 자리로 안되면 그냥 다 따로따로 그냥 앉아야 되나요?(BeginOffsetMillis: 265447, EndOffsetMillis: 278927, Id: a6d5fe03-59c1-43c9-bb97-b7c2edc77ae6)\nAGENT : 네.(BeginOffsetMillis: 279177, EndOffsetMillis: 279407, Id: 17fdb604-ea87-4a93-a192-f72d5c3f55c8)\nAGENT : 일단 고객님은 무조건(BeginOffsetMillis: 280387, EndOffsetMillis: 281897, Id: 6d1811b3-49cc-428d-8e2c-b7727ebc746e)\nCUSTOMER : 지금 자리가 없는 건가요?(BeginOffsetMillis: 280807, EndOffsetMillis: 282367, Id: 9bea455c-d366-454e-ac69-485054408d73)\nAGENT : 네. 없고요. 고객님은 전용서 앉으셔야 되는데 현재 고객님 주변에 그 좌석들은 현재 다 마감된 상태라서 다른 다른 승객분들이 취소하지 않는 이상은 자리가 안 나올 것 같고요. 그다음에 다른 이제 가족분 세분 같은 경우에는 공항 오셔서 현장에서 혹시 나란히 자리에 앉을 수 있는지 확인해 보셔야 됩니다.(BeginOffsetMillis: 282687, EndOffsetMillis: 301407, Id: ac9ef531-a59e-4563-9dc3-7d03b75135d0)\nCUSTOMER : 네.(BeginOffsetMillis: 286217, EndOffsetMillis: 286487, Id: 67872a33-7824-4a36-8818-222a17b9c962)\nCUSTOMER : 어 어.(BeginOffsetMillis: 289657, EndOffsetMillis: 290687, Id: c94ee309-e498-4095-8c16-d804755d5b11)\nCUSTOMER : 아.(BeginOffsetMillis: 294217, EndOffsetMillis: 294847, Id: 61c75c9b-b3c9-492f-80b0-e156052a2461)\nCUSTOMER : 아 네. 알겠습니다.(BeginOffsetMillis: 302177, EndOffsetMillis: 303707, Id: f770077e-0726-492e-aa43-ad2239c3921c)\nAGENT : 네 감사합니다.(BeginOffsetMillis: 303227, EndOffsetMillis: 304867, Id: d8803bbd-7f84-4310-9d75-ef3109ca2f75)\nCUSTOMER : 네. 감사합니다. 네.(BeginOffsetMillis: 305607, EndOffsetMillis: 307637, Id: 1005264f-bedf-4e3a-a195-68e96856cc01)\nAGENT : 완료되었습니다.(BeginOffsetMillis: 305617, EndOffsetMillis: 307187, Id: 33a96bd8-6229-4ee7-9399-2ff2e7eb00f2)\nAGENT : 감사합니다.(BeginOffsetMillis: 307717, EndOffsetMillis: 308267, Id: d511cd5f-680a-407e-97e8-773e33176c74)\nCUSTOMER : 네.(BeginOffsetMillis: 308477, EndOffsetMillis: 309067, Id: cb74142a-9514-405a-8842-92d50c996c1e)\n</transcript>\n\n# Evaluation Criteria (평가 기준)\n\n## 1. 인사 (Greeting)\n\n## 1.1. 첫인사 평가 (Opening)\n1.1.1. 표준 인사말 준수 여부:\n   - 기본: \"안녕하십니까? [상담원 이름]입니다.\" 형식을 갖추었는가?\n   - 예외: \"기다려주셔서 감사합니다. [상담원 이름]입니다.\"도 정답으로 인정.\n   - 필수 요소: '인사말(안녕하십니까/감사합니다)'과 '이름'이 모두 포함되어야 함.\n1.1.2. 신속성 및 준비 상태:\n   - 고객이 먼저 \"여보세요\"라고 말하게 하지 않았는가?\n   - 통화 연결 후 즉시 응대했는가? (스크립트 상 고객 발화가 먼저 시작되면 감점)\n\n## 1.2. 인사말 호응 평가 (Response)\n1.2.1. 고객 인사에 대한 호응:\n   - 고객이 \"수고하십니다\" 발언 시 -> \"감사합니다\"로 응대했는가?\n   - 고객이 \"통화하기 힘드네요\" 발언 시 -> \"기다려 주셔서 감사합니다\"로 응대했는가?\n   - 예외: 고객이 인사 없이 바로 용건을 말한 경우, 호응어가 없어도 감점하지 않음.\n   - 감점 요인: 고객의 인사에 \"네\"라고만 답하거나 무시한 경우.\n   - 대기 불만 제기 시: \"기다리시게 해서 죄송합니다. 신속하게 도와드리겠습니다.\"\n\n## 1.3. 끝인사 평가 (Closing)\n1.3.1. 추가 문의 확인 (필수):\n   - 상담 종료 전 \"추가 문의사항 있습니까?\" 또는 \"다른 요청사항이 있습니까?\" 등을 질문했는가?\n1.3.2. 표준 끝인사 준수 여부:\n   - 기본: \"감사합니다. [상담원 이름]입니다(였습니다).\"\n   - 상황별 변형:\n     - 불만/미해결 종료 시: \"죄송합니다. [상담원 이름]입니다.\"\n     - 상담 중 이름을 이미 밝힌 경우: \"감사합니다\" (이름 생략 가능)\n     - 고객이 끊지 않을 경우: \"문의 사항 없으시면 먼저 종료하겠습니다.\"\n     - 대기 불만 제기 시: \"기다리시게 해서 죄송합니다. 신속하게 도와드리겠습니다.\"\n1.3.3. 이름 명확성:\n   - 끝인사 시 이름을 포함했는가? (위 예외 상황 제외)\n\n## 2. 음성연출 (VoiceProduction)\n\n## 2.1. 정중함과 친밀감의 조화 (Tone_Manner)\n**[분석 로직]**\n2.1.1. 종결 어미 혼합 사용:\n   - 일반 안내 시: '요/조체(친밀감, ~해요)'와 '다/까체(정중함, ~입니다)'가 적절히(약 5:5) 섞여 있는지 확인하십시오.\n   - 예외: 상담 전체가 지나치게 딱딱하거나(군대식 말투), 반대로 지나치게 가벼운지(친구 대화) 확인하십시오.\n2.1.2. 거절/부정 안내 시 태도 변화:\n   - 고객에게 불리한 정보(결항, 불가, 만석 등)를 전달하는 순간을 찾으십시오.\n   - 이때는 '다/까체(~입니다/죄송합니다)'를 사용하여 정중하고 침착한 태도로 전환했는지 확인하십시오.\n2.1.3. 고압적/부정적 표현 감점:\n   - \"안 되거든요\", \"규정이라서요\"와 같이 단정적이고 차가운 종결 어미가 사용되었는지 확인하십시오.\n   - 한숨 소리(STT에 (한숨) 등이 기록된 경우)나 직원의 짜증 섞인 반응이 텍스트에 드러나는지 확인하십시오.\n\n## 2.2. 부정적 상황 핸들링 (Handling_Negativity)\n**[핵심 키워드 체크]**\n2.2.1. 쿠션 멘트(Cushion Words) 필수 사용:\n   - 거절, 불가, 설득이 필요한 시점에 아래 키워드가 사용되었는지 확인하십시오.\n   - 키워드: \"번거로우시겠지만\", \"실례지만\", \"불편하시겠지만\", \"양해 부탁드립니다\", \"죄송합니다만\"\n2.2.2. 긍정 화법 및 대안 제시 (Positive Framing):\n   - \"안 됩니다\"로 끝나는 것이 아니라, \"~를 통해 가능합니다\" 또는 \"~방법이 있습니다\"로 전환했는지 확인하십시오.\n   - 예: \"환불 안 돼요\" (Fail) -> \"규정상 환불은 어렵지만, 변경은 가능하십니다\" (Pass)\n2.2.3. 진심 어린 사과:\n   - 귀책 사유나 고객 불편 발생 시 단순 \"네\"가 아닌 \"죄송합니다\", \"많이 당황하셨겠습니다\" 등의 표현이 포함되었는지 확인하십시오.\n\n## 2.3. 적극적 경청 및 호응 (Active_Listening)\n**[패턴 분석]**\n2.3.1. 호응어의 다양성:\n   - 상담원이 \"네\", \"네네\"만 반복하는지(기계적 호응) 확인하십시오.\n   - \"그러셨군요\", \"확인해 보겠습니다\", \"맞습니다\", \"많이 기다리셨죠\" 등 다양한 표현을 사용하는지 평가하십시오.\n2.3.2. 핵심어 반복(Paraphrasing):\n   - 고객이 말한 핵심 단어나 요청 사항을 상담원이 따라 말하며 확인하는 과정이 있는지 체크하십시오.\n2.3.3. 침묵 방지:\n   - 고객이 \"여보세요?\", \"듣고 계세요?\"라고 묻는 상황이 발생했다면, 이는 적절한 호응 타이밍을 놓친 것으로 간주하여 **FAIL** 처리하십시오.\n\n## 3. 상담속도 (Speed)\n\n## 3.1. 상담원 발화 중단 분석 (Interruption_Analysis)\n**[분류 기준]**\n3.1.1. **PASS (정상 응대 - 예외 처리):**\n   - **단순 호응:** 내용이 \"네\", \"아\", \"음\" 등이며, 겹침 시간이 500ms(0.5초) 미만인 경우.\n   - **정보 수집 완료:** 고객의 `Sentiment`가 NEUTRAL이고 문장이 완결된 후(종결어미 감지) 즉시 응대하는 경우.\n   - **침묵 후 발화:** `상담원 Begin` - `고객 End` >= 1000ms (1초 이상의 공백 후 발화).\n\n3.1.2. **FAIL (감점 대상 - 중단 발생):**\n   - **유형 A (명백한 겹침):** 겹침 지속 시간이 **2000ms(2초)** 이상인 경우. (LoudnessScore가 양쪽 모두 높다면 '언쟁'으로 기록)\n   - **유형 B (복합 호응 끼어들기):** \"네\"로 시작하지만 뒤이어 문장이 계속되며, 고객 발화 도중(`Agent Begin < Customer End`)에 시작된 경우.\n   - **유형 C (말꼬리 덮기):** 고객이 말을 더듬거나 흐리는 중에 치고 들어간 경우.\n   - **양해 멘트 부재:** 위 겹침 상황에서 \"죄송합니다만\", \"잠시만요\" 등의 사과 표현이 없는 경우.\n\n## 3.2. 어속 조절 및 이해도 확인 (Pacing_Understanding)\n`Content`의 텍스트 길이와 `Duration`(`End - Begin`)을 비교하여 판단하십시오.\n3.2.1. **필수 정보 구간 분석:**\n   - 운임, 날짜, 규정 등 숫자/조건이 포함된 상담원 발화 구간을 찾으십시오.\n   - 해당 구간의 글자 수 대비 시간이 너무 짧으면(빠른 어속) 경고하십시오.\n3.2.2. **고객 이해도 실패 감지:**\n   - 고객 발화 중 \"뭐라고요?\", \"네?\", \"다시요\", \"빨라요\" 등이 포함된 경우.\n   - 또는 고객 `Sentiment`가 `NEGATIVE`로 변하면서 재질문하는 경우.\n3.2.3. **상담원 대응:**\n   - 재질문 발생 시 상담원의 다음 발화 속도가 느려졌는지, 혹은 문장이 간결해졌는지 확인하십시오. (이전과 동일하면 FAIL)\n\n# [작업 지침 (Core Instructions)]\n전수 조사 및 임의 생략 금지: 분석 과정에서 식별된 모든 사례(특히 끼어들기)는 단 하나도 누락 없이 events 리스트에 포함되어야 합니다. \"대표 사례만 추출\"하거나 \"중략\"하는 행위를 엄격히 금지합니다.\n\n## 4. 언어사용 (Language_Use)\n\n## 4.1. 문법 및 사물 존칭 오류 (Grammar_Object_Honorifics)\n**[핵심 감점 요인]**\n사람이 아닌 사물이나 개념에 존칭을 사용하는 **'사물 존칭'** 오류를 검출하십시오.\n- **검출 패턴:**\n  - 주어(사물: 요금, 자리, 시간, 서류, 상품 등) + 서술어(존칭: ~이세요, ~이십니다, ~계십니다).\n  - 예시: \"요금이 5만원**이세요**\", \"좌석이 만석**이십니다**\", \"커피 나오**셨습니다**\", \"예약하는 거**세요**?\"\n- **정상 표현:** \"5만원입니다\", \"만석입니다\", \"나왔습니다\" 등.\n\n## 4.2. 부적절한 어휘 사용 (Inappropriate_Vocabulary)\n다음 카테고리에 해당하는 단어가 상담원 발화에 포함되었는지 확인하십시오.\n4.2.1. **내부 은어 및 거친 표현:**\n   - 금지어: \"자리가 풀리다\", \"예약이 잘리다\", \"표를 끊다\", \"마일을 뽑다\", \"빵꾸나다\".\n4.2.2. **과도한 외래어 및 전문 용어:**\n   - 금지어: \"캔슬(Cancel)\", \"리펀드(Refund)\", \"조인트(Joint)\", \"노쇼(No-show)\".\n   - 기준: 고객이 이해하기 쉬운 우리말(취소, 환불, 연결, 미탑승) 대신 외래어를 사용한 경우.\n4.2.3. **직원 관점의 표현:**\n   - 예시: \"입력해 드릴게요\", \"기록 만들게요\", \"운임 받을게요\".\n   - 권장: \"확인해 드리겠습니다\", \"예약해 드리겠습니다\", \"결제 도와드리겠습니다\".\n\n## 4.3. 정중하지 못한 어감 및 화법 (Unpolite_Tone_Manner)\n종결 어미와 연결어를 분석하여 태도를 평가하십시오.\n4.3.1. **반토막말 및 성의 없는 종결:**\n   - 명사형 종결: \"성함은**요**?\", \"날짜는**요**?\", \"잠시만**요**\". (완전한 문장이 아님)\n   - 반말체 질문: \"~지**요**?\"가 아닌 \"~죠?\"의 빈번한 사용.\n4.3.2. **부정/단정적 표현:**\n   - 금지 패턴: \"안되**죠**\", \"그건 모르**죠**\", \"글쎄**요**\". (고객 무시 또는 책임 회피)\n4.3.3. **공손하지 않은 연결어 (변명조):**\n   - 금지 패턴: \"~하**구요**\", \"~하**거든요**\", \"~했**잖아요**\".\n\n## 4.4. 습관적 추임새 및 혼잣말 (Bad Habits)\n- **의미 없는 추임새:** \"뭐~\", \"어~\", \"음~\", \"아무튼\", \"일단\"이 문장 시작마다 반복되는지 확인.\n- **혼잣말:** \"어디보자...\", \"이게 얼마더라...\" 등 업무 처리 중 독백이 포함되었는지 확인.\n\n## 5. 추가 검증 항목 (Additional_Verification)\n\n## 5.1. 중복 본인 확인 검증 (Duplicate_Authentication_Check)\n시스템에서 이미 본인 확인이 완료된 상태입니다. 상담사가 인증된 고객에게 다시 본인 확인 절차(생년월일, 주소, 연락처 등)를 요청했는지 확인하세요. 중복 요청은 감점 요인입니다. (단, 대리인 확인, 민감 정보 변경 등 추가 보안이 필요한 특수 상황은 예외)\n\n\n# Output Format (출력 형식)\n\n# [작성 절차 (Thinking Process)]\n분석 결과 작성 시, 바로 JSON을 출력하지 말고 내부적으로 다음 순서를 따르십시오:\n1. 상담원 끼어들기(Interruption) 타임스탬프를 먼저 모두 나열하십시오.\n2. 나열된 타임스탬프가 총 몇 개인지 세어보십시오. (Count)\n3. 그 Count 값을 `total_interruptions`에 입력하십시오.\n4. 그 후 각 타임스탬프에 해당하는 상세 내용을 `events` 리스트에 작성하십시오.\n\n분석 결과는 반드시 아래의 JSON 스키마 구조를 준수하여 작성하십시오. 마크다운 코드 블록(```json) 안에 유효한 JSON만 출력하고, 사족을 붙이지 마십시오.\n '판정'은 PASS 또는 FAIL입니다.\n\n```json\n{\n  \"summary\": {\n    \"greeting_result\": \"PASS/FAIL\",\n    \"score\": \"100점 만점 기준 점수 (정성적 판단)\",\n    \"VoiceProduction_result\": \"PASS/FAIL\",\n    \"score\": \"100점 만점 기준 점수 (정성적 판단)\",\n    \"Speed_result\": \"PASS/FAIL\",\n    \"score\": \"100점 만점 기준 점수 (정성적 판단)\",\n    \"Language_Use_result\": \"PASS/FAIL\",\n    \"score\": \"100점 만점 기준 점수 (정성적 판단)\",\n  },\n  \"details\": {\n    \"greeting\" : {\n      \"opening\": {\n        \"status\": \"PASS/FAIL\",\n        \"reason\": \"평가 근거 요약\"\n      },\n      \"response\": {\n        \"status\": \"PASS/FAIL (or N/A)\",\n        \"reason\": \"고객 인사가 없었다면 N/A, 그 외 평가 근거\"\n      },\n      \"additional_inquiry_check\": {\n        \"status\": \"PASS/FAIL\",\n        \"reason\": \"추가 문의 확인 멘트 유무\"\n      },\n      \"closing\": {\n        \"status\": \"PASS/FAIL\",\n        \"reason\": \"끝인사 및 이름 언급 여부\"\n      },\n      \"feedback_message\": \"상담원에게 전달할 피드백 문구 (표준 미달 시: 고객이 느끼는 감정을 포함하여 코칭 멘트 작성 / 표준 준수 시: 칭찬 멘트 작성)\"\n    },\n    \"VoiceProduction\" : {\n      \"Tone_Manner\": {\n        \"status\": \"PASS/FAIL\",\n        \"reason\": \"요조체/다까체 혼합 비율 및 분위기 분석 결과\"\n      },\n      \"handling_negativity\": {\n        \"status\": \"PASS/FAIL\",\n        \"cushion_words_used\": [\"사용된 쿠션멘트 나열 (없으면 '없음')\"],\n        \"reason\": \"쿠션멘트 사용 여부 및 대안 제시 여부\"\n      },\n      \"active_listening\": {\n        \"status\": \"PASS/FAIL\",\n        \"reason\": \"호응어 다양성 및 핵심어 반복 여부\"\n      },\n      \"feedback_message\": \"상담원 피드백 (표준 미달 시: 고객의 심정을 대변하여 코칭 / 준수 시: 구체적인 칭찬)\"\n    },\n    \"Speed\" : {\n      \"Interruption_Analysis\": {\n        \"summary\": {\n        \"total_interruptions\": 0,\n        \"grade\": \"PASS/FAIL\"\n        },\n        \"events\": [\n          {\n            \"type\": \"유형 B (복합 호응 끼어들기)\",\n            \"timestamp_start\": \"03:15\",\n            \"timestamp_end\": \"03:18\",\n            \"content_context\": \"고객: 제가 그래서 19일에... / 상담원: 네 19일은 안되고요.\",\n            \"apology_used\": false,\n            \"judgment\": \"FAIL\"\n          }\n        ]\n      },\n      \"pacing_understanding\": {\n        \"summary\": {\n          \"re_explanation_requests\": 0,\n          \"assessment\": \"Good/Fast/Slow\"\n        },\n        \"issues\": [\n          {\n            \"timestamp\": \"01:45\",\n            \"category\": \"어속 빠름 / 필수 정보 전달 미흡\",\n            \"customer_reaction\": \"네? 다시 말해주세요. (Sentiment: NEGATIVE)\",\n            \"agent_response_quality\": \"속도 조절 없이 단순 반복함 (FAIL)\"\n          }\n        ]\n      },\n      \"feedback_message\": \"데이터 기반의 구체적 피드백 (예: 03:15 구간에서 고객 말이 끝나기 2.9초 전에 끼어들었습니다. 양해 멘트가 필요합니다.)\"\n    },\n    \"Language_Use\" : {\n      \"language_quality_score\": {\n        \"events\": [\n          {\n            \"timestamp\": \"mm:ss\",\n            \"error_sentence\": \"요금이 5만원이세요.\",\n            \"correction\": \"요금이 5만원입니다.\",\n            \"reason\": \"사물(요금)에 존칭 사용\"\n          }\n        ]\n      },\n      \"inappropriate_vocabulary\": {\n        \"events\": [\n          {\n            \"timestamp\": \"mm:ss\",\n            \"category\": \"내부 은어/외래어/직원관점\",\n            \"detected_word\": \"예약이 잘리다\",\n            \"correction\": \"예약이 취소되다\",\n            \"context\": \"시간 안 지키시면 예약이 잘리거든요.\"\n          }\n        ]\n      },\n      \"Unpolite_Tone_Manner\": {\n        \"events\": [\n          {\n            \"timestamp\": \"mm:ss\",\n            \"type\": \"반토막말/단정적표현/변명조\",\n            \"detected_sentence\": \"성함은요?\",\n            \"correction\": \"성함이 어떻게 되십니까?\",\n            \"analysis\": \"명사형 질문으로 고객을 하대하는 느낌을 줌\"\n          }\n        ]\n      },\n      \"bad_habits\": {\n        \"events\": [\n          {\n            \"timestamp\": \"mm:ss\",\n            \"habit_type\": \"추임새/혼잣말\",\n            \"content\": \"아무튼 그건 안돼요.\",\n            \"count\": \"반복 횟수\"\n          }\n        ]\n      },\n      \"feedback_message\": \"상담원에게 전달할 피드백 문구. (예: '요금이 5만원이세요'와 같은 사물 존칭은 문법에 맞지 않으며 서비스 품격을 낮춥니다. '5만원입니다'로 간결하게 표현해 주세요. 또한 '잘리다'와 같은 은어는 고객에게 거친 인상을 주므로 지양해야 합니다.)\"\n    }\n  }\n}"
             },
             "streaming": {
                 "BOOL": false
@@ -58,18 +64,18 @@
                                     "data": {
                                         "M": {
                                             "agent_confirmation": {
-                                                "S": "전화주신 박희영 고객님 탑승자 본인이십니까?"
+                                                "S": "전화주신 정명아님이십니까?"
                                             },
                                             "authenticated": {
                                                 "BOOL": true
                                             },
                                             "dobAuthenticated": {
-                                                "NULL": true
+                                                "S": "true"
                                             }
                                         }
                                     },
                                     "functionCallId": {
-                                        "S": "61bace5d-9a67-416f-8188-e329bc4664d2"
+                                        "S": "863638c2-2726-47f7-b14d-0a1bc05d8409"
                                     },
                                     "name": {
                                         "S": "DOB_Authenticate"
@@ -88,7 +94,7 @@
                                     "args": {
                                         "M": {
                                             "transcript_agent_confirmation": {
-                                                "S": "전화주신 박희영 고객님 탑승자 본인이십니까?"
+                                                "S": "전화주신 정명아님이십니까?"
                                             },
                                             "transcript_authenticated": {
                                                 "BOOL": true
@@ -96,7 +102,7 @@
                                         }
                                     },
                                     "id": {
-                                        "S": "61bace5d-9a67-416f-8188-e329bc4664d2"
+                                        "S": "863638c2-2726-47f7-b14d-0a1bc05d8409"
                                     },
                                     "name": {
                                         "S": "DOB_Authenticate"
@@ -109,96 +115,454 @@
                         "S": "gemini-2.5-flash"
                     },
                     "processingTime": {
-                        "N": "38.76"
+                        "N": "42.54"
+                    },
+                    "thinkingText": {
+                        "S": "Okay, here's what I'm thinking. I'm being asked to analyze this transcript and look for specific situations to trigger a function call. The only situation I'm looking for is \"DOB_Authenticate,\" which means the agent is directly asking for or verifying a customer's identity.\n\nI need to read the transcript line by line, focusing on any instances where the agent asks the customer for personal identification.\n\n*   First, the agent introduces themself. Then, a customer calls about their trip.\n*   The agent asks for the customer's reservation number or date. The customer offers their name. The agent asks about the flight details.\n*   Then comes a key line: \"개인 정보 보호를 위해 탑승객이 아닌 경우 정보 제공 제한될 수 있습니다. 탑승객 본인이십니까?\" This is a question regarding identity, verifying that the caller *is* the passenger, but doesn't *specifically* ask for personal info like birthdate. So I'll skip it for now.\n*   Finally! The agent asks, \"전화주신 정명아님이십니까?\" Bingo! This directly asks the customer to confirm their name, confirming the customer's identity. This *definitely* triggers `DOB_Authenticate`. The agent is requesting/questioning the customer's identity.\n*   So I need to set `transcript_authenticated` to `True` because the agent *is* asking the question.\n*   Also, I need to remember the exact question asked, which is \"전화주신 정명아님이십니까?\". I'll save that as `transcript_agent_confirmation`.\n\nBased on my understanding of the `DOB_Authenticate` definition, I'm ready. The question the agent asked (\"전화주신 정명아님이십니까?\") fits perfectly into the definition of \"본인 확인을 요청/질문\". So, I'll call `DOB_Authenticate(transcript_authenticated=True, transcript_agent_confirmation=\"전화주신 정명아님이십니까?\")` . And importantly, I only need to call it *once* because there is only one instance of the triggering event.\n"
                     },
                     "tokenUsage": {
                         "M": {
                             "inputTokens": {
-                                "N": "2950"
+                                "N": "1998"
                             },
                             "outputTokens": {
-                                "N": "29"
+                                "N": "23"
                             },
                             "totalTokens": {
-                                "N": "3229"
+                                "N": "2599"
                             }
                         }
                     },
                     "toolPrompt": {
-                        "S": "\n당신은 항공사 콜센터 상담 분석 시스템입니다.\n\n<task>\n아래 상담 스크립트를 **전체적으로 분석**하여, 적절한 함수를 호출하세요.\n텍스트로 응답하지 말고, 함수 호출(Function Calling)을 통해 결과를 반환하세요.\n\n## 사용 가능한 함수\n\n### 1. DOB_Authenticate\n상담사가 고객에게 본인 확인을 요청/질문한 경우 1회 호출합니다. 본인 확인 질문/요청 시점에 호출하세요. 확인 완료 여부와 무관합니다. 예: 생년월일 확인 부탁드립니다, 본인 확인을 위해 생년월일 말씀해주세요, 고객님 성함과 생년월일 확인 부탁드려요\n\n**파라미터:**\n  - transcript_authenticated: 본인 확인 요청 여부 (true: 요청함, false: 요청하지 않음)\n  - transcript_agent_confirmation: 상담사가 본인 확인을 요청한 발화 내용\n\n## 중요 규칙\n- 각 함수는 **필요한 경우에만** 호출하세요\n- 스크립트에서 관련 정보를 찾을 수 없으면 함수를 호출하지 마세요\n</task>\n\n<transcript>\nAGENT : 안녕하십니까? 박동주입니다.\nCUSTOMER : 아 네, 안녕하세요. 제가 그 예약번호 아까 제가 통화했던 분이랑 혹시 다시 연결은 어려운 거죠?\nAGENT : 음 네, 그렇습니다. 고객님 혹시 예약번호 또는 정확한 사정이 어떻게 됩니까?\nCUSTOMER : 아 네.\nCUSTOMER : 아 네, 예약 번호 말씀드리면 5K7LNX.\nAGENT : 확인해 보겠습니다. 개인정보 보호를 위해 탑승자가 아닌 경우 정보 제공 제한될 수 있습니다. 전화주신 박희영 고객님 탑승자 본인이십니까?\nCUSTOMER : 네, 맞습니다.\nAGENT : 동반 탑승객분 있으시면 성함 말씀해 주시겠습니까?\nCUSTOMER : 이희용이요.\nAGENT : 잠시만 기다려 주십시오, 고객님.\nAGENT : 지금 호놀룰루 인천이 예약부도 위약금 나와서 변경하셔야 될 때 변경 수수료, 그다음 운임차 세금차액터 발생되고 이전 상담 확인해 봤을 때에는 고객님께서 폐쇄공포증으로 인해서 플라스티지를 이용 원하셨으나 지금 프레스티지가 없어서 상담을 받아주셨던 거죠, 고객님?\nCUSTOMER : 네 네, 맞습니다.\nAGENT : 네, 확인되고 있고요. 정확하게 이제 어떻게 하실 예정인지 확인 부탁드려도 될까요?\nCUSTOMER : 아 네. 네. 지금 그래서 뭔가 뭐 취소되거나 이런 게 나오면 내일자 출발로요. 그러면 좀 바로 저 제가 더 어 더 페이를 하더라도 연락을 주실 수 있을까요? 그 일단은 이코노미로 바꿔 놓고\nAGENT : 네.\nCUSTOMER : 그렇게 좀 요청드려야 될 거 같아가지고.\nAGENT : 일단은 고객님께서 이코노 이코노미로 바꾸실 때 변경 수수료 운임차 세금차액 발생되고 그 예약 부도 위약금 한 분당 ₩300, 000씩 내주셔야 USB $300씩 내주셔야 하고요. 그다음에 추가적으로 지금 출발 24시간 전까지 대기 기다려 보실 수 있도록 전 직원이 대기 예약을 해놓은 상황입니다. 그래서 유상 가장 확약이 될 확률이 높은 프레스티지 플렉스로 대기업 되어 있으나 출발 24시간 전까지 확약되지 않을 시\nCUSTOMER : 대기로, 네.\nCUSTOMER : 네 네.\nAGENT : 대개는 자동으로 취소됩니다. 고객님. 확약되시면 예약 시에 남겨주신 휴대폰 번호 혹은 이메일 주소로 확인 문자가 가기 때문에 무조건 구매 시한 안으로 저희 측에 전화 주셔서 동일하게 변경 수수료 운임차 세금 차이 되시고 고객님께서 변경 가능하거든요, 고객님.\nCUSTOMER : 네 네.\nAGENT : 일단 제가 일반석이라도 변경해 드릴까요, 고객님?\nCUSTOMER : 네.\nCUSTOMER : 네. 그러니까 지금 아까 말씀하신 다른 그 뭐 프레스티지 플러스나 뭐 그냥 프레스티지나 이게 지금은 안되고 그래서 이코노미로 일단은 변경을 해 놓고 그리고 다른 데에도 대기를 걸어주셔서 그래서 그게 나오면 이제 바로 저한테 문자가 온다는 말씀이신 거죠?\nAGENT : 네, 맞습니다. 마이 프레스티지 확인 안 되시면 일반석 이용하시거나 동일하게 이용 원치 않으시는 경우 예약부도 위약금 한 번도 발생하지 않도록 출발 시간 전까지는 변경 혹은 환불해 주셔야 합니다.\nCUSTOMER : 아 네 네. 어 근데 죄송한데 아까 처음에 말씀하시는 그 프레스티지 확약되지 않는다는 게 그게 어떤 거 말씀하신 거예요?\nAGENT : 네.\nAGENT : 대기가 출발 24시간 전까지 확약되지 않으면 대기가 자동으로 취소되기 때문에 오늘 오전 11:30밖에 기다려보실 수가 없어요.\nCUSTOMER : 네.\nAGENT : 그 대기 예약을요.\nCUSTOMER : 아 그러니까 현지 시간으로요?\nAGENT : 네 네.\nCUSTOMER : 현지 시간은 지금 오후 13:00인데요.\nAGENT : 아 죄송합니다. 호놀룰루 기준 시간 확인하겠습니다.\nCUSTOMER : 네 네.\nAGENT : 내일 호노요일 현지 시간 기준으로는 1월 6일 오후 12:51이신 거죠?\nCUSTOMER : 네 네.\nAGENT : 어.\nAGENT : 잠시만요, 고객님.\nCUSTOMER : 네. 아 제가 진짜 더 돈을 내더라도 좀.\nCUSTOMER : 잘 확인 좀 부탁드릴게요.\nAGENT : 잠시만요.\nAGENT : 어 원래는 대기가 출발 24시간 전까지 확약되지 않을 시 대기가 자동으로 취소되는 게 맞습니다. 근데 이제 전 직원이 고객님께서 그 폐쇄공포증을 언급해 주셔서 대기 예약을 억지로 넣어둔 것 같아요. 근데 사실 이 대기약을 넣어둔다고 해서 출발 24시간 이미 이내 시점이기 때문에 이 대기가 자동으로 취소되는 경우도 있고요. 확약될 거라고 확답 드리기가 어려워서 일단은 지금 기다려 보시는 방법밖에는 없습니다 고객님.\nCUSTOMER : 그 확약이 보통 언제쯤 이게 나와요?\nAGENT : 대기에서 확인되시면 바로 예약 시에 남겨주신 휴대폰 번호와 이메일 주소로 확인 문자가 가기는 합니다. 일반적으로. 지금은 원래는 24시간 네 네. 이내인데도 대기를 해 놓은 거라서\nCUSTOMER : 아 그래요.\nAGENT : 일단은 기다려보시는 방법밖엔 없을 것 같고 만약 확약 안되시더라도 일반석은 이용하실 예정이시죠 고객님?\nCUSTOMER : 네.\nCUSTOMER : 네 네.\nAGENT : 일단 변경 진행해도 괜찮으세요, 고객님.\nCUSTOMER : 일단은 어쩔 수 없잖아 지금.\nCUSTOMER : 근데 이코노미석은 자유- 자리가 지금 여유가 많다그래서 말씀드리고 예약 변경하는 게 좋을 거 같아서.\nCUSTOMER : 아니 그 아 죄송해요. 그러면은 지금 일단 이거를 대기를 해놓으셨고 제가 지금 해야 되는 절차가 어떻게 되는 거예요?\nAGENT : 일단 대기는 이미 진행이 완료되어서 확약이 된다라고 하면 예약 시에 남겨주신 휴대폰 번호와 이메일 주소로 확인 문자 가기 때문에 구매 시한이 길지 않을 거라 즉시적으로 저희 쪽에 전화 주셔서 변경 요청해 주시면 되는데 변경하셨을 때에는 일단 지금 일반석으로 변경하시나 아니면 일단 기다렸다가 프레스티지 확인되셔서 변경하시나 변경 수수료, 운임차액, 세금차액, 예약 부도 위약금 한 분당 USD $300씩 내주셔야 돼요.\nCUSTOMER : 네.\nCUSTOMER : 네.\nCUSTOMER : 아 어차피 이래도 저래도 똑같은 거죠. 그니까.\nCUSTOMER : 그니까 제가 가만히 있다가 그 프레스티지 변경 확약이 와가지고 변경을 하는 것과 제가 지금 일단 이코노미로 변경을 해 놓고 그 프레스티지 확약이 오면 그때 변경을 하는 것과 이게 어떠- 어떻게 제가 해야 될까 싶어가지고.\nAGENT : 아 예약부도 위약금은 동일하고요. 예약부도 위약금은 한 번 변경하신다 두 번 변경하신다 첫 번째 변경하실 때 무조건 발생되는 거예요. 뭐 두 번 다 발생되지는 않고 다만 지금 일반석으로 변경하시면 뭐 장점이 추후에 이제\nCUSTOMER : 네.\nCUSTOMER : 네 네.\nCUSTOMER : 아.\nAGENT : 고객님께서 일반석이 가격이 오른다거나 아니면 좌석이 없을 수도 있는데 미리 일단 좌석은 확보가 가능하다는 점이 있고 그 다음에 단점은 고객님께서 만약에 지금 변경하셔도 변경 수수료 발생되고요. 변경 일반석으로 변경하시고 프레스티지로 변경하셨을 때 또 변경 수수료가 발생돼요. 각각의 장단점이 있다고 보시면 됩니다.\nCUSTOMER : 그렇죠.\nCUSTOMER : 네.\nCUSTOMER : 네.\nCUSTOMER : 아.\nCUSTOMER : 아 그러면 그때 만약에 확약이 그 프레스티지가 나올 경우에는 변경 수수료가 두 번이 발생하는 거고요.\nAGENT : 네 맞아요.\nCUSTOMER : 음 그러면 지금 이코노미 좌석은 넉넉한가요?\nAGENT : 지금 9좌석 이상 남아있기는 합니다만 좌석은 언제나 변동 가능성이 있기 때문에 추후에 있을 거라고 확답 드릴 수는 없어요.\nCUSTOMER : 아.\nCUSTOMER : 그래, 그 응, 아니 9좌석밖에 없으니까. 그러면 일단은 그걸 바꾸고 바꿔- 바꿔 놓고\nAGENT : 어 아 좌석이 있는 건 아니고요. 9좌석 이상 남아있는데 저희가 8좌석까지 남아있는 경우에는 정확한 남은 숫자가 표기되고요. 아 좌석 이상부터는 숫자 구로 표기되기 때문이 9석 이상 남아있다고 말씀드리고 있어요.\nCUSTOMER : 네.\nCUSTOMER : 네.\nCUSTOMER : 네.\nCUSTOMER : 아.\nCUSTOMER : 아 네 네 네.\nAGENT : 네 네.\nCUSTOMER : 응.\nCUSTOMER : 그러면은 저 죄송해요. 자꾸 여쭤봐서. 마지막으로 하나만 여쭤보면 그 아까 말씀하신 지금 이 기종이 이코노미랑 그리고 그.\nCUSTOMER : 새로 생긴 그 프레스티지 플러스 이게 있고 프레- 프레스티지가 있는 거죠.\nAGENT : 지금 신기종 보잉 787-10기종이기 때문에 프레스티지 스위트 2.0 기종이기는 합니다.\nCUSTOMER : 아 네. 네. 그- 그러면은 그니까 그렇게 프레스티지랑 그리고 그냥 이코노미 좌석 이렇게만 두 개 있는 거예요?\nAGENT : 네 네.\nCUSTOMER : 아 네 네 네. 그러- 그리고 거기에 대기를 걸어 놨고. 보통 보통 진짜 보셨을 때 통상 이게 만약에 빠진다면 오늘 그니까 호놀룰루 현지 시각으로 제가 오늘 자기 전까지 밤 전에 뭔가 좌석이 나올 수가 있- 있을까요? 제가 왜냐면은 언제까지 기다렸다가 이코노미를 그냥 일단은 사야겠다 라고 해야 되는 시점이 궁금해서.\nAGENT : 따로 정해진 건 없어요. 아까 말씀드렸다시피 원래는 출발 24시간 전까지 대기를 기다려보실 수 있는 것은 맞는데 원래는 이 이는 시점에 저희가 따로 대기 예약을 해드리지는 않아요. 불가한 경우도 있고요. 근데 일단 지금으로서는 전 직원이 그래도 고객님 사정을 고려해서 임의적으로 대기예약을 넣어둔 거다 보니까 이게 확약이 언제 될지도 알 수가 없고요. 확약이 될지 안 될지도 알 수가 없고 이 시스템에서 이내 시점에 억지로 놓은 대기예약이다 보니까 차동으로 언제 취소\nCUSTOMER : 네.\nCUSTOMER : 응.\nAGENT : 될지도 저희가 알 수가 없어요.\nCUSTOMER : 아 언제 취소가 될 수도 있다고요?\nAGENT : 네네. 계속 말씀드렸을 때 이 대기예약 자체가 원래는 출발 24시간 전까지만 기다려 보실 수 있는데 지금 이 시점에 대기약을 넣어둔 거라서 이게 언제 대기이 취소될지는 저희도 알 수가 없어요.\nCUSTOMER : 아.\nCUSTOMER : 네 네.\nCUSTOMER : 응.\nAGENT : 네 네.\nCUSTOMER : 아.\nCUSTOMER : 알겠습니다. 그러면 제가 조금 기다리다 기다리고 있을게요, 그러면.\nAGENT : 네 제가 상담내역은 자세히 적어 놓겠습니다. 고객님.\nCUSTOMER : 네, 알겠습니다. 감사합니다.\nAGENT : 네. 네. 감사합니다. 박동주입니다.\nCUSTOMER : 네.\n</transcript>\n"
+                        "S": "\n당신은 항공사 콜센터 상담 분석 시스템입니다.\n\n<task>\n아래 상담 스크립트를 **전체적으로 분석**하여, 최종 결과만 함수로 호출하세요.\n텍스트로 응답하지 말고, 함수 호출(Function Calling)을 통해 결과를 반환하세요.\n\n## 감지해야 할 상황\n\n### 1. 본인 인증 확인 (DOB_Authenticate)\n- 상담사가 고객에게 본인 확인을 **요청/질문**한 경우 1회 호출\n- 예: \"생년월일 확인 부탁드립니다\", \"본인 확인을 위해 생년월일 말씀해주세요\", \"고객님 성함과 생년월일 확인 부탁드려요\"\n- **주의**: 본인 확인 질문/요청 시점에 호출. 확인 완료 여부와 무관\n\n## 중요 규칙\n- 각 함수는 **최소한으로** 호출하세요\n- 동일한 여정을 중복 호출하지 마세요\n- 불완전한 정보(출발지/도착지/날짜 누락)는 호출하지 마세요\n</task>\n\n<transcript>\nAGENT : 안소민입니다.\nCUSTOMER : 아 네. 문의 좀 드릴게요. 저기 제주도 가는데 애견 동반이어가지고.\nAGENT : 네.\nAGENT : 네.\nAGENT : 네.\nCUSTOMER : 네.\nAGENT : 예약 번호나 일도 말씀해 주십시오.\nCUSTOMER : 네 네.\nCUSTOMER : 아 이름 말씀드릴까요?\nAGENT : 일정은 어디서 어디로 가는 일정입니까?\nCUSTOMER : 음 27일이요. 제주도요.\nAGENT : 몇 시 비행기입니까?\nCUSTOMER : 9시요.\nAGENT : 개인 정보 보호를 위해 탑승객이 아닌 경우 정보 제공 제한될 수 있습니다. 탑승객 본인이십니까?\nCUSTOMER : 네.\nCUSTOMER : 네.\nAGENT : 전화주신 정명아님이십니까?\nCUSTOMER : 네 네.\nAGENT : 네. 탑승자는 고객님 한 분입니까?\nCUSTOMER : 4명이요.\nAGENT : 일인분 성함도 말씀 부탁드립니다.\nCUSTOMER : 저까지 포함 4명.\nCUSTOMER : 네. 반대형, 반해경, 반아리네요.\nAGENT : 확인 감사합니다. 저희\nAGENT : 1월 27일 화요일 김포, 제주 오전 9시와 1월 31일 금요일 제주 김포 20:20으로 예약해 주셨고, 반려동물은 비행기 안으로 데려가는 한마리 맞습니까?\nCUSTOMER : 네.\nAGENT : 네. 보호자님은 정명아님으로 신청해드릴까요?\nCUSTOMER : 네 네.\nAGENT : 네, 반려동물 종류와 나이 말씀해 주십시오.\nCUSTOMER : 말티즈 8살이요.\nAGENT : 네, 케이지에는 소프트 케이지입니까? 하드 케이지입니까?\nCUSTOMER : 어 어떤 다시 말씀해 주시겠어요?\nAGENT : 아 소프트 케이지니까 단단한 재질의 플라스틱이나 철제로 된 카드 케이지입니까?\nCUSTOMER : 하드야. 아니.\nAGENT : 하대.\nCUSTOMER : 단- 단단하지 않은 거야.\nAGENT : 아 금지시고 혹시 가로, 세로, 높이 사이즈 알고 계십니까?\nCUSTOMER : 응.\nCUSTOMER : 어 아직 정확하게 모르겠는데.\nAGENT : 모르세요? 저 일단 규정은 가로 32cm\nCUSTOMER : 네 네 네.\nCUSTOMER : 잠시만요.\nAGENT : 네.\nCUSTOMER : 가로 32요?\nAGENT : 네.\nCUSTOMER : 네.\nAGENT : 그리고 세로 45cm.\nCUSTOMER : 네.\nAGENT : 높이 25cm까지 반입 가능합니다.\nCUSTOMER : 높이 25야.\nAGENT : 네. 그래서 지금은 최대 사이즈로 입력해 놓겠습니다만 출발 전까지 정확한 사이즈 확인하셔서 전화 주신 후에 변경해 주시면 되고요. 사이즈 초과 시에는 운송 거절될 수 있습니다. 그리고 강아지 케이지 포함해서 몇 kg입니까?\nCUSTOMER : 네 네.\nCUSTOMER : 네.\nCUSTOMER : 네 네.\nCUSTOMER : 아 네 네.\nCUSTOMER : 음 지금 몸무게는 한 3kg 정도 되고요. 아니다. 3.8 정도 되고 KG까지 하면은 한 4.5?\nAGENT : 네.\nAGENT : 네.\nCUSTOMER : 네, 5kg 미만일 것 같아요. 네.\nAGENT : 아 네. 저희 규정상 말씀드리겠습니다. 반려동물 움직이기 위한 충분한 여유 공간 필요하고 공격성향 안정제나 수면제 등 약물을 투여 임신 상대 암컷 심한 반려동물의 경우 운송 불가하고 는 등 소음 발생 가능성 높을 시 운송 거절될 수 있어 입마개 소지 부탁드리며, 바닥에 배변 패드 설치와 비행기 안에서 운반용기 개방하거나 꺼내지 않거나 먹이로 주신 행위는 제한이 되며 편도 ₩30, 000의 운임이 있습니다. 그리고 항공기 편도당 ₩30, 000\nCUSTOMER : 네.\nCUSTOMER : ₩30, 000, 000요.\nAGENT : 이며 항공기 교체 등 사유로 기종 변경될 수 있으며 이로 인해 반려동물 신청이 변경 또는 취소될 수 있습니다. 그리고 정명아님께서는 반려동물 전용석 앉아주셔야 되는데 김포제주공간 전용석은 37 F 창가와 54번의 에 창가가 있습니다. 어디로 지정해드릴까요?\nCUSTOMER : 네.\nCUSTOMER : 아 혹시 저희가 지금 사인 가족이잖아요. 그 한쪽 같이 네 명이 다 앉을 수 있을까요?\nAGENT : 네.\nAGENT : 너무 죄송하게도 오픈된 자리가 이렇게 뛰어있는 자리밖에 없어서 지금은 이렇게 배송하시고 공항 오셔서 혹시 나란히 자리 있으면은 공항에서 변경하실 수 있는데 일단 정명원님은 그 전용 사고 앉아주셔야 됩니다.\nCUSTOMER : 아.\nCUSTOMER : 어.\nCUSTOMER : 그 그 잠깐만요. 어느 쪽이 나올까요?\nAGENT : 조금 앞쪽은 37입니다. 둘 다 창가석이고요.\nCUSTOMER : 아 그럼 50\nCUSTOMER : 지적으로는\nCUSTOMER : 뒤쪽이 좀 낫지 않을까요?\nAGENT : 아 네. 그럼 54F로 지정해드리겠습니다.\nCUSTOMER : 응.\nAGENT : 그리고 돌아오는 제주, 김포는 잠시 기다려 주십시오.\nCUSTOMER : 아, 시간이?\nAGENT : 아 아니요. 지금 여기 발려 전용석은 2429조이고요. 여기는 나란히 지정 가능해서 45번에 AB, 복도 끼구 CD 이렇게 규정해드리겠습니다.\nCUSTOMER : 네.\nCUSTOMER : 네.\nCUSTOMER : 어.\nCUSTOMER : 아 이게 위 그러니까 앞뒤로는 안 되는 거죠. 자리가.\nAGENT : 어 됩니다. 그러면 50\nCUSTOMER : 아 돼요? 그러면 앞뒤로.\nAGENT : 뒤쪽으로 가셔야 되는데 괜찮으세요?\nCUSTOMER : 창가 쪽.\nAGENT : 네.\nAGENT : 상가 쪽 좀 뒤쪽에 있고\nCUSTOMER : 창가 쪽으로 앞뒤, 예.\nAGENT : 57GH58GH로 창가 쪽 2명 2명 앞뒤로 지정 완료되었습니다.\nCUSTOMER : 네. 네. 네. 아 그러면 올 거는 올 때는 그렇게 됐는데 그 갈 때는 만약에 자리가 만약에 그 같은 지역으로 자리로 안되면 그냥 다 따로따로 그냥 앉아야 되나요?\nAGENT : 네.\nAGENT : 일단 고객님은 무조건\nCUSTOMER : 지금 자리가 없는 건가요?\nAGENT : 네. 없고요. 고객님은 전용서 앉으셔야 되는데 현재 고객님 주변에 그 좌석들은 현재 다 마감된 상태라서 다른 다른 승객분들이 취소하지 않는 이상은 자리가 안 나올 것 같고요. 그다음에 다른 이제 가족분 세분 같은 경우에는 공항 오셔서 현장에서 혹시 나란히 자리에 앉을 수 있는지 확인해 보셔야 됩니다.\nCUSTOMER : 네.\nCUSTOMER : 어 어.\nCUSTOMER : 아.\nCUSTOMER : 아 네. 알겠습니다.\nAGENT : 네 감사합니다.\nCUSTOMER : 네. 감사합니다. 네.\nAGENT : 완료되었습니다.\nAGENT : 감사합니다.\nCUSTOMER : 네.\n</transcript>\n"
                     },
                     "toolWorkerRequestId": {
-                        "S": "8c148a5b-b926-4ce5-bb54-16125a3e6319"
-                    },
-                    "thinkingText": {
-                        "S": "Okay, here's my analysis. The user wants me to process this transcript and, crucially, use the `DOB_Authenticate` function. My expert eye immediately zeroes in on the authentication aspect. I need to figure out if the agent is requesting personal information to verify the caller's identity.\n\nLet's dissect this. Scanning the Korean text, the agent starts by mentioning \"개인정보 보호,\" or \"personal information protection,\" which immediately raises a flag. Then, they ask, in essence, \"Are you the passenger, Ms. Park Heeyoung?\" The agent specifically names the customer. That's a clear authentication attempt! They are verifying the caller's identity.\n\nSo, the `transcript_authenticated` parameter is definitively `True`. And the specific phrase the agent used to confirm identity is \"전화주신 박희영 고객님 탑승자 본인이십니까?\" That's the key text.\n\nTherefore, the correct function call is `DOB_Authenticate(transcript_authenticated=True, transcript_agent_confirmation='전화주신 박희영 고객님 탑승자 본인이십니까?')`. I'm confident in this assessment.\n"
+                        "S": "ec86f75d-9047-46f0-a17e-67232d7e69f6"
                     }
-                },
-                "type": {
-                    "S": "QM_Automation"
-                },
-                "useAudioAnalysis": {
-                    "BOOL": false
-                },
-                "useContextCaching": {
-                    "BOOL": false
-                },
-                "useThinking": {
-                    "BOOL": true
-                },
-                "useTools": {
-                    "BOOL": false
                 }
+            },
+            "type": {
+                "S": "QM_Automation"
+            },
+            "useAudioAnalysis": {
+                "BOOL": true
+            },
+            "useContextCaching": {
+                "BOOL": false
+            },
+            "useThinking": {
+                "BOOL": true
+            },
+            "useTools": {
+                "BOOL": false
             }
-        },
-        "requestId": {
-            "S": "fc2f64fb-e428-4bab-aa46-99fbe49f36d5"
-        },
-        "result": {
-            "M": {
-                "geminiModel": {
-                    "S": "gemini-2.5-flash"
-                },
-                "geminiResponse": {
-                    "S": "### [상담콜 품질 평가 보고서]\n\n**1. 종합 평가**\n*   **총점:** 100점 만점에 64점\n*   **요약:** 상담사는 고객의 복잡한 상황을 이해하고 필요한 정보를 상세히 제공하려는 적극적인 태도를 보였으나, 고객 발화 중단이 빈번하고 필수 안내 지침(날짜 표현, 본인 확인)을 일부 누락하여 서비스 품질 향상이 필요합니다.\n\n**2. 항목별 상세 분석**\n\n**1) 인사 및 관계 형성 (7/10점)**\n*   **잘한 점:**\n    *   첫인사 시 표준 멘트와 이름을 정확히 사용했습니다.\n        *   AGENT : \"안녕하십니까? 박동주입니다.\"(BeginOffsetMillis: 57, EndOffsetMillis: 2097)\n    *   고객의 첫 발화에 대해 적절히 반응하며 필요한 정보를 요청했습니다.\n        *   CUSTOMER : \"아 네, 안녕하세요. 제가 그 예약번호 아까 제가 통화했던 분이랑 혹시 다시 연결은 어려운 거죠?\"(BeginOffsetMillis: 4147, EndOffsetMillis: 11277)\n        *   AGENT : \"음 네, 그렇습니다. 고객님 혹시 예약번호 또는 정확한 사정이 어떻게 됩니까?\"(BeginOffsetMillis: 11367, EndOffsetMillis: 15847)\n    *   끝인사 시 상담사 이름을 명확히 밝혔습니다.\n        *   AGENT : \"네. 네. 감사합니다. 박동주입니다.\"(BeginOffsetMillis: 613117, EndOffsetMillis: 616117)\n*   **개선할 점:**\n    *   상담 종료 전 재문의 확인 멘트(\"추가로 궁금하신 사항 있으십니까?\")가 누락되었습니다. 이는 끝인사 표준 프로세스 위반입니다.\n        *   CUSTOMER : \"네, 알겠습니다. 감사합니다.\"(BeginOffsetMillis: 611937, EndOffsetMillis: 614737)\n        *   AGENT : \"네. 네. 감사합니다. 박동주입니다.\"(BeginOffsetMillis: 613117, EndOffsetMillis: 616117)\n        *   (재문의 확인 멘트가 없음)\n\n**2) 서비스 마인드 (20/30점)**\n*   **잘한 점:**\n    *   고객의 지적에 대해 즉각적으로 사과하며 정중한 태도를 보였습니다.\n        *   CUSTOMER : \"현지 시간은 지금 오후 13:00인데요.\"(BeginOffsetMillis: 211847, EndOffsetMillis: 214037)\n        *   AGENT : \"아 죄송합니다. 호놀룰루 기준 시간 확인하겠습니다.\"(BeginOffsetMillis: 214627, EndOffsetMillis: 217617)\n    *   대기 요청 시 정중한 표현을 사용했습니다.\n        *   AGENT : \"잠시만 기다려 주십시오, 고객님.\"(BeginOffsetMillis: 40897, EndOffsetMillis: 42437)\n*   **개선할 점:**\n    *   **고객 발화 중단이 빈번하게 발생하여 경청 태도가 부족했습니다.** 고객의 말이 끝나기 전에 상담사의 발화가 시작되는 경우가 총 9회 확인되었습니다. 이는 고객에게 불쾌감을 줄 수 있으며, \"말씀 중에 죄송합니다\"와 같은 양해 멘트도 없었습니다.\n        *   CUSTOMER : \"...이코노미로 바꿔 놓고\"(BeginOffsetMillis: 79597, EndOffsetMillis: 99447)\n        *   AGENT : \"네.\"(BeginOffsetMillis: 88617, EndOffsetMillis: 88927) (고객 발화 중 AGENT 발화 시작)\n        *   AGENT : \"일단은 고객님께서 이코노 이코노미로 바꾸실 때 변경 수수료 운임차 세금차액 발생되고...\"(BeginOffsetMillis: 103687, EndOffsetMillis: 133307)\n        *   CUSTOMER : \"대기로, 네.\"(BeginOffsetMillis: 104727, EndOffsetMillis: 106087) (AGENT 발화 중 CUSTOMER 발화 시작, AGENT는 계속 발화)\n        *   CUSTOMER : \"...문자가 온다는 말씀이신 거죠?\"(BeginOffsetMillis: 156237, EndOffsetMillis: 174927)\n        *   AGENT : \"네, 맞습니다. 마이 프레스티지 확인 안 되시면 일반석 이용하시거나...\"(BeginOffsetMillis: 174867, EndOffsetMillis: 186567) (고객 발화 중 AGENT 발화 시작)\n        *   CUSTOMER : \"...어떤 거 말씀하신 거예요?\"(BeginOffsetMillis: 188637, EndOffsetMillis: 196297)\n        *   AGENT : \"네.\"(BeginOffsetMillis: 194787, EndOffsetMillis: 195007) (고객 발화 중 AGENT 발화 시작)\n        *   AGENT : \"그 대기 예약을요.\"(BeginOffsetMillis: 207497, EndOffsetMillis: 208607)\n        *   CUSTOMER : \"아 그러니까 현지 시간으로요?\"(BeginOffsetMillis: 207837, EndOffsetMillis: 209547) (AGENT 발화 중 CUSTOMER 발화 시작)\n        *   AGENT : \"일단은 기다려보시는 방법밖엔 없을 것 같고 만약 확약 안되시더라도 일반석은 이용하실 예정이시죠 고객님?\"(BeginOffsetMillis: 296807, EndOffsetMillis: 303557)\n        *   CUSTOMER : \"네.\"(BeginOffsetMillis: 301417, EndOffsetMillis: 301727) (AGENT 발화 중 CUSTOMER 발화 시작)\n        *   AGENT : \"아 예약부도 위약금은 동일하고요. 예약부도 위약금은 한 번 변경하신다 두 번 변경하신다 첫 번째 변경하실 때 무조건 발생되는 거예요. 뭐 두 번 다 발생되지는 않고 다만 지금 일반석으로 변경하시면 뭐 장점이 추후에 이제\"(BeginOffsetMillis: 388857, EndOffsetMillis: 405607)\n        *   CUSTOMER : \"네.\"(BeginOffsetMillis: 392777, EndOffsetMillis: 393087) (AGENT 발화 중 CUSTOMER 발화 시작)\n        *   AGENT : \"어 아 좌석이 있는 건 아니고요. 9좌석 이상 남아있는데 저희가 8좌석까지 남아있는 경우에는 정확한 남은 숫자가 표기되고요. 아 좌석 이상부터는 숫자 구로 표기되기 때문이 9석 이상 남아있다고 말씀드리고 있어요.\"(BeginOffsetMillis: 459337, EndOffsetMillis: 475157)\n        *   CUSTOMER : \"네.\"(BeginOffsetMillis: 462937, EndOffsetMillis: 463077) (AGENT 발화 중 CUSTOMER 발화 시작)\n        *   AGENT : \"네 제가 상담내역은 자세히 적어 놓겠습니다. 고객님.\"(BeginOffsetMillis: 606847, EndOffsetMillis: 610047)\n        *   CUSTOMER : \"네, 알겠습니다. 감사합니다.\"(BeginOffsetMillis: 611937, EndOffsetMillis: 614737) (AGENT 발화 중 CUSTOMER 발화 시작)\n    *   '~하고요', '~거든요', '잠시만요' 등 반토막말이나 정돈되지 않은 표현이 사용되었습니다.\n        *   AGENT : \"...내주셔야 하고요.\"(BeginOffsetMillis: 103687, EndOffsetMillis: 133307)\n        *   AGENT : \"...가능하거든요, 고객님.\"(BeginOffsetMillis: 133647, EndOffsetMillis: 149317)\n        *   AGENT : \"잠시만요, 고객님.\"(BeginOffsetMillis: 236567, EndOffsetMillis: 237827)\n        *   AGENT : \"잠시만요.\"(BeginOffsetMillis: 247337, EndOffsetMillis: 248167)\n        *   (수정 제안: \"~합니다\", \"잠시만 기다려 주십시오\" 등 정돈된 표현 사용)\n    *   대기 후 \"기다려 주셔서 감사합니다\"와 같은 감사 멘트가 누락되었습니다.\n\n**3) 상담진행 능력 (37/60점)**\n*   **잘한 점:**\n    *   고객의 복잡한 상황(폐쇄공포증, 프레스티지 대기, 이코노미 변경 고려)을 파악하고, 변경 수수료, 위약금, 대기 확약 가능성 등 필요한 정보를 상세히 제공하려 노력했습니다.\n        *   AGENT : \"일단은 고객님께서 이코노 이코노미로 바꾸실 때 변경 수수료 운임차 세금차액 발생되고 그 예약 부도 위약금 한 분당 ₩300, 000씩 내주셔야 USB $300씩 내주셔야 하고요. 그다음에 추가적으로 지금 출발 24시간 전까지 대기 기다려 보실 수 있도록 전 직원이 대기 예약을 해놓은 상황입니다.\"(BeginOffsetMillis: 103687, EndOffsetMillis: 133307)\n    *   일반석 변경 시의 장단점을 명확하게 설명하여 고객의 의사결정을 도왔습니다.\n        *   AGENT : \"아 예약부도 위약금은 동일하고요. 예약부도 위약금은 한 번 변경하신다 두 번 변경하신다 첫 번째 변경하실 때 무조건 발생되는 거예요. 뭐 두 번 다 발생되지는 않고 다만 지금 일반석으로 변경하시면 뭐 장점이 추후에 이제 고객님께서 일반석이 가격이 오른다거나 아니면 좌석이 없을 수도 있는데 미리 일단 좌석은 확보가 가능하다는 점이 있고 그 다음에 단점은 고객님께서 만약에 지금 변경하셔도 변경 수수료 발생되고요. 변경 일반석으로 변경하시고 프레스티지로 변경하셨을 때 또 변경 수수료가 발생돼요. 각각의 장단점이 있다고 보시면 됩니다.\"(BeginOffsetMillis: 388857, EndOffsetMillis: 427887)\n*   **개선할 점:**\n    *   **[날짜 정확성 점검]:** 고객이 \"내일자 출발로요\"라고 언급했음에도 불구하고, 상담사는 \"내일 호노요일 현지 시간 기준으로는 1월 6일 오후 12:51이신 거죠?\"라고 '내일'이라는 상대적 표현을 사용했습니다. 이는 날짜 안내 필수 지침 위반입니다.\n        *   CUSTOMER : \"아 네. 네. 지금 그래서 뭔가 뭐 취소되거나 이런 게 나오면 내일자 출발로요.\"(BeginOffsetMillis: 79597, EndOffsetMillis: 99447)\n        *   AGENT : \"내일 호노요일 현지 시간 기준으로는 1월 6일 오후 12:51이신 거죠?\"(BeginOffsetMillis: 225227, EndOffsetMillis: 230377)\n        *   (수정 제안: \"1월 6일 호놀룰루 현지 시간 기준 오후 12시 51분 말씀이신가요?\"와 같이 명확한 [월/일] 기반의 날짜로만 안내 필요.)\n    *   **[정보 보호 점검]:** 예약 정보 안내 시 탑승객 본인 확인 절차 중 전화번호 또는 이메일 확인이 누락되었습니다.\n        *   AGENT : \"개인정보 보호를 위해 탑승자가 아닌 경우 정보 제공 제한될 수 있습니다. 전화주신 박희영 고객님 탑승자 본인이십니까?\"(BeginOffsetMillis: 23287, EndOffsetMillis: 30807) (양해어 및 이름 확인은 준수)\n        *   CUSTOMER : \"네, 맞습니다.\"(BeginOffsetMillis: 32217, EndOffsetMillis: 33247)\n        *   (예약번호, 이름 외 전화번호 또는 이메일 확인 절차 누락)\n        *   **강력 경고: 정보 보호 및 본인 확인 절차는 Critical Fail 항목으로, 필수 확인 절차 누락 시 정보 유출의 위험이 있으므로 반드시 개선되어야 합니다.**\n\n**3. 총평 및 코칭 제언**\n상담사 박동주님은 고객의 복잡한 문의에 대해 적극적으로 정보를 탐색하고, 규정 및 변경 옵션에 대한 상세한 설명을 제공하려는 강점을 가지고 있습니다. 특히, 고객의 특수한 상황(폐쇄공포증)을 인지하고 이전 상담 내역을 확인하여 맞춤형 안내를 시도한 점은 칭찬할 만합니다.\n\n그러나 가장 시급하게 개선해야 할 점은 **고객 발화 경청 태도와 필수 안내 지침 준수**입니다. 빈번한 고객 발화 중단은 고객에게 존중받지 못한다는 인상을 줄 수 있으므로, 고객의 말이 완전히 끝난 후 발화하는 습관을 들여야 합니다. 또한, **날짜 안내 시 '내일'과 같은 상대적 표현 대신 '1월 6일'과 같이 [월/일] 기반의 정확한 날짜만을 사용**하도록 매뉴얼을 철저히 숙지하고 적용해야 합니다. 마지막으로, **정보 보호를 위한 본인 확인 절차(전화번호/이메일 확인)를 빠짐없이 수행**하여 Critical Fail 항목 위반이 재발하지 않도록 각별히 유의해야 합니다. 이 세 가지 핵심 개선 사항에 집중하여 연습한다면, 박동주 상담사님의 서비스 품질은 크게 향상될 것입니다."
-                },
-                "message": {
-                    "S": "GCP Authentication Success"
-                },
-                "outputTokens": {
-                    "N": "3221"
-                },
-                "processingTime": {
-                    "N": "92.32"
-                },
-                "projectId": {
-                    "S": "ke-pss-aicc-dev"
-                },
-                "promptLength": {
-                    "N": "19154"
-                },
-                "responseLength": {
-                    "N": "6651"
-                },
-                "serviceAccount": {
-                    "S": "pss-aicc-dev-sa@ke-pss-aicc-dev.iam.gserviceaccount.com"
-                },
-                "thinkingText": {
-                    "S": "Okay, here's my analysis of the call data, delivered as a Senior QA Specialist would, focusing on providing actionable insights:\n\n\"Alright, I've reviewed the provided call data. My objective here is to evaluate this agent's performance based on the established criteria and company standards. I've broken down the process systematically to ensure a thorough and objective assessment. First, I reconstructed the conversation flow, paying close attention to timings. Then, I applied the evaluation criteria, meticulously analyzing each point based on the provided JSON data. Where applicable, I've included direct quotes to support my findings. After evaluating each section, I'll calculate an overall score and provide specific coaching recommendations to improve service quality. The primary goal is to identify strengths and weaknesses to help this agent excel.\n\n**1. 인사 및 관계 형성 (7/10점)**\n\nThe agent started the call with a proper greeting: \"안녕하십니까? 박동주입니다.\" This confirms that the required first greeting template was used. The agent demonstrated an ability to appropriately respond to the customer's initial statements, showing they were attentive to the customer's initial needs and questions. However, the closing greeting lacked the required sequence. While the agent responded to the customer's expression of gratitude, and included their name, the required question before closing (\"추가로 궁금하신 사항 있으십니까?\") was omitted. This caused a deduction in points.\n\n**Evidence:**\n*   \"안녕하십니까? 박동주입니다.\" (57, 2097) - Proper Greeting\n*   CUSTOMER: \"아 네, 안녕하세요. 제가 그 예약번호 아까 제가 통화했던 분이랑 혹시 다시 연결은 어려운 거죠?\" (4147, 11277)\n    AGENT: \"음 네, 그렇습니다. 고객님 혹시 예약번호 또는 정확한 사정이 어떻게 됩니까?\" (11367, 15847) - Good Response\n*   CUSTOMER: \"네, 알겠습니다. 감사합니다.\" (611937, 614737)\n    AGENT: \"네. 네. 감사합니다. 박동주입니다.\" (613117, 616117) - Closing greeting (incomplete - lacking a prompt).\n\n**2. 서비스 마인드 (20/30점)**\n\nOverall, the agent displayed an approachable demeanor. The agent employed \"고객님\" and spoke in a calm tone. The agent attempts to offer answers which showed the attempt to provide service, however, more could be done to offer empathetic language. The agent demonstrated that they are able to reply with appropriate responses. A key area for improvement is in actively listening and showing awareness. **The agent repeatedly interrupted the customer's speech.** This is a significant issue and requires immediate attention as it impacts the agent's ability to create a smooth, considerate and customer-centric experience. Furthermore, the agent didn't always use the required politeness, for example, the use of '잠시만요' at several points in the conversation, or in the closing of the conversation.\n\n**Evidence:**\n*   The agent consistently uses \"고객님.\" - Positive.\n*   \"아 죄송합니다. 호놀룰루 기준 시간 확인하겠습니다.\" (214627, 217617) - Shows accountability. However, more opportunities to apply the language.\n*   CUSTOMER: \"아 네. 네. 지금 그래서 뭔가 뭐 취소되거나 이런 게 나오면 내일자 출발로요. 그러면 좀 바로 저 제가 더 어 더 페이를 하더라도 연락을 주실 수 있을까요? 그 일단은 이코노미로 바꿔 놓고\" (79597, 99447)\n    AGENT: \"네.\" (88617, 88927) - Interruption\n*   CUSTOMER: \"대기로, 네.\" (104727, 106087)\n    AGENT: \"일단은 고객님께서 이코노 이코노미로 바꾸실 때 변경 수수료 운임차 세금차액 발생되고...\" (103687, 133307) - Interruption\n*   CUSTOMER: \"네 네.\" (115977, 116327)\n    AGENT: \"대개는 자동으로 취소됩니다. 고객님. 확약되시면 예약 시에 남겨주신 휴대폰 번호 혹은 이메일 주소로 확인 문자가 가기 때문에...\" (133647, 149317) - Interruption\n*   CUSTOMER: \"네. 그러니까 지금 아까 말씀하신 다른 그 뭐 프레스티지 플러스나 뭐 그냥 프레스티지나 이게 지금은 안되고 그래서 이코노미로 일단은 변경을 해 놓고 그리고 다른 데에도 대기를 걸어주셔서 그래서 그게 나오면 이제 바로 저한테 문자가 온다는 말씀이신 거죠?\" (156237, 174927)\n    AGENT: \"네, 맞습니다. 마이 프레스티지 확인 안 되시면 일반석 이용하시거나 동일하게 이용 원치 않으시는 경우...\" (174867, 186567) - Interruption\n*   CUSTOMER: \"아 네 네. 어 근데 죄송한데 아까 처음에 말씀하시는 그 프레스티지 확약되지 않는다는 게 그게 어떤 거 말씀하신 거예요?\" (188637, 196297)\n    AGENT: \"네.\" (194787, 195007) - Interruption\n*   CUSTOMER: \"아 그러니까 현지 시간으로요?\" (207837, 209547)\n    AGENT: \"그 대기 예약을요.\" (207497, 208607) - Interruption\n*   CUSTOMER: \"네. 아 제가 진짜 더 돈을 내더라도 좀.\" (239457, 243527)\n    AGENT: \"잠시만요.\" (236567, 237827) - While the agent said this first, it feels like an interruption.\n*   CUSTOMER: \"네.\" (301417, 301727)\n    AGENT: \"일단은 기다려보시는 방법밖엔 없을 것 같고 만약 확약 안되시더라도 일반석은 이용하실 예정이시죠 고객님?\" (296807, 303557) - Interruption\n*   CUSTOMER: \"네.\" (392777, 393087)\n    AGENT: \"아 예약부도 위약금은 동일하고요. 예약부도 위약금은 한 번 변경하신다 두 번 변경하신다 첫 번째 변경하실 때 무조건 발생되는 거예요. 뭐 두 번 다 발생되지는 않고 다만 지금 일반석으로 변경하시면 뭐 장점이 추후에 이제\" (388857, 405607) - Interruption\n*   CUSTOMER: \"네.\" (462937, 463077)\n    AGENT: \"어 아 좌석이 있는 건 아니고요. 9좌석 이상 남아있는데 저희가 8좌석까지 남아있는 경우에는 정확한 남은 숫자가 표기되고요. 아 좌석 이상부터는 숫자 구로 표기되기 때문이 9석 이상 남아있다고 말씀드리고 있어요.\" (459337, 475157) - Interruption\n*   CUSTOMER: \"네.\" (554787, 555097)\n    AGENT: \"따로 정해진 건 없어요. 아까 말씀드렸다시피 원래는 출발 24시간 전까지 대기를 기다려보실 수 있는 것은 맞는데 원래는 이 이는 시점에 저희가 따로 대기 예약을 해드리지는 않아요. 불가한 경우도 있고요. 근데 일단 지금으로서는 전 직원이 그래도 고객님 사정을 고려해서 임의적으로 대기예약을 넣어둔 거다 보니까 이게 확약이 언제 될지도 알 수가 없고요. 확약이 될지 안 될지도 알 수가 없고 이 시스템에서 이내 시점에 억지로 놓은 대기예약이다 보니까 차동으로 언제 취소\" (542127, 571867) - Interruption\n*   CUSTOMER: \"네, 알겠습니다. 감사합니다.\" (611937, 614737)\n    AGENT: \"네 제가 상담내역은 자세히 적어 놓겠습니다. 고객님.\" (606847, 610047) - Interruption\n\n**3. 상담진행 능력 (37/60점)**\n\nThe agent demonstrated a strong ability to understand the customer's needs, specifically when the customer needed to explain the situation involving a flight change. The agent efficiently addressed the customer's concerns, explaining the implications of potential changes and options. The agent displayed a good understanding of the complex procedures and regulations involved in flight changes, showing they could provide correct information. However, they demonstrated a reliance on the agent taking over parts of the conversation. **The agent failed to adhere to the correct protocols regarding date and time-specific information.** \"내일\" was utilized and should be replaced with a specific date and time. Furthermore, the agent demonstrated that they adhered to the information-sharing requirements of the call. In terms of information protection, the agent fulfilled the criteria of asking the customer if they were the correct person. The agent asked the required question. However, the agent failed to confirm the customer's contact details, meaning the conversation and any further information shared might not be verified, which would be a major cause for concern.\n\n**Evidence:**\n*   AGENT: \"확인해 보겠습니다. 개인정보 보호를 위해 탑승자가 아닌 경우 정보 제공 제한될 수 있습니다. 전화주신 박희영 고객님 탑승자 본인이십니까?\" (23287, 30807) - Correct use of 'Personal Information' verification language.\n*   The agent correctly answered the customer's questions. - Effective conversation.\n*   AGENT: \"내일 호노요일 현지 시간 기준으로는 1월 6일 오후 12:51이신 거죠?\" (225227, 230377) - \"내일\" is too vague; precise date/time is required.\n*   The agent did not confirm the customer's contact details. - Information sharing is not fully compliant.\n\n**Overall Score: 64/100 점**\n\n**Coaching Recommendations:**\n\n*   **Active Listening & Customer Interaction:** The most critical area for improvement is to improve active listening skills. The agent must avoid interrupting the customer. Actively listening to the customer will improve customer satisfaction, and improve the quality of the customer's overall experience. Additionally, the agent needs to practice using more empathy.\n*   **Adherence to SOP for Date and Time:** The agent must be trained to express the date and time requirements based on the SOP, including specific dates and times, to avoid confusion.\n*   **Information Security Protocols:** Reinforce the importance of verifying customer contact details as part of the information-sharing process. This is a critical security step and needs to be consistently applied.\n*   **Closing Procedures:** Ensure the agent consistently follows the complete closing greeting protocol, including the pre-closing inquiry.\n\nBy focusing on these areas, the agent can significantly improve their service quality and customer satisfaction.\"\n"
-                },
-                "timestamp": {
-                    "N": "1768288375931"
-                },
-                "totalTokens": {
-                    "N": "32932"
-                }
-            }
-        },
-        "status": {
-            "S": "COMPLETED"
-        },
-        "ttl": {
-            "N": "1768291883"
         }
+    },
+    "requestId": {
+        "S": "e56fc0ea-c1ee-447a-b309-33fc747e4feb"
+    },
+    "result": {
+        "M": {
+            "evaluationResult": {
+                "M": {
+                    "details": {
+                        "M": {
+                            "greeting": {
+                                "M": {
+                                    "additional_inquiry_check": {
+                                        "M": {
+                                            "reason": {
+                                                "S": "상담 종료 직전 '추가 문의 사항 있으십니까?'와 같은 추가 문의 확인 절차를 누락했습니다."
+                                            },
+                                            "status": {
+                                                "S": "FAIL"
+                                            }
+                                        }
+                                    },
+                                    "closing": {
+                                        "M": {
+                                            "reason": {
+                                                "S": "추가 문의 확인 절차 없이 '네 감사합니다'(05:03)로 상담을 마무리하여 표준 끝인사 절차를 준수하지 않았습니다."
+                                            },
+                                            "status": {
+                                                "S": "FAIL"
+                                            }
+                                        }
+                                    },
+                                    "feedback_message": {
+                                        "S": "첫인사 시 '안녕하십니까?'를 포함한 완전한 문장으로 시작하고, 끝인사 시 '추가 문의사항은 없으신지' 확인하는 절차를 지켜주시면 더욱 신뢰감 있고 안정적인 상담이 될 것입니다."
+                                    },
+                                    "opening": {
+                                        "M": {
+                                            "reason": {
+                                                "S": "표준 인사말 '안녕하십니까?'가 누락된 채 '안소민입니다.'(00:00)로 응대를 시작하여 불완전한 첫인사를 제공했습니다."
+                                            },
+                                            "status": {
+                                                "S": "FAIL"
+                                            }
+                                        }
+                                    },
+                                    "response": {
+                                        "M": {
+                                            "reason": {
+                                                "S": "고객이 별도의 인사 없이 바로 본 용건(00:01)을 이야기하여, 인사 호응이 필요 없는 상황이었습니다."
+                                            },
+                                            "status": {
+                                                "S": "N/A"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "Language_Use": {
+                                "M": {
+                                    "bad_habits": {
+                                        "M": {
+                                            "events": {
+                                                "L": []
+                                            }
+                                        }
+                                    },
+                                    "feedback_message": {
+                                        "S": "사물 존칭 오류나 부적절한 어휘 사용 없이 전반적으로 매우 정확한 언어를 사용하셨습니다. 이는 서비스의 전문성을 높이는 큰 강점입니다. 다만, 문장 끝을 '~고요'로 마무리하는 습관(04:42 등)을 '~습니다'로 바꾸면 더욱 간결하고 명확한 인상을 줄 수 있습니다."
+                                    },
+                                    "inappropriate_vocabulary": {
+                                        "M": {
+                                            "events": {
+                                                "L": []
+                                            }
+                                        }
+                                    },
+                                    "language_quality_score": {
+                                        "M": {
+                                            "events": {
+                                                "L": []
+                                            }
+                                        }
+                                    },
+                                    "Unpolite_Tone_Manner": {
+                                        "M": {
+                                            "events": {
+                                                "L": [
+                                                    {
+                                                        "M": {
+                                                            "analysis": {
+                                                                "S": "'~고요'라는 표현은 상황에 따라 변명처럼 들릴 수 있어, '~습니다'로 명확하게 문장을 종결하는 것이 더 신뢰감을 줍니다."
+                                                            },
+                                                            "correction": {
+                                                                "S": "...자리가 나오지 않을 것 같습니다."
+                                                            },
+                                                            "detected_sentence": {
+                                                                "S": "...자리가 안 나올 것 같고요."
+                                                            },
+                                                            "timestamp": {
+                                                                "S": "04:42"
+                                                            },
+                                                            "type": {
+                                                                "S": "공손하지 않은 연결어 (변명조)"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "Speed": {
+                                "M": {
+                                    "feedback_message": {
+                                        "S": "고객의 말이 끝나기 전에 응답하는 경우가 5회 발생했습니다(04:08, 04:11 등). 고객의 말이 완전히 끝난 것을 확인한 후 답변하는 습관이 필요합니다. 특히 02:19 구간에서 약 30초간 규정을 매우 빠르게 안내하셨는데, 중요한 정보는 단락을 나누어 잠시 쉬거나 고객의 이해 여부를 확인하며 전달하는 것이 효과적입니다."
+                                    },
+                                    "Interruption_Analysis": {
+                                        "M": {
+                                            "events": {
+                                                "L": [
+                                                    {
+                                                        "M": {
+                                                            "apology_used": {
+                                                                "BOOL": false
+                                                            },
+                                                            "content_context": {
+                                                                "S": "고객: ...네 명이 다 앉을 수 있을까요? / 상담원: 네."
+                                                            },
+                                                            "judgment": {
+                                                                "S": "FAIL"
+                                                            },
+                                                            "timestamp_end": {
+                                                                "S": "03:13"
+                                                            },
+                                                            "timestamp_start": {
+                                                                "S": "03:12"
+                                                            },
+                                                            "type": {
+                                                                "S": "유형 B (복합 호응 끼어들기)"
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "M": {
+                                                            "apology_used": {
+                                                                "BOOL": false
+                                                            },
+                                                            "content_context": {
+                                                                "S": "고객: ...앞뒤로는 안 되는 거죠. 자리가. / 상담원: 어 됩니다. 그러면 50"
+                                                            },
+                                                            "judgment": {
+                                                                "S": "FAIL"
+                                                            },
+                                                            "timestamp_end": {
+                                                                "S": "04:10"
+                                                            },
+                                                            "timestamp_start": {
+                                                                "S": "04:08"
+                                                            },
+                                                            "type": {
+                                                                "S": "유형 C (말꼬리 덮기)"
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "M": {
+                                                            "apology_used": {
+                                                                "BOOL": false
+                                                            },
+                                                            "content_context": {
+                                                                "S": "고객: 아 돼요? 그러면 앞뒤로. / 상담원: 뒤쪽으로 가셔야 되는데 괜찮으세요?"
+                                                            },
+                                                            "judgment": {
+                                                                "S": "FAIL"
+                                                            },
+                                                            "timestamp_end": {
+                                                                "S": "04:13"
+                                                            },
+                                                            "timestamp_start": {
+                                                                "S": "04:11"
+                                                            },
+                                                            "type": {
+                                                                "S": "유형 C (말꼬리 덮기)"
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "M": {
+                                                            "apology_used": {
+                                                                "BOOL": false
+                                                            },
+                                                            "content_context": {
+                                                                "S": "고객: 아 네. 알겠습니다. / 상담원: 네 감사합니다."
+                                                            },
+                                                            "judgment": {
+                                                                "S": "FAIL"
+                                                            },
+                                                            "timestamp_end": {
+                                                                "S": "05:04"
+                                                            },
+                                                            "timestamp_start": {
+                                                                "S": "05:03"
+                                                            },
+                                                            "type": {
+                                                                "S": "유형 C (말꼬리 덮기)"
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "M": {
+                                                            "apology_used": {
+                                                                "BOOL": false
+                                                            },
+                                                            "content_context": {
+                                                                "S": "고객: 네. 감사합니다. 네. / 상담원: 완료되었습니다."
+                                                            },
+                                                            "judgment": {
+                                                                "S": "FAIL"
+                                                            },
+                                                            "timestamp_end": {
+                                                                "S": "05:07"
+                                                            },
+                                                            "timestamp_start": {
+                                                                "S": "05:05"
+                                                            },
+                                                            "type": {
+                                                                "S": "유형 B (복합 호응 끼어들기)"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            "summary": {
+                                                "M": {
+                                                    "grade": {
+                                                        "S": "FAIL"
+                                                    },
+                                                    "total_interruptions": {
+                                                        "N": "5"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "pacing_understanding": {
+                                        "M": {
+                                            "issues": {
+                                                "L": [
+                                                    {
+                                                        "M": {
+                                                            "agent_response_quality": {
+                                                                "S": "소프트/하드 케이지 용어를 풀어서 설명하며 속도를 조절하여 잘 대응함 (PASS)"
+                                                            },
+                                                            "category": {
+                                                                "S": "고객 이해도 실패 감지"
+                                                            },
+                                                            "customer_reaction": {
+                                                                "S": "어떤 다시 말씀해 주시겠어요?"
+                                                            },
+                                                            "timestamp": {
+                                                                "S": "01:12"
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "M": {
+                                                            "agent_response_quality": {
+                                                                "S": "중요 규정(운송 불가 조건, 요금 등)을 전달할 때 고객이 정보를 소화할 시간을 주지 않고 너무 빠르게 말하여 전달력이 떨어짐 (FAIL)"
+                                                            },
+                                                            "category": {
+                                                                "S": "어속 빠름 / 필수 정보 전달 미흡"
+                                                            },
+                                                            "customer_reaction": {
+                                                                "S": "고객의 별도 재질문은 없었으나, 약 30초간 쉼 없이 반려동물 규정 전체를 매우 빠르게 안내함."
+                                                            },
+                                                            "timestamp": {
+                                                                "S": "02:19"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            "summary": {
+                                                "M": {
+                                                    "assessment": {
+                                                        "S": "Fast"
+                                                    },
+                                                    "re_explanation_requests": {
+                                                        "N": "1"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "VoiceProduction": {
+                                "M": {
+                                    "active_listening": {
+                                        "M": {
+                                            "reason": {
+                                                "S": "고객의 발화에 대해 '네'라는 단일 호응어만 반복적으로 사용(총 10회 이상)하여 기계적인 인상을 줍니다. '그러셨군요', '확인해보겠습니다' 등 다양한 호응어를 사용한 적극적 경청 노력이 부족했습니다."
+                                            },
+                                            "status": {
+                                                "S": "FAIL"
+                                            }
+                                        }
+                                    },
+                                    "feedback_message": {
+                                        "S": "부정적인 상황에서 대안을 제시하며 응대한 점은 매우 훌륭합니다. 다만, '네'라고만 반복하기보다 고객의 말을 요약하여 되묻거나('~라고 이해했는데 맞으실까요?') 다양한 호응어를 사용하면 고객이 존중받고 있다는 느낌을 더 강하게 받을 것입니다. 또한, '다/까'체와 '요/조'체를 적절히 혼합하여 사용하면 더욱 부드럽고 친근한 상담이 가능합니다."
+                                    },
+                                    "handling_negativity": {
+                                        "M": {
+                                            "cushion_words_used": {
+                                                "L": [
+                                                    {
+                                                        "S": "너무 죄송하게도"
+                                                    }
+                                                ]
+                                            },
+                                            "reason": {
+                                                "S": "고객의 요청(가족 동반석)을 거절해야 하는 상황에서 '너무 죄송하게도 오픈된 자리가...'(03:16)라는 쿠션 멘트를 효과적으로 사용했습니다. 또한, '공항 오셔서 변경하실 수 있는데'(03:16)라며 대안을 제시하여 부정적인 상황을 긍정적으로 잘 처리했습니다."
+                                            },
+                                            "status": {
+                                                "S": "PASS"
+                                            }
+                                        }
+                                    },
+                                    "Tone_Manner": {
+                                        "M": {
+                                            "reason": {
+                                                "S": "상담 내내 '다/까'체의 종결 어미만 일관되게 사용하여(예: '일정입니까?', '맞습니까?'), 친밀감을 형성하는 '요/조'체와의 혼합 사용이 전혀 이루어지지 않았습니다. 이로 인해 전반적인 분위기가 다소 경직되고 기계적으로 느껴질 수 있습니다."
+                                            },
+                                            "status": {
+                                                "S": "FAIL"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "summary": {
+                        "M": {
+                            "greeting_result": {
+                                "S": "FAIL"
+                            },
+                            "Language_Use_result": {
+                                "S": "PASS"
+                            },
+                            "score": {
+                                "S": "90"
+                            },
+                            "Speed_result": {
+                                "S": "FAIL"
+                            },
+                            "VoiceProduction_result": {
+                                "S": "FAIL"
+                            }
+                        }
+                    }
+                }
+            },
+            "geminiModel": {
+                "S": "gemini-2.5-pro"
+            },
+            "geminiResponse": {
+                "S": "```json\n{\n  \"summary\": {\n    \"greeting_result\": \"FAIL\",\n    \"score\": \"40\",\n    \"VoiceProduction_result\": \"FAIL\",\n    \"score\": \"50\",\n    \"Speed_result\": \"FAIL\",\n    \"score\": \"30\",\n    \"Language_Use_result\": \"PASS\",\n    \"score\": \"90\"\n  },\n  \"details\": {\n    \"greeting\": {\n      \"opening\": {\n        \"status\": \"FAIL\",\n        \"reason\": \"표준 인사말 '안녕하십니까?'가 누락된 채 '안소민입니다.'(00:00)로 응대를 시작하여 불완전한 첫인사를 제공했습니다.\"\n      },\n      \"response\": {\n        \"status\": \"N/A\",\n        \"reason\": \"고객이 별도의 인사 없이 바로 본 용건(00:01)을 이야기하여, 인사 호응이 필요 없는 상황이었습니다.\"\n      },\n      \"additional_inquiry_check\": {\n        \"status\": \"FAIL\",\n        \"reason\": \"상담 종료 직전 '추가 문의 사항 있으십니까?'와 같은 추가 문의 확인 절차를 누락했습니다.\"\n      },\n      \"closing\": {\n        \"status\": \"FAIL\",\n        \"reason\": \"추가 문의 확인 절차 없이 '네 감사합니다'(05:03)로 상담을 마무리하여 표준 끝인사 절차를 준수하지 않았습니다.\"\n      },\n      \"feedback_message\": \"첫인사 시 '안녕하십니까?'를 포함한 완전한 문장으로 시작하고, 끝인사 시 '추가 문의사항은 없으신지' 확인하는 절차를 지켜주시면 더욱 신뢰감 있고 안정적인 상담이 될 것입니다.\"\n    },\n    \"VoiceProduction\": {\n      \"Tone_Manner\": {\n        \"status\": \"FAIL\",\n        \"reason\": \"상담 내내 '다/까'체의 종결 어미만 일관되게 사용하여(예: '일정입니까?', '맞습니까?'), 친밀감을 형성하는 '요/조'체와의 혼합 사용이 전혀 이루어지지 않았습니다. 이로 인해 전반적인 분위기가 다소 경직되고 기계적으로 느껴질 수 있습니다.\"\n      },\n      \"handling_negativity\": {\n        \"status\": \"PASS\",\n        \"cushion_words_used\": [\n          \"너무 죄송하게도\"\n        ],\n        \"reason\": \"고객의 요청(가족 동반석)을 거절해야 하는 상황에서 '너무 죄송하게도 오픈된 자리가...'(03:16)라는 쿠션 멘트를 효과적으로 사용했습니다. 또한, '공항 오셔서 변경하실 수 있는데'(03:16)라며 대안을 제시하여 부정적인 상황을 긍정적으로 잘 처리했습니다.\"\n      },\n      \"active_listening\": {\n        \"status\": \"FAIL\",\n        \"reason\": \"고객의 발화에 대해 '네'라는 단일 호응어만 반복적으로 사용(총 10회 이상)하여 기계적인 인상을 줍니다. '그러셨군요', '확인해보겠습니다' 등 다양한 호응어를 사용한 적극적 경청 노력이 부족했습니다.\"\n      },\n      \"feedback_message\": \"부정적인 상황에서 대안을 제시하며 응대한 점은 매우 훌륭합니다. 다만, '네'라고만 반복하기보다 고객의 말을 요약하여 되묻거나('~라고 이해했는데 맞으실까요?') 다양한 호응어를 사용하면 고객이 존중받고 있다는 느낌을 더 강하게 받을 것입니다. 또한, '다/까'체와 '요/조'체를 적절히 혼합하여 사용하면 더욱 부드럽고 친근한 상담이 가능합니다.\"\n    },\n    \"Speed\": {\n      \"Interruption_Analysis\": {\n        \"summary\": {\n          \"total_interruptions\": 5,\n          \"grade\": \"FAIL\"\n        },\n        \"events\": [\n          {\n            \"type\": \"유형 B (복합 호응 끼어들기)\",\n            \"timestamp_start\": \"03:12\",\n            \"timestamp_end\": \"03:13\",\n            \"content_context\": \"고객: ...네 명이 다 앉을 수 있을까요? / 상담원: 네.\",\n            \"apology_used\": false,\n            \"judgment\": \"FAIL\"\n          },\n          {\n            \"type\": \"유형 C (말꼬리 덮기)\",\n            \"timestamp_start\": \"04:08\",\n            \"timestamp_end\": \"04:10\",\n            \"content_context\": \"고객: ...앞뒤로는 안 되는 거죠. 자리가. / 상담원: 어 됩니다. 그러면 50\",\n            \"apology_used\": false,\n            \"judgment\": \"FAIL\"\n          },\n          {\n            \"type\": \"유형 C (말꼬리 덮기)\",\n            \"timestamp_start\": \"04:11\",\n            \"timestamp_end\": \"04:13\",\n            \"content_context\": \"고객: 아 돼요? 그러면 앞뒤로. / 상담원: 뒤쪽으로 가셔야 되는데 괜찮으세요?\",\n            \"apology_used\": false,\n            \"judgment\": \"FAIL\"\n          },\n          {\n            \"type\": \"유형 C (말꼬리 덮기)\",\n            \"timestamp_start\": \"05:03\",\n            \"timestamp_end\": \"05:04\",\n            \"content_context\": \"고객: 아 네. 알겠습니다. / 상담원: 네 감사합니다.\",\n            \"apology_used\": false,\n            \"judgment\": \"FAIL\"\n          },\n          {\n            \"type\": \"유형 B (복합 호응 끼어들기)\",\n            \"timestamp_start\": \"05:05\",\n            \"timestamp_end\": \"05:07\",\n            \"content_context\": \"고객: 네. 감사합니다. 네. / 상담원: 완료되었습니다.\",\n            \"apology_used\": false,\n            \"judgment\": \"FAIL\"\n          }\n        ]\n      },\n      \"pacing_understanding\": {\n        \"summary\": {\n          \"re_explanation_requests\": 1,\n          \"assessment\": \"Fast\"\n        },\n        \"issues\": [\n          {\n            \"timestamp\": \"01:12\",\n            \"category\": \"고객 이해도 실패 감지\",\n            \"customer_reaction\": \"어떤 다시 말씀해 주시겠어요?\",\n            \"agent_response_quality\": \"소프트/하드 케이지 용어를 풀어서 설명하며 속도를 조절하여 잘 대응함 (PASS)\"\n          },\n          {\n            \"timestamp\": \"02:19\",\n            \"category\": \"어속 빠름 / 필수 정보 전달 미흡\",\n            \"customer_reaction\": \"고객의 별도 재질문은 없었으나, 약 30초간 쉼 없이 반려동물 규정 전체를 매우 빠르게 안내함.\",\n            \"agent_response_quality\": \"중요 규정(운송 불가 조건, 요금 등)을 전달할 때 고객이 정보를 소화할 시간을 주지 않고 너무 빠르게 말하여 전달력이 떨어짐 (FAIL)\"\n          }\n        ]\n      },\n      \"feedback_message\": \"고객의 말이 끝나기 전에 응답하는 경우가 5회 발생했습니다(04:08, 04:11 등). 고객의 말이 완전히 끝난 것을 확인한 후 답변하는 습관이 필요합니다. 특히 02:19 구간에서 약 30초간 규정을 매우 빠르게 안내하셨는데, 중요한 정보는 단락을 나누어 잠시 쉬거나 고객의 이해 여부를 확인하며 전달하는 것이 효과적입니다.\"\n    },\n    \"Language_Use\": {\n      \"language_quality_score\": {\n        \"events\": []\n      },\n      \"inappropriate_vocabulary\": {\n        \"events\": []\n      },\n      \"Unpolite_Tone_Manner\": {\n        \"events\": [\n          {\n            \"timestamp\": \"04:42\",\n            \"type\": \"공손하지 않은 연결어 (변명조)\",\n            \"detected_sentence\": \"...자리가 안 나올 것 같고요.\",\n            \"correction\": \"...자리가 나오지 않을 것 같습니다.\",\n            \"analysis\": \"'~고요'라는 표현은 상황에 따라 변명처럼 들릴 수 있어, '~습니다'로 명확하게 문장을 종결하는 것이 더 신뢰감을 줍니다.\"\n          }\n        ]\n      },\n      \"bad_habits\": {\n        \"events\": []\n      },\n      \"feedback_message\": \"사물 존칭 오류나 부적절한 어휘 사용 없이 전반적으로 매우 정확한 언어를 사용하셨습니다. 이는 서비스의 전문성을 높이는 큰 강점입니다. 다만, 문장 끝을 '~고요'로 마무리하는 습관(04:42 등)을 '~습니다'로 바꾸면 더욱 간결하고 명확한 인상을 줄 수 있습니다.\"\n    }\n  }\n}\n```"
+            },
+            "message": {
+                "S": "GCP Authentication Success"
+            },
+            "outputTokens": {
+                "N": "2062"
+            },
+            "processingTime": {
+                "N": "148.91"
+            },
+            "projectId": {
+                "S": "ke-pss-aicc-dev"
+            },
+            "promptLength": {
+                "N": "23509"
+            },
+            "responseLength": {
+                "N": "5223"
+            },
+            "serviceAccount": {
+                "S": "pss-aicc-dev-sa@ke-pss-aicc-dev.iam.gserviceaccount.com"
+            },
+            "thinkingText": {
+                "S": "Okay, as a senior QA expert, I've just meticulously reviewed a call recording and its transcript for a Global Service Center agent. My process involved strictly adhering to the provided `Evaluation Criteria`, using the JSON `Content` and `BeginOffsetMillis` values as definitive evidence.\n\nFirst, I assessed the `Greeting`. The agent missed the formal opening (\"안녕하십니까? [상담원 이름]입니다.\"), resulting in a FAIL. The closing lacked the \"additional inquiry\" check, further contributing to a FAIL.\n\nNext, I delved into `Voice Production`. The agent's tone was overly formal (exclusively using '다/까' style), leading to a FAIL. The agent demonstrated good handling of negative information, showing empathy and providing alternatives (PASS). However, the agent's active listening was very poor, relying almost entirely on \"네\" for acknowledgements, which yielded a FAIL.\n\nThen, I analyzed `Speed`. I identified five instances of agent interruptions, which is a significant issue and resulted in a FAIL. The agent's delivery of lengthy information (like the pet policy) was excessively fast, which also resulted in a FAIL.\n\nFinally, I examined `Language Use`. The agent was mostly compliant, therefore I rated it a PASS. There were no instances of inappropriate vocabulary or grammar errors.\n"
+            },
+            "timestamp": {
+                "N": "1768461631988"
+            },
+            "totalTokens": {
+                "N": "32925"
+            }
+        }
+    },
+    "status": {
+        "S": "COMPLETED"
+    },
+    "ttl": {
+        "N": "1768465082"
     }
 }

@@ -203,16 +203,23 @@ export interface QMAutomationListResponse {
   hasMore: boolean;
 }
 
-// Evaluation Result Types for QM Analysis
-export interface EvaluationItemStatus {
-  status: 'PASS' | 'FAIL' | 'N/A';
-  reason: string;
+// Evaluation Result Types for QM Analysis (동적 구조 지원)
+
+// 대항목 상태 타입
+export type EvaluationStatusType =
+  | 'GEMINI_EVAL_COMPLETED'        // AI QM 평가 완료
+  | 'AGENT_OBJECTION_REQUESTED'    // 상담원 이의제기 요청됨
+  | 'QA_AGENT_OBJECTION_ACCEPTED'  // QA가 상담원 이의제기 수용
+  | 'QA_AGENT_OBJECTION_REJECTED'; // QA가 상담원 이의제기 거절
+
+// 대항목 상태 정보
+export interface EvaluationState {
+  seq: number;
+  status: EvaluationStatusType;
+  status_reason: string;
 }
 
-export interface EvaluationItemWithCushion extends EvaluationItemStatus {
-  cushion_words_used?: string[];
-}
-
+// 기본 이벤트 타입 - 다양한 필드를 유연하게 지원
 export interface EvaluationEvent {
   timestamp?: string;
   timestamp_start?: string;
@@ -227,69 +234,17 @@ export interface EvaluationEvent {
   category?: string;
   customer_reaction?: string;
   agent_response_quality?: string;
+  [key: string]: unknown; // 추가 필드 허용
 }
 
-export interface EvaluationEventList {
-  events: EvaluationEvent[];
+// 대항목 데이터 구조 (소항목 + states)
+export interface EvaluationSectionData {
+  states?: EvaluationState[];
+  [key: string]: unknown; // 소항목들
 }
 
-export interface GreetingDetails {
-  opening: EvaluationItemStatus;
-  response: EvaluationItemStatus;
-  additional_inquiry_check: EvaluationItemStatus;
-  closing: EvaluationItemStatus;
-  feedback_message: string;
-}
-
-export interface LanguageUseDetails {
-  language_quality_score: EvaluationEventList;
-  inappropriate_vocabulary: EvaluationEventList;
-  Unpolite_Tone_Manner: EvaluationEventList;
-  bad_habits: EvaluationEventList;
-  feedback_message: string;
-}
-
-export interface SpeedDetails {
-  Interruption_Analysis: {
-    summary: {
-      total_interruptions: number;
-      grade: string;
-    };
-    events: EvaluationEvent[];
-  };
-  pacing_understanding: {
-    summary: {
-      re_explanation_requests: number;
-      assessment: string;
-    };
-    issues: EvaluationEvent[];
-  };
-  feedback_message: string;
-}
-
-export interface VoiceProductionDetails {
-  Tone_Manner: EvaluationItemStatus;
-  handling_negativity: EvaluationItemWithCushion;
-  active_listening: EvaluationItemStatus;
-  feedback_message: string;
-}
-
-export interface EvaluationDetails {
-  greeting: GreetingDetails;
-  Language_Use: LanguageUseDetails;
-  Speed: SpeedDetails;
-  VoiceProduction: VoiceProductionDetails;
-}
-
-export interface EvaluationSummary {
-  greeting_result: string;
-  Language_Use_result: string;
-  Speed_result: string;
-  VoiceProduction_result: string;
-  score: string;
-}
-
+// 동적 평가 결과 타입 - 대항목/소항목이 변경되어도 유연하게 대응
 export interface EvaluationResult {
-  details: EvaluationDetails;
-  summary: EvaluationSummary;
+  details: Record<string, EvaluationSectionData>; // 대항목 > 소항목 + states 동적 구조
+  summary: Record<string, string>; // 요약 정보 (점수, 결과 등)
 }

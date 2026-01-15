@@ -40,6 +40,10 @@ import {
   Functions as FunctionIcon,
   AccessTime as TimeIcon,
   Token as TokenIcon,
+  Gavel as ObjectionIcon,
+  ThumbUp as AcceptIcon,
+  ThumbDown as RejectIcon,
+  History as HistoryIcon,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -55,8 +59,9 @@ import {
   FunctionCallResultData,
   AudioAnalyzeResult,
   EvaluationResult,
-  EvaluationItemStatus,
   EvaluationEvent,
+  EvaluationState,
+  EvaluationStatusType,
 } from '@/types/qmAutomation.types';
 import dayjs from 'dayjs';
 
@@ -764,33 +769,38 @@ const QMAutomationDetail: React.FC = () => {
   );
 };
 
-// Section label mapping
-const SECTION_LABELS: Record<string, string> = {
+// 라벨 매핑 (알려진 키에 대한 한글 라벨, 없으면 키 이름 그대로 표시)
+const LABEL_MAP: Record<string, string> = {
+  // 대항목
   greeting: '인사',
   Language_Use: '언어 사용',
   Speed: '속도',
   VoiceProduction: '음성 표현',
-};
-
-// Item label mapping
-const ITEM_LABELS: Record<string, string> = {
-  // Greeting
+  // 소항목
   opening: '첫인사',
   response: '인사 호응',
   additional_inquiry_check: '추가 문의 확인',
   closing: '끝인사',
-  // Language Use
   language_quality_score: '언어 품질 점수',
   inappropriate_vocabulary: '부적절한 어휘',
   Unpolite_Tone_Manner: '공손하지 않은 표현',
   bad_habits: '습관적 표현',
-  // Speed
   Interruption_Analysis: '끼어들기 분석',
   pacing_understanding: '속도/이해도 분석',
-  // Voice Production
   Tone_Manner: '어조/매너',
   handling_negativity: '부정적 상황 대처',
   active_listening: '적극적 경청',
+  feedback_message: '피드백',
+};
+
+// 키 이름을 라벨로 변환 (매핑이 없으면 키 이름을 읽기 쉽게 변환)
+const getLabel = (key: string): string => {
+  if (LABEL_MAP[key]) return LABEL_MAP[key];
+  // snake_case나 camelCase를 읽기 쉽게 변환
+  return key
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/^./, (str) => str.toUpperCase());
 };
 
 // Status chip component
@@ -819,128 +829,401 @@ const StatusChip: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
-// Evaluation Item Component for simple status items
-const EvaluationStatusItem: React.FC<{
-  label: string;
-  item: EvaluationItemStatus;
-  cushionWords?: string[];
-}> = ({ label, item, cushionWords }) => (
-  <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-      <Typography variant="subtitle2" fontWeight={600}>
-        {label}
-      </Typography>
-      <StatusChip status={item.status} />
-    </Stack>
-    <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-      {item.reason}
-    </Typography>
-    {cushionWords && cushionWords.length > 0 && (
-      <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
-        <Typography variant="caption" color="text.secondary">
-          사용한 쿠션 멘트:
-        </Typography>
-        {cushionWords.map((word, idx) => (
-          <Chip key={idx} size="small" label={word} variant="outlined" color="primary" />
-        ))}
-      </Stack>
-    )}
-  </Box>
-);
+// 대항목 상태 레이블 및 색상 매핑
+const getEvaluationStatusConfig = (status: EvaluationStatusType) => {
+  switch (status) {
+    case 'GEMINI_EVAL_COMPLETED':
+      return {
+        label: 'AI 평가 완료',
+        color: 'info' as const,
+        icon: <AIIcon fontSize="small" />,
+        bgColor: 'info.50',
+        borderColor: 'info.main',
+      };
+    case 'AGENT_OBJECTION_REQUESTED':
+      return {
+        label: '이의제기 요청',
+        color: 'warning' as const,
+        icon: <ObjectionIcon fontSize="small" />,
+        bgColor: 'warning.50',
+        borderColor: 'warning.main',
+      };
+    case 'QA_AGENT_OBJECTION_ACCEPTED':
+      return {
+        label: '이의제기 수용',
+        color: 'success' as const,
+        icon: <AcceptIcon fontSize="small" />,
+        bgColor: 'success.50',
+        borderColor: 'success.main',
+      };
+    case 'QA_AGENT_OBJECTION_REJECTED':
+      return {
+        label: '이의제기 거절',
+        color: 'error' as const,
+        icon: <RejectIcon fontSize="small" />,
+        bgColor: 'error.50',
+        borderColor: 'error.main',
+      };
+    default:
+      return {
+        label: status,
+        color: 'default' as const,
+        icon: <InfoIcon fontSize="small" />,
+        bgColor: 'grey.50',
+        borderColor: 'grey.300',
+      };
+  }
+};
 
-// Evaluation Event List Component
-const EvaluationEventListView: React.FC<{
-  label: string;
-  events: EvaluationEvent[];
-}> = ({ label, events }) => (
-  <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-      <Typography variant="subtitle2" fontWeight={600}>
-        {label}
-      </Typography>
-      <Chip
-        size="small"
-        label={events.length > 0 ? `${events.length}건 감지` : '감지 없음'}
-        color={events.length > 0 ? 'warning' : 'success'}
-      />
-    </Stack>
-    {events.length > 0 ? (
-      <List dense disablePadding>
-        {events.map((event, idx) => (
-          <ListItem key={idx} sx={{ px: 0, alignItems: 'flex-start' }}>
-            <ListItemIcon sx={{ minWidth: 36, mt: 0.5 }}>
-              <TimeIcon fontSize="small" color="action" />
-            </ListItemIcon>
-            <ListItemText
-              primary={
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Typography variant="body2" fontWeight={600}>
-                    {event.timestamp || `${event.timestamp_start || ''} ~ ${event.timestamp_end || ''}`}
+// 대항목 상태 칩 컴포넌트
+const EvaluationStatusChip: React.FC<{ status: EvaluationStatusType }> = ({ status }) => {
+  const config = getEvaluationStatusConfig(status);
+  return (
+    <Chip
+      size="small"
+      label={config.label}
+      color={config.color}
+      icon={config.icon}
+      sx={{ fontWeight: 600 }}
+    />
+  );
+};
+
+// 상태 히스토리 컴포넌트
+const StateHistoryView: React.FC<{ states: EvaluationState[] }> = ({ states }) => {
+  if (!states || states.length === 0) return null;
+
+  // seq 기준으로 정렬 (최신이 위로)
+  const sortedStates = [...states].sort((a, b) => b.seq - a.seq);
+
+  return (
+    <Box sx={{ mt: 2, mb: 1 }}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+        <HistoryIcon fontSize="small" color="action" />
+        <Typography variant="subtitle2" color="text.secondary">
+          상태 히스토리
+        </Typography>
+      </Stack>
+      <Box sx={{ pl: 1 }}>
+        {sortedStates.map((state, index) => {
+          const config = getEvaluationStatusConfig(state.status);
+          const isLatest = index === 0;
+          return (
+            <Box
+              key={state.seq}
+              sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                mb: 1.5,
+                position: 'relative',
+                '&::before': index < sortedStates.length - 1 ? {
+                  content: '""',
+                  position: 'absolute',
+                  left: '11px',
+                  top: '24px',
+                  bottom: '-12px',
+                  width: '2px',
+                  bgcolor: 'grey.300',
+                } : undefined,
+              }}
+            >
+              <Box
+                sx={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  bgcolor: isLatest ? `${config.color}.main` : 'grey.300',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mr: 1.5,
+                  flexShrink: 0,
+                  color: isLatest ? 'white' : 'grey.600',
+                }}
+              >
+                {React.cloneElement(config.icon, {
+                  fontSize: 'inherit',
+                  sx: { fontSize: '14px' }
+                })}
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Typography
+                    variant="body2"
+                    fontWeight={isLatest ? 600 : 400}
+                    color={isLatest ? 'text.primary' : 'text.secondary'}
+                  >
+                    {config.label}
                   </Typography>
-                  {event.type && (
-                    <Chip size="small" label={event.type} variant="outlined" />
-                  )}
-                  {event.judgment && (
-                    <StatusChip status={event.judgment} />
+                  {isLatest && (
+                    <Chip size="small" label="현재" variant="outlined" color="primary" sx={{ height: 20, fontSize: '0.7rem' }} />
                   )}
                 </Stack>
-              }
-              secondary={
-                <Box sx={{ mt: 0.5 }}>
-                  {event.detected_sentence && (
-                    <Typography variant="body2" color="error.main" sx={{ mb: 0.5 }}>
-                      감지: "{event.detected_sentence}"
-                    </Typography>
-                  )}
-                  {event.correction && (
-                    <Typography variant="body2" color="success.main" sx={{ mb: 0.5 }}>
-                      수정: "{event.correction}"
-                    </Typography>
-                  )}
-                  {event.content_context && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                      상황: {event.content_context}
-                    </Typography>
-                  )}
-                  {event.analysis && (
-                    <Typography variant="body2" color="text.secondary">
-                      분석: {event.analysis}
-                    </Typography>
-                  )}
-                  {event.category && (
-                    <Typography variant="body2" color="text.secondary">
-                      분류: {event.category}
-                    </Typography>
-                  )}
-                  {event.customer_reaction && (
-                    <Typography variant="body2" color="text.secondary">
-                      고객 반응: {event.customer_reaction}
-                    </Typography>
-                  )}
-                  {event.agent_response_quality && (
-                    <Typography variant="body2" color="text.secondary">
-                      상담사 대응: {event.agent_response_quality}
-                    </Typography>
-                  )}
-                </Box>
-              }
-            />
-          </ListItem>
-        ))}
-      </List>
-    ) : (
-      <Typography variant="body2" color="text.secondary">
-        감지된 이벤트가 없습니다.
-      </Typography>
-    )}
-  </Box>
-);
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                  {state.status_reason}
+                </Typography>
+              </Box>
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
+  );
+};
 
-// Evaluation Detail View Component
+// 소항목 데이터 타입 판별 및 렌더링
+const isStatusItem = (value: unknown): value is { status: string; reason: string } => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'status' in value &&
+    'reason' in value &&
+    typeof (value as Record<string, unknown>).status === 'string'
+  );
+};
+
+const isEventList = (value: unknown): value is { events: EvaluationEvent[] } => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'events' in value &&
+    Array.isArray((value as Record<string, unknown>).events)
+  );
+};
+
+const hasEventsOrIssues = (value: unknown): value is { events?: EvaluationEvent[]; issues?: EvaluationEvent[]; summary?: Record<string, unknown> } => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (('events' in value && Array.isArray((value as Record<string, unknown>).events)) ||
+     ('issues' in value && Array.isArray((value as Record<string, unknown>).issues)))
+  );
+};
+
+// 이벤트 렌더링 컴포넌트
+const EventItemView: React.FC<{ event: EvaluationEvent }> = ({ event }) => {
+  const timestamp = event.timestamp ||
+    (event.timestamp_start && event.timestamp_end ? `${event.timestamp_start} ~ ${event.timestamp_end}` : '');
+
+  return (
+    <ListItem sx={{ px: 0, alignItems: 'flex-start' }}>
+      <ListItemIcon sx={{ minWidth: 36, mt: 0.5 }}>
+        <TimeIcon fontSize="small" color="action" />
+      </ListItemIcon>
+      <ListItemText
+        primary={
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            {timestamp && (
+              <Typography variant="body2" fontWeight={600}>
+                {timestamp}
+              </Typography>
+            )}
+            {event.type && <Chip size="small" label={event.type} variant="outlined" />}
+            {event.category && <Chip size="small" label={event.category} variant="outlined" />}
+            {event.judgment && <StatusChip status={event.judgment} />}
+          </Stack>
+        }
+        secondary={
+          <Box sx={{ mt: 0.5 }}>
+            {event.detected_sentence && (
+              <Typography variant="body2" color="error.main" sx={{ mb: 0.5 }}>
+                감지: "{event.detected_sentence}"
+              </Typography>
+            )}
+            {event.correction && (
+              <Typography variant="body2" color="success.main" sx={{ mb: 0.5 }}>
+                수정: "{event.correction}"
+              </Typography>
+            )}
+            {event.content_context && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                상황: {event.content_context}
+              </Typography>
+            )}
+            {event.analysis && (
+              <Typography variant="body2" color="text.secondary">
+                분석: {event.analysis}
+              </Typography>
+            )}
+            {event.customer_reaction && (
+              <Typography variant="body2" color="text.secondary">
+                고객 반응: {event.customer_reaction}
+              </Typography>
+            )}
+            {event.agent_response_quality && (
+              <Typography variant="body2" color="text.secondary">
+                상담사 대응: {event.agent_response_quality}
+              </Typography>
+            )}
+          </Box>
+        }
+      />
+    </ListItem>
+  );
+};
+
+// 소항목 렌더링 컴포넌트
+const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKey, value }) => {
+  const label = getLabel(itemKey);
+
+  // feedback_message는 별도 처리
+  if (itemKey === 'feedback_message' && typeof value === 'string') {
+    return (
+      <Alert severity="info" sx={{ mt: 2 }}>
+        <Typography variant="body2">{value}</Typography>
+      </Alert>
+    );
+  }
+
+  // status + reason 형태의 항목
+  if (isStatusItem(value)) {
+    const cushionWords = (value as Record<string, unknown>).cushion_words_used as string[] | undefined;
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          <StatusChip status={value.status} />
+        </Stack>
+        <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+          {value.reason}
+        </Typography>
+        {cushionWords && cushionWords.length > 0 && (
+          <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
+            <Typography variant="caption" color="text.secondary">
+              사용한 쿠션 멘트:
+            </Typography>
+            {cushionWords.map((word, idx) => (
+              <Chip key={idx} size="small" label={word} variant="outlined" color="primary" />
+            ))}
+          </Stack>
+        )}
+      </Box>
+    );
+  }
+
+  // events 배열만 있는 경우
+  if (isEventList(value)) {
+    const events = value.events;
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          <Chip
+            size="small"
+            label={events.length > 0 ? `${events.length}건 감지` : '감지 없음'}
+            color={events.length > 0 ? 'warning' : 'success'}
+          />
+        </Stack>
+        {events.length > 0 ? (
+          <List dense disablePadding>
+            {events.map((event, idx) => (
+              <EventItemView key={idx} event={event} />
+            ))}
+          </List>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            감지된 이벤트가 없습니다.
+          </Typography>
+        )}
+      </Box>
+    );
+  }
+
+  // summary + events/issues 형태 (복잡한 분석 항목)
+  if (hasEventsOrIssues(value)) {
+    const events = value.events || value.issues || [];
+    const summary = value.summary as Record<string, unknown> | undefined;
+
+    const summaryChips = [];
+    if (summary?.grade) {
+      summaryChips.push(<StatusChip key="grade" status={String(summary.grade)} />);
+    }
+    if (summary?.assessment) {
+      summaryChips.push(
+        <Chip
+          key="assessment"
+          size="small"
+          label={String(summary.assessment)}
+          color={summary.assessment === 'Fast' ? 'warning' : 'success'}
+        />
+      );
+    }
+    if (summary?.total_interruptions !== undefined) {
+      summaryChips.push(
+        <Chip key="interruptions" size="small" label={`${summary.total_interruptions}회`} variant="outlined" />
+      );
+    }
+    if (summary?.re_explanation_requests !== undefined) {
+      summaryChips.push(
+        <Chip key="re_explanation" size="small" label={`재설명 요청 ${summary.re_explanation_requests}회`} variant="outlined" />
+      );
+    }
+
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          {summaryChips}
+        </Stack>
+        {events.length > 0 && (
+          <List dense disablePadding>
+            {events.map((event, idx) => (
+              <EventItemView key={idx} event={event as EvaluationEvent} />
+            ))}
+          </List>
+        )}
+      </Box>
+    );
+  }
+
+  // 기타 - JSON으로 표시
+  if (typeof value === 'object' && value !== null) {
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+          {label}
+        </Typography>
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 1,
+            bgcolor: 'background.paper',
+            maxHeight: '200px',
+            overflow: 'auto',
+            fontFamily: 'monospace',
+            fontSize: '0.75rem',
+          }}
+        >
+          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {JSON.stringify(value, null, 2)}
+          </pre>
+        </Paper>
+      </Box>
+    );
+  }
+
+  return null;
+};
+
+// Evaluation Detail View Component - 동적 렌더링
 const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = ({
   evaluationResult,
 }) => {
   const { details, summary } = evaluationResult;
+
+  // 대항목 키 추출 (details의 키들)
+  const sectionKeys = Object.keys(details);
+
+  // summary에서 _result로 끝나는 키들 추출하여 대항목별 결과 매핑
+  const getSectionResult = (sectionKey: string): string | undefined => {
+    return summary[`${sectionKey}_result`];
+  };
 
   return (
     <Stack spacing={3}>
@@ -950,38 +1233,20 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
           평가 요약
         </Typography>
         <Grid container spacing={2}>
-          <Grid item xs={6} sm={3}>
-            <Stack alignItems="center" spacing={1}>
-              <Typography variant="caption" color="text.secondary">
-                인사
-              </Typography>
-              <StatusChip status={summary.greeting_result} />
-            </Stack>
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Stack alignItems="center" spacing={1}>
-              <Typography variant="caption" color="text.secondary">
-                언어 사용
-              </Typography>
-              <StatusChip status={summary.Language_Use_result} />
-            </Stack>
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Stack alignItems="center" spacing={1}>
-              <Typography variant="caption" color="text.secondary">
-                속도
-              </Typography>
-              <StatusChip status={summary.Speed_result} />
-            </Stack>
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Stack alignItems="center" spacing={1}>
-              <Typography variant="caption" color="text.secondary">
-                음성 표현
-              </Typography>
-              <StatusChip status={summary.VoiceProduction_result} />
-            </Stack>
-          </Grid>
+          {sectionKeys.map((sectionKey) => {
+            const result = getSectionResult(sectionKey);
+            if (!result) return null;
+            return (
+              <Grid item xs={6} sm={3} key={sectionKey}>
+                <Stack alignItems="center" spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    {getLabel(sectionKey)}
+                  </Typography>
+                  <StatusChip status={result} />
+                </Stack>
+              </Grid>
+            );
+          })}
         </Grid>
         {summary.score && (
           <Box sx={{ mt: 2, textAlign: 'center' }}>
@@ -1005,232 +1270,56 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
         )}
       </Paper>
 
-      {/* Greeting Section */}
-      <Accordion defaultExpanded>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Stack direction="row" alignItems="center" spacing={2}>
-            <Typography variant="subtitle1" fontWeight={600}>
-              {SECTION_LABELS.greeting}
-            </Typography>
-            <StatusChip status={summary.greeting_result} />
-          </Stack>
-        </AccordionSummary>
-        <AccordionDetails>
-          <EvaluationStatusItem
-            label={ITEM_LABELS.opening}
-            item={details.greeting.opening}
-          />
-          <EvaluationStatusItem
-            label={ITEM_LABELS.response}
-            item={details.greeting.response}
-          />
-          <EvaluationStatusItem
-            label={ITEM_LABELS.additional_inquiry_check}
-            item={details.greeting.additional_inquiry_check}
-          />
-          <EvaluationStatusItem
-            label={ITEM_LABELS.closing}
-            item={details.greeting.closing}
-          />
-          {details.greeting.feedback_message && (
-            <Alert severity="info" sx={{ mt: 2 }}>
-              <Typography variant="body2">{details.greeting.feedback_message}</Typography>
-            </Alert>
-          )}
-        </AccordionDetails>
-      </Accordion>
+      {/* 대항목별 섹션 - 동적 렌더링 */}
+      {sectionKeys.map((sectionKey) => {
+        const sectionData = details[sectionKey];
+        const sectionResult = getSectionResult(sectionKey);
+        // states와 feedback_message 제외한 소항목들
+        const subItemKeys = Object.keys(sectionData).filter((key) => key !== 'feedback_message' && key !== 'states');
+        const feedbackMessage = sectionData.feedback_message as string | undefined;
+        const states = sectionData.states as EvaluationState[] | undefined;
+        // 현재 상태 (가장 최신 seq)
+        const currentState = states && states.length > 0
+          ? states.reduce((latest, current) => current.seq > latest.seq ? current : latest, states[0])
+          : undefined;
 
-      {/* Language Use Section */}
-      <Accordion defaultExpanded>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Stack direction="row" alignItems="center" spacing={2}>
-            <Typography variant="subtitle1" fontWeight={600}>
-              {SECTION_LABELS.Language_Use}
-            </Typography>
-            <StatusChip status={summary.Language_Use_result} />
-          </Stack>
-        </AccordionSummary>
-        <AccordionDetails>
-          <EvaluationEventListView
-            label={ITEM_LABELS.language_quality_score}
-            events={details.Language_Use.language_quality_score?.events || []}
-          />
-          <EvaluationEventListView
-            label={ITEM_LABELS.inappropriate_vocabulary}
-            events={details.Language_Use.inappropriate_vocabulary?.events || []}
-          />
-          <EvaluationEventListView
-            label={ITEM_LABELS.Unpolite_Tone_Manner}
-            events={details.Language_Use.Unpolite_Tone_Manner?.events || []}
-          />
-          <EvaluationEventListView
-            label={ITEM_LABELS.bad_habits}
-            events={details.Language_Use.bad_habits?.events || []}
-          />
-          {details.Language_Use.feedback_message && (
-            <Alert severity="info" sx={{ mt: 2 }}>
-              <Typography variant="body2">{details.Language_Use.feedback_message}</Typography>
-            </Alert>
-          )}
-        </AccordionDetails>
-      </Accordion>
-
-      {/* Speed Section */}
-      <Accordion defaultExpanded>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Stack direction="row" alignItems="center" spacing={2}>
-            <Typography variant="subtitle1" fontWeight={600}>
-              {SECTION_LABELS.Speed}
-            </Typography>
-            <StatusChip status={summary.Speed_result} />
-          </Stack>
-        </AccordionSummary>
-        <AccordionDetails>
-          {/* Interruption Analysis */}
-          <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <Typography variant="subtitle2" fontWeight={600}>
-                {ITEM_LABELS.Interruption_Analysis}
-              </Typography>
-              <StatusChip status={details.Speed.Interruption_Analysis?.summary?.grade || 'N/A'} />
-              <Chip
-                size="small"
-                label={`${details.Speed.Interruption_Analysis?.summary?.total_interruptions || 0}회`}
-                variant="outlined"
-              />
-            </Stack>
-            {details.Speed.Interruption_Analysis?.events &&
-              details.Speed.Interruption_Analysis.events.length > 0 && (
-                <List dense disablePadding>
-                  {details.Speed.Interruption_Analysis.events.map((event, idx) => (
-                    <ListItem key={idx} sx={{ px: 0, alignItems: 'flex-start' }}>
-                      <ListItemIcon sx={{ minWidth: 36, mt: 0.5 }}>
-                        <TimeIcon fontSize="small" color="action" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <Typography variant="body2" fontWeight={600}>
-                              {event.timestamp_start} ~ {event.timestamp_end}
-                            </Typography>
-                            {event.type && (
-                              <Chip size="small" label={event.type} variant="outlined" />
-                            )}
-                            <StatusChip status={event.judgment || 'N/A'} />
-                          </Stack>
-                        }
-                        secondary={
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                            {event.content_context}
-                          </Typography>
-                        }
-                      />
-                    </ListItem>
-                  ))}
-                </List>
+        return (
+          <Accordion key={sectionKey} defaultExpanded>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ flexWrap: 'wrap' }}>
+                <Typography variant="subtitle1" fontWeight={600}>
+                  {getLabel(sectionKey)}
+                </Typography>
+                {sectionResult && <StatusChip status={sectionResult} />}
+                {currentState && (
+                  <EvaluationStatusChip status={currentState.status} />
+                )}
+              </Stack>
+            </AccordionSummary>
+            <AccordionDetails>
+              {/* 상태 히스토리 */}
+              {states && states.length > 0 && (
+                <StateHistoryView states={states} />
               )}
-          </Box>
-
-          {/* Pacing Understanding */}
-          <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <Typography variant="subtitle2" fontWeight={600}>
-                {ITEM_LABELS.pacing_understanding}
-              </Typography>
-              <Chip
-                size="small"
-                label={details.Speed.pacing_understanding?.summary?.assessment || '-'}
-                color={
-                  details.Speed.pacing_understanding?.summary?.assessment === 'Fast'
-                    ? 'warning'
-                    : 'success'
-                }
-              />
-              <Chip
-                size="small"
-                label={`재설명 요청 ${details.Speed.pacing_understanding?.summary?.re_explanation_requests || 0}회`}
-                variant="outlined"
-              />
-            </Stack>
-            {details.Speed.pacing_understanding?.issues &&
-              details.Speed.pacing_understanding.issues.length > 0 && (
-                <List dense disablePadding>
-                  {details.Speed.pacing_understanding.issues.map((issue, idx) => (
-                    <ListItem key={idx} sx={{ px: 0, alignItems: 'flex-start' }}>
-                      <ListItemIcon sx={{ minWidth: 36, mt: 0.5 }}>
-                        <TimeIcon fontSize="small" color="action" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <Typography variant="body2" fontWeight={600}>
-                              {issue.timestamp}
-                            </Typography>
-                            {issue.category && (
-                              <Chip size="small" label={issue.category} variant="outlined" />
-                            )}
-                          </Stack>
-                        }
-                        secondary={
-                          <Box sx={{ mt: 0.5 }}>
-                            {issue.customer_reaction && (
-                              <Typography variant="body2" color="text.secondary">
-                                고객 반응: {issue.customer_reaction}
-                              </Typography>
-                            )}
-                            {issue.agent_response_quality && (
-                              <Typography variant="body2" color="text.secondary">
-                                상담사 대응: {issue.agent_response_quality}
-                              </Typography>
-                            )}
-                          </Box>
-                        }
-                      />
-                    </ListItem>
-                  ))}
-                </List>
+              {states && states.length > 0 && <Divider sx={{ my: 2 }} />}
+              {/* 소항목들 렌더링 */}
+              {subItemKeys.map((subItemKey) => (
+                <SubItemRenderer
+                  key={subItemKey}
+                  itemKey={subItemKey}
+                  value={sectionData[subItemKey]}
+                />
+              ))}
+              {/* 피드백 메시지 */}
+              {feedbackMessage && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">{feedbackMessage}</Typography>
+                </Alert>
               )}
-          </Box>
-
-          {details.Speed.feedback_message && (
-            <Alert severity="info" sx={{ mt: 2 }}>
-              <Typography variant="body2">{details.Speed.feedback_message}</Typography>
-            </Alert>
-          )}
-        </AccordionDetails>
-      </Accordion>
-
-      {/* Voice Production Section */}
-      <Accordion defaultExpanded>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Stack direction="row" alignItems="center" spacing={2}>
-            <Typography variant="subtitle1" fontWeight={600}>
-              {SECTION_LABELS.VoiceProduction}
-            </Typography>
-            <StatusChip status={summary.VoiceProduction_result} />
-          </Stack>
-        </AccordionSummary>
-        <AccordionDetails>
-          <EvaluationStatusItem
-            label={ITEM_LABELS.Tone_Manner}
-            item={details.VoiceProduction.Tone_Manner}
-          />
-          <EvaluationStatusItem
-            label={ITEM_LABELS.handling_negativity}
-            item={details.VoiceProduction.handling_negativity}
-            cushionWords={details.VoiceProduction.handling_negativity?.cushion_words_used}
-          />
-          <EvaluationStatusItem
-            label={ITEM_LABELS.active_listening}
-            item={details.VoiceProduction.active_listening}
-          />
-          {details.VoiceProduction.feedback_message && (
-            <Alert severity="info" sx={{ mt: 2 }}>
-              <Typography variant="body2">{details.VoiceProduction.feedback_message}</Typography>
-            </Alert>
-          )}
-        </AccordionDetails>
-      </Accordion>
+            </AccordionDetails>
+          </Accordion>
+        );
+      })}
     </Stack>
   );
 };

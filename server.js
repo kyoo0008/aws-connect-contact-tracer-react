@@ -1194,8 +1194,8 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
-║  AWS Connect Contact Tracer - Backend API Server        ║
-║  Running on http://localhost:${PORT}                        ║
+║  AWS Connect Contact Tracer - Backend API Server         ║
+║  Running on http://localhost:${PORT}                     ║
 ╚══════════════════════════════════════════════════════════╝
 
 사용 전 준비:

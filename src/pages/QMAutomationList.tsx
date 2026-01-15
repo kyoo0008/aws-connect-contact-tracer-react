@@ -28,7 +28,6 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  LinearProgress,
   TextField,
   InputAdornment,
   TablePagination,
@@ -50,12 +49,10 @@ import {
   requestQMAutomation,
   getStatusLabel,
   getStatusColor,
-  pollQMAutomationUntilComplete,
 } from '@/services/qmAutomationService';
 import {
   QMAutomationListItem,
   QMAutomationRequestBody,
-  QMStatus,
 } from '@/types/qmAutomation.types';
 import dayjs, { Dayjs } from 'dayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -139,8 +136,6 @@ const QMAutomationList: React.FC = () => {
     maxOutputTokens: 65535,
   });
   const [toolDefinitionsJson, setToolDefinitionsJson] = useState(DEFAULT_TOOL_DEFINITIONS_JSON);
-  const [pollingRequestId, setPollingRequestId] = useState<string | null>(null);
-  const [pollingStatus, setPollingStatus] = useState<QMStatus | null>(null);
 
   // Search Date Range State (Default: Last 30 days)
   const [startDate, setStartDate] = useState<Dayjs | null>(dayjs().subtract(30, 'day'));
@@ -152,11 +147,11 @@ const QMAutomationList: React.FC = () => {
 
   // Sorting state
   type Order = 'asc' | 'desc';
-  type OrderBy = 'connectedToAgentTimestamp' | 'totalProcessingTime' | 'updatedAt';
+  type OrderBy = 'connectedToAgentTimestamp' | 'totalProcessingTime' | 'updatedAt' | null;
   const [order, setOrder] = useState<Order>('desc');
-  const [orderBy, setOrderBy] = useState<OrderBy>('connectedToAgentTimestamp');
+  const [orderBy, setOrderBy] = useState<OrderBy>(null);
 
-  const handleRequestSort = (property: OrderBy) => {
+  const handleRequestSort = (property: Exclude<OrderBy, null>) => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(property);
@@ -207,24 +202,15 @@ const QMAutomationList: React.FC = () => {
       const response = await requestQMAutomation(body, config);
       return response;
     },
-    onSuccess: async (response) => {
+    onSuccess: (response) => {
       setDialogOpen(false);
-      setPollingRequestId(response.requestId);
-      setPollingStatus('PENDING');
-
-      // Start polling
-      try {
-        await pollQMAutomationUntilComplete(response.requestId, config, {
-          onStatusChange: (status) => setPollingStatus(status),
-        });
-        // Refresh list after completion
-        queryClient.invalidateQueries({ queryKey: ['qm-automation-list'] });
-      } catch (error) {
-        console.error('Polling error:', error);
-      } finally {
-        setPollingRequestId(null);
-        setPollingStatus(null);
-      }
+      // Navigate to detail page with requestId from response
+      const targetContactId = requestOptions.contactId || contactId || 'view';
+      navigate(`/qm-automation/${targetContactId}/detail/${response.requestId}`);
+    },
+    onError: (error: Error) => {
+      // Error will be displayed in the UI via createQMMutation.error
+      console.error('QM Automation creation failed:', error);
     },
   });
 
@@ -319,42 +305,53 @@ const QMAutomationList: React.FC = () => {
 
             {/* Search Controls Container */}
             <Stack direction="row" spacing={2} alignItems="center" sx={{ ml: 4, flex: 1 }}>
-              {!contactId && (
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <DatePicker
-                    label="Start Date"
-                    value={startDate}
-                    format="YYYY-MM-DD"
-                    onChange={(newValue) => setStartDate(newValue)}
-                    slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
-                  />
-                  <Typography>-</Typography>
-                  <DatePicker
-                    label="End Date"
-                    value={endDate}
-                    format="YYYY-MM-DD"
-                    onChange={(newValue) => setEndDate(newValue)}
-                    slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
-                  />
-                </Stack>
-              )}
 
-              <Box component="form" onSubmit={handleSearch} sx={{ flex: 1, maxWidth: 300 }}>
-                <TextField
-                  size="small"
-                  fullWidth
-                  placeholder="Contact ID 검색..."
-                  value={inputContactId}
-                  onChange={(e) => setInputContactId(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon color="action" />
-                      </InputAdornment>
-                    ),
-                  }}
+              <Stack direction="row" spacing={1} alignItems="center">
+                <DatePicker
+                  label="Start Date"
+                  value={startDate}
+                  format="YYYY-MM-DD"
+                  onChange={(newValue) => setStartDate(newValue)}
+                  slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
                 />
-              </Box>
+                <Typography>-</Typography>
+                <DatePicker
+                  label="End Date"
+                  value={endDate}
+                  format="YYYY-MM-DD"
+                  onChange={(newValue) => setEndDate(newValue)}
+                  slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
+                />
+              </Stack>
+
+
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: 1, maxWidth: 400 }}>
+                <Box component="form" onSubmit={handleSearch} sx={{ flex: 1 }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    placeholder="Contact ID 검색..."
+                    value={inputContactId}
+                    onChange={(e) => setInputContactId(e.target.value)}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Box>
+                <Button
+                  variant="contained"
+                  size="medium"
+                  onClick={handleSearch}
+                  disabled={!inputContactId.trim()}
+                  sx={{ minWidth: '80px' }}
+                >
+                  검색
+                </Button>
+              </Stack>
             </Stack>
           </Stack>
 
@@ -364,44 +361,19 @@ const QMAutomationList: React.FC = () => {
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
-            {contactId && (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setDialogOpen(true)}
-                disabled={!!pollingRequestId}
-              >
-                새 QM 분석
-              </Button>
-            )}
+
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setDialogOpen(true)}
+              disabled={createQMMutation.isPending}
+            >
+              새 QM 분석
+            </Button>
+
           </Stack>
         </Stack>
       </Paper>
-
-      {/* Polling Progress */}
-      {pollingRequestId && (
-        <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
-          <Stack direction="row" alignItems="center" spacing={2}>
-            <CircularProgress size={24} />
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="body2" fontWeight={500}>
-                QM 분석 진행 중...
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Request ID: {pollingRequestId}
-              </Typography>
-              <LinearProgress sx={{ mt: 1 }} />
-            </Box>
-            {pollingStatus && (
-              <Chip
-                label={getStatusLabel(pollingStatus)}
-                color={getStatusColor(pollingStatus)}
-                size="small"
-              />
-            )}
-          </Stack>
-        </Paper>
-      )}
 
       {/* Loading */}
       {isLoading && (
@@ -482,6 +454,9 @@ const QMAutomationList: React.FC = () => {
               <TableBody>
                 {[...qmList]
                   .sort((a, b) => {
+                    // orderBy가 null이면 정렬하지 않음
+                    if (!orderBy) return 0;
+
                     let comparison = 0;
                     if (orderBy === 'connectedToAgentTimestamp') {
                       const dateA = new Date(a.connectedToAgentTimestamp || 0).getTime();
@@ -578,10 +553,21 @@ const QMAutomationList: React.FC = () => {
         </>
       )}
 
-      {/* New Request Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>새 QM 분석 요청</DialogTitle>
         <DialogContent>
+          {/* Error Alert */}
+          {createQMMutation.isError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" fontWeight={600}>
+                QM 분석 요청 실패
+              </Typography>
+              <Typography variant="body2">
+                {(createQMMutation.error as Error)?.message || '알 수 없는 오류가 발생했습니다.'}
+              </Typography>
+            </Alert>
+          )}
+
           <Stack spacing={3} sx={{ mt: 1 }}>
             <TextField
               label="Contact ID"
@@ -708,6 +694,11 @@ const QMAutomationList: React.FC = () => {
                     }
                     label="기본 Tool Definitions 사용"
                   />
+                  {!requestOptions.useDefaultToolDefinitions && (
+                    <Typography variant="caption" color="error" sx={{ display: 'block', mt: -0.5, mb: 1, ml: 1 }}>
+                      * Lambda에 Tool 구현이 되어 있는 것만 호출 가능합니다.
+                    </Typography>
+                  )}
                   {!requestOptions.useDefaultToolDefinitions && (
                     <TextField
                       label="Tool Definitions (JSON)"

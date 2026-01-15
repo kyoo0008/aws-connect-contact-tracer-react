@@ -42,13 +42,30 @@ export async function requestQMAutomation(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'x-aws-region': config.region,
+      'x-environment': config.environment,
+      ...(config.credentials && {
+        'x-aws-credentials': JSON.stringify(config.credentials),
+      }),
     },
     body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `Failed to request QM automation: ${response.status}`);
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+
+    // Lambda에서 반환된 상세 에러 메시지 추출
+    const errorMessage = errorData.message || errorData.error || `Failed to request QM automation: ${response.status}`;
+
+    // 상태 코드에 따른 사용자 친화적 메시지
+    let userFriendlyMessage = errorMessage;
+    if (response.status === 400) {
+      userFriendlyMessage = `잘못된 요청: ${errorMessage}`;
+    } else if (response.status === 500) {
+      userFriendlyMessage = `서버 오류: ${errorMessage}`;
+    }
+
+    throw new Error(userFriendlyMessage);
   }
 
   return response.json();
@@ -79,8 +96,9 @@ export async function getQMAutomationStatus(
   );
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `Failed to get QM automation status: ${response.status}`);
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `Failed to get QM automation status: ${response.status}`;
+    throw new Error(errorMessage);
   }
 
   return response.json();
@@ -116,8 +134,9 @@ export async function getQMAutomationListByContactId(
       if (response.status === 404) {
         return [];
       }
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || `Failed to get QM automation list: ${response.status}`);
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+      const errorMessage = errorData.message || errorData.error || `Failed to get QM automation list: ${response.status}`;
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -157,8 +176,9 @@ export async function getQMAutomationListAll(
       if (response.status === 404) {
         return [];
       }
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || `Failed to scan QM automation list: ${response.status}`);
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+      const errorMessage = errorData.message || errorData.error || `Failed to scan QM automation list: ${response.status}`;
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -197,8 +217,9 @@ export async function getQMAutomationListSearch(
     );
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || `Failed to search QM automation list: ${response.status}`);
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+      const errorMessage = errorData.message || errorData.error || `Failed to search QM automation list: ${response.status}`;
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -246,8 +267,9 @@ export async function getQMAutomationListByMonth(
       if (response.status === 404) {
         return [];
       }
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || `Failed to get QM automation statistics: ${response.status}`);
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+      const errorMessage = errorData.message || errorData.error || `Failed to get QM automation statistics: ${response.status}`;
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -293,8 +315,9 @@ export async function getQMAutomationListByAgent(
       if (response.status === 404) {
         return [];
       }
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || `Failed to get agent QM history: ${response.status}`);
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+      const errorMessage = errorData.message || errorData.error || `Failed to get agent QM history: ${response.status}`;
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -385,7 +408,7 @@ export async function pollQMAutomationUntilComplete(
     onStatusChange?: (status: QMStatus) => void;
   } = {}
 ): Promise<QMAutomationStatusResponse> {
-  const { maxAttempts = 60, intervalMs = 2000, onStatusChange } = options;
+  const { maxAttempts = 100, intervalMs = 3000, onStatusChange } = options;
 
   let attempts = 0;
   let lastStatus: QMStatus | null = null;

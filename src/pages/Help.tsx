@@ -93,22 +93,29 @@ const Help: React.FC = () => {
                                                 <ListItem>
                                                     <ListItemIcon><KeyIcon color="primary" /></ListItemIcon>
                                                     <ListItemText
-                                                        primary="Access Key ID"
-                                                        secondary="AWS IAM 사용자 또는 역할의 액세스 키 ID (예: AKIA...)"
-                                                    />
-                                                </ListItem>
-                                                <ListItem>
-                                                    <ListItemIcon><KeyIcon color="primary" /></ListItemIcon>
-                                                    <ListItemText
-                                                        primary="Secret Access Key"
-                                                        secondary="AWS IAM 사용자 또는 역할의 비밀 액세스 키"
+                                                        primary="Access Key ID / Secret Access Key"
+                                                        secondary="AWS IAM 사용자 또는 역할의 자격 증명 정보"
                                                     />
                                                 </ListItem>
                                                 <ListItem>
                                                     <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
                                                     <ListItemText
                                                         primary="Region"
-                                                        secondary="AWS 리전 코드 (예: ap-northeast-2)"
+                                                        secondary="Amazon Connect 인스턴스가 위치한 리전 (예: ap-northeast-2)"
+                                                    />
+                                                </ListItem>
+                                                <ListItem>
+                                                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                                                    <ListItemText
+                                                        primary="Instance ID"
+                                                        secondary="Connect 인스턴스의 고유 ID (Contact Flow 로그 조회 등에 필요)"
+                                                    />
+                                                </ListItem>
+                                                <ListItem>
+                                                    <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                                                    <ListItemText
+                                                        primary="Environment"
+                                                        secondary="실행 환경 구분 (dev, stg, prd 등)"
                                                     />
                                                 </ListItem>
                                             </List>
@@ -147,7 +154,7 @@ const Help: React.FC = () => {
                                 </Typography>
                                 <Typography paragraph>
                                     LLM(Gemini)을 활용하여 상담 내용을 자동으로 분석하고 평가하는 기능입니다.
-                                    상담 내역(Transcript)을 바탕으로 상담 품질, 규정 준수 여부, 고객 만족도 등을 자동으로 평가합니다.
+                                    상담 내역(Transcript) 및 오디오(Audio)를 바탕으로 상담 품질, 규정 준수 여부, 고객 만족도 등을 분석합니다.
                                 </Typography>
                             </Box>
 
@@ -158,33 +165,33 @@ const Help: React.FC = () => {
                                     1. 분석 시작하기
                                 </Typography>
                                 <Typography variant="body2" paragraph>
-                                    <strong>Contact ID</strong>를 기반으로 분석을 요청할 수 있습니다.
+                                    날짜 범위를 설정하거나 <strong>Contact ID</strong>를 검색하여 기존 분석을 조회하고, 신규 분석을 요청할 수 있습니다.
                                 </Typography>
 
                                 <List>
                                     <ListItem disablePadding sx={{ mb: 2 }}>
                                         <ListItemIcon><PlayIcon /></ListItemIcon>
                                         <ListItemText
-                                            primary="새 QM 분석 요청"
-                                            secondary="QM Evaluation 목록 화면에서 '새 QM 분석' 버튼을 클릭하거나, 검색창에 Contact ID를 입력하여 분석을 시작할 수 있습니다."
+                                            primary="이력 조회 및 검색"
+                                            secondary="목록 상단의 Date Picker를 통해 특정 기간의 분석 이력을 불러올 수 있으며, Contact ID 검색을 통해 특정 상담 건을 즉시 찾을 수 있습니다."
                                         />
                                     </ListItem>
                                 </List>
 
                                 <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-                                    <Typography variant="subtitle2" gutterBottom>분석 옵션 설명:</Typography>
+                                    <Typography variant="subtitle2" gutterBottom>새 QM 분석 옵션 설명:</Typography>
                                     <List dense>
                                         <ListItem>
-                                            <ListItemText primary="• 모델 선택" secondary="Gemini-2.5-Pro (권장) 등 분석에 사용할 LLM 모델을 선택합니다." />
+                                            <ListItemText primary="• 모델 및 파라미터 선택" secondary="Gemini 2.5 Pro/Flash/Lite 모델 중 선택 가능하며, Temperature와 Max Output Tokens를 조절할 수 있습니다." />
                                         </ListItem>
                                         <ListItem>
-                                            <ListItemText primary="• 기본 QM 프롬프트 사용" secondary="미리 정의된 표준 QM 평가 양식을 사용합니다. 해제 시 직접 프롬프트를 입력할 수 있습니다." />
+                                            <ListItemText primary="• Thinking Process" secondary="AI가 최종 답변을 내놓기 전 추론 과정을 출력합니다. Thinking Budget으로 추론에 사용할 토큰 범위를 설정합니다." />
                                         </ListItem>
                                         <ListItem>
-                                            <ListItemText primary="• Tool/Function Calling" secondary="외부 시스템 연동이나 특정 포맷의 구조적 데이터 추출이 필요할 때 사용합니다." />
+                                            <ListItemText primary="• Tool/Function Calling" secondary="구조화된 정보 추출을 위해 사용합니다. 기본 템플릿 외에 직접 JSON 형식을 입력하여 Custom Tool을 정의할 수 있습니다." />
                                         </ListItem>
                                         <ListItem>
-                                            <ListItemText primary="• 오디오 분석 사용" secondary="통화 녹음 파일(Audio) 자체를 분석하여 음성 톤, 침묵 구간 등을 파악합니다. (비용이 추가될 수 있습니다)" />
+                                            <ListItemText primary="• 오디오 분석" secondary="음성 데이터를 분석하여 상담 요약, 불만 상황, 대화 패턴 등을 파악합니다." />
                                         </ListItem>
                                     </List>
                                 </Paper>
@@ -202,13 +209,22 @@ const Help: React.FC = () => {
                                             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                                                 <ListIcon color="primary" />
                                                 <Typography variant="subtitle1" fontWeight={600}>
-                                                    목록 화면
+                                                    목록 화면 (List View)
                                                 </Typography>
                                             </Stack>
-                                            <Typography variant="body2" color="text.secondary">
-                                                날짜별, ID별로 과거 분석 이력을 조회할 수 있습니다.
-                                                상태(성공/실패), 모델, 처리 시간 등을 한눈에 확인할 수 있습니다.
+                                            <Typography variant="body2" color="text.secondary" paragraph>
+                                                분석 상태, 모델명, 상담 연결 시각, 최근 수정 시각 등을 한눈에 확인합니다.
                                             </Typography>
+                                            <List dense>
+                                                <ListItem>
+                                                    <ListItemIcon><CheckIcon fontSize="small" color="primary" /></ListItemIcon>
+                                                    <ListItemText primary="필터 및 정렬" secondary="연결 시간, 총 처리 시간, 업데이트 시간 기준으로 데이터를 정렬하여 우선순위를 확인할 수 있습니다." />
+                                                </ListItem>
+                                                <ListItem>
+                                                    <ListItemIcon><CheckIcon fontSize="small" color="primary" /></ListItemIcon>
+                                                    <ListItemText primary="총 처리 시간" secondary="QM 분석, Tool 실행, 오디오 분석에 소요된 전체 시간을 합산하여 보여줍니다." />
+                                                </ListItem>
+                                            </List>
                                         </CardContent>
                                     </Card>
 
@@ -217,24 +233,24 @@ const Help: React.FC = () => {
                                             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                                                 <DetailIcon color="primary" />
                                                 <Typography variant="subtitle1" fontWeight={600}>
-                                                    상세 화면
+                                                    상세 화면 (Detail View)
                                                 </Typography>
                                             </Stack>
                                             <Typography variant="body2" color="text.secondary" paragraph>
-                                                각 분석 요청의 상세 결과를 탭별로 확인할 수 있습니다.
+                                                분석 전 과정의 메타데이터와 최종 결과물을 탭 형식으로 제공합니다.
                                             </Typography>
                                             <List dense>
                                                 <ListItem>
                                                     <ListItemIcon><InfoIcon fontSize="small" /></ListItemIcon>
-                                                    <ListItemText primary="QM 평가 결과" secondary="LLM이 생성한 종합 평가 리포트" />
+                                                    <ListItemText primary="QM 평가 결과 탭" secondary="종합 리포트, 사용된 프롬프트, Thinking Process(추론 과정) 및 상세 토큰 통계를 포함합니다." />
                                                 </ListItem>
                                                 <ListItem>
                                                     <ListItemIcon><InfoIcon fontSize="small" /></ListItemIcon>
-                                                    <ListItemText primary="Function Calls" secondary="구조화된 데이터 추출 결과 (Tool 사용 시)" />
+                                                    <ListItemText primary="Function Calls 탭" secondary="Tool 사용 시 호출된 각 함수의 상세 인자(Arguments)와 실행 결과(Result)를 대조 확인할 수 있습니다." />
                                                 </ListItem>
                                                 <ListItem>
                                                     <ListItemIcon><InfoIcon fontSize="small" /></ListItemIcon>
-                                                    <ListItemText primary="Thinking Process" secondary="AI가 결론을 도출하기까지의 추론 과정" />
+                                                    <ListItemText primary="상단 요약 섹션" secondary="단계별 소요 시간과 토큰 사용량을 시각적으로 요약하여 비용 및 효율성을 파악하기 용이합니다." />
                                                 </ListItem>
                                             </List>
                                         </CardContent>

@@ -695,6 +695,21 @@ function parseCredentials(credentialsHeader) {
 }
 
 /**
+ * 요청 헤더에서 credentials 가져오기 또는 기본 provider 사용
+ */
+async function getCredentialsFromRequest(req) {
+  const credentialsHeader = req.headers['x-aws-credentials'];
+
+  if (credentialsHeader) {
+    return parseCredentials(credentialsHeader);
+  } else {
+    const credentialProvider = defaultProvider();
+    return await credentialProvider();
+  }
+}
+
+
+/**
  * DynamoDB 아이템을 unmarshall (간단한 버전)
  */
 function unmarshallItem(item) {
@@ -721,17 +736,9 @@ app.post('/api/agent/v1/qm-automation', async (req, res) => {
   try {
     const requestBody = req.body;
 
-    const credentialsHeader = req.headers['x-aws-credentials'];
     const region = req.headers['x-aws-region'] || 'ap-northeast-2';
     const environment = req.headers['x-environment'] || 'dev';
-
-    let credentials;
-    if (credentialsHeader) {
-      credentials = parseCredentials(credentialsHeader);
-    } else {
-      const credentialProvider = defaultProvider();
-      credentials = await credentialProvider();
-    }
+    const credentials = await getCredentialsFromRequest(req);
 
     const lambdaClient = new LambdaClient({
       region,
@@ -759,12 +766,39 @@ app.post('/api/agent/v1/qm-automation', async (req, res) => {
 
     const response = await lambdaClient.send(command);
 
-    // Return the RequestId for polling
-    res.json({
-      requestId: response.ResponseMetadata.RequestId,
-      status: 'PENDING',
-      message: 'QM Analysis started successfully'
-    });
+    // Lambda (ALB Proxy 타입) 응답 파싱
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      // AlbResponse.success/fail은 body를 JSON string으로 반환함
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+
+      // 에러 응답 처리 (statusCode >= 400)
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      // 성공 응답
+      res.status(statusCode).json(responseData.data || responseData);
+    } else {
+      // 에러 응답 처리 (statusCode >= 400)
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Request failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      // 성공 응답
+      res.status(statusCode).json(result.data || result);
+    }
 
   } catch (error) {
     console.error('Error invoking QM Automation Lambda:', error);
@@ -786,19 +820,9 @@ app.get('/api/agent/v1/qm-automation/list', async (req, res) => {
       return res.status(400).json({ error: 'contactId is required' });
     }
 
-    // 헤더에서 credentials 가져오기
-    const credentialsHeader = req.headers['x-aws-credentials'];
     const region = req.headers['x-aws-region'] || 'ap-northeast-2';
     const environment = req.headers['x-environment'] || 'dev';
-
-    let credentials;
-    if (credentialsHeader) {
-      credentials = parseCredentials(credentialsHeader);
-    } else {
-      // 기본 프로필 사용
-      const credentialProvider = defaultProvider();
-      credentials = await credentialProvider();
-    }
+    const credentials = await getCredentialsFromRequest(req);
 
     const dynamoClient = new DynamoDBClient({
       region,
@@ -837,6 +861,7 @@ app.get('/api/agent/v1/qm-automation/list', async (req, res) => {
         completedAt: unmarshalled.completedAt,
         geminiModel: unmarshalled.result?.geminiModel || unmarshalled.input?.model,
         processingTime: unmarshalled.result?.processingTime,
+        connectedToAgentTimestamp: unmarshalled.connectedToAgentTimestamp,
         input: unmarshalled.input,
         result: unmarshalled.result,
       };
@@ -863,18 +888,9 @@ app.get('/api/agent/v1/qm-automation/status', async (req, res) => {
       return res.status(400).json({ error: 'requestId is required' });
     }
 
-    // 헤더에서 credentials 가져오기
-    const credentialsHeader = req.headers['x-aws-credentials'];
     const region = req.headers['x-aws-region'] || 'ap-northeast-2';
     const environment = req.headers['x-environment'] || 'dev';
-
-    let credentials;
-    if (credentialsHeader) {
-      credentials = parseCredentials(credentialsHeader);
-    } else {
-      const credentialProvider = defaultProvider();
-      credentials = await credentialProvider();
-    }
+    const credentials = await getCredentialsFromRequest(req);
 
     const dynamoClient = new DynamoDBClient({
       region,
@@ -909,6 +925,7 @@ app.get('/api/agent/v1/qm-automation/status', async (req, res) => {
       status: item.status,
       createdAt: item.sk,
       completedAt: item.completedAt,
+      connectedToAgentTimestamp: item.connectedToAgentTimestamp,
       result: item.result,
       input: item.input,
       error: item.error,
@@ -933,17 +950,9 @@ app.get('/api/agent/v1/qm-automation/statistics', async (req, res) => {
       return res.status(400).json({ error: 'month (YYYYMM format) is required' });
     }
 
-    const credentialsHeader = req.headers['x-aws-credentials'];
     const region = req.headers['x-aws-region'] || 'ap-northeast-2';
     const environment = req.headers['x-environment'] || 'dev';
-
-    let credentials;
-    if (credentialsHeader) {
-      credentials = parseCredentials(credentialsHeader);
-    } else {
-      const credentialProvider = defaultProvider();
-      credentials = await credentialProvider();
-    }
+    const credentials = await getCredentialsFromRequest(req);
 
     const dynamoClient = new DynamoDBClient({
       region,
@@ -1009,17 +1018,9 @@ app.get('/api/agent/v1/qm-automation/agent/:agentId/history', async (req, res) =
       return res.status(400).json({ error: 'agentId is required' });
     }
 
-    const credentialsHeader = req.headers['x-aws-credentials'];
     const region = req.headers['x-aws-region'] || 'ap-northeast-2';
     const environment = req.headers['x-environment'] || 'dev';
-
-    let credentials;
-    if (credentialsHeader) {
-      credentials = parseCredentials(credentialsHeader);
-    } else {
-      const credentialProvider = defaultProvider();
-      credentials = await credentialProvider();
-    }
+    const credentials = await getCredentialsFromRequest(req);
 
     const dynamoClient = new DynamoDBClient({
       region,
@@ -1082,17 +1083,9 @@ app.post('/api/agent/v1/qm-automation/search', async (req, res) => {
       return res.status(400).json({ error: 'startDate and endDate are required' });
     }
 
-    const credentialsHeader = req.headers['x-aws-credentials'];
     const region = req.headers['x-aws-region'] || 'ap-northeast-2';
     const environment = req.headers['x-environment'] || 'dev';
-
-    let credentials;
-    if (credentialsHeader) {
-      credentials = parseCredentials(credentialsHeader);
-    } else {
-      const credentialProvider = defaultProvider();
-      credentials = await credentialProvider();
-    }
+    const credentials = await getCredentialsFromRequest(req);
 
     const dynamoClient = new DynamoDBClient({
       region,

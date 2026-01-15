@@ -213,12 +213,17 @@ const QMAutomationDetail: React.FC = () => {
       {/* Error State */}
       {qmDetail && (qmDetail.status === 'FAILED' || qmDetail.status === 'ERROR') && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          <Typography variant="subtitle1" fontWeight={600}>
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
             QM 분석 실패
           </Typography>
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ mb: 1 }}>
             {qmDetail.error || '알 수 없는 오류가 발생했습니다.'}
           </Typography>
+          {qmDetail.result?.errorDetails && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontFamily: 'monospace' }}>
+              상세 정보: {JSON.stringify(qmDetail.result.errorDetails, null, 2)}
+            </Typography>
+          )}
         </Alert>
       )}
 

@@ -70,6 +70,7 @@ export interface QMAutomationResult {
   functionCalls?: FunctionCall[];
   audioAnalyzeResult?: AudioAnalyzeResult;
   thinkingText?: string;
+  errorDetails?: any; // 에러 상세 정보 (Lambda 에러 응답)
 }
 
 export interface QMAutomationItem {

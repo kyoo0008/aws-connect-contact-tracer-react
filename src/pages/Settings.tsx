@@ -159,11 +159,11 @@ const Settings: React.FC = () => {
             }));
             setSaved(false);
           } else {
-            setWarning('AWS SSO 프로필을 찾을 수 없습니다. ~/.aws/config 파일에 SSO 프로필을 설정하거나 수동으로 자격 증명을 입력하세요.');
+            // setWarning('AWS SSO 프로필을 찾을 수 없습니다. ~/.aws/config 파일에 SSO 프로필을 설정하거나 수동으로 자격 증명을 입력하세요.');
           }
         }
       } catch (err) {
-        setWarning('AWS SSO 자격 증명을 자동으로 가져오지 못했습니다. 수동으로 입력하세요.');
+        // setWarning('AWS SSO 자격 증명을 자동으로 가져오지 못했습니다. 수동으로 입력하세요.');
       } finally {
         setLoading(false);
         setLoadingProfiles(false);
@@ -200,71 +200,11 @@ const Settings: React.FC = () => {
 
       <Paper sx={{ p: 3, maxWidth: 800 }}>
         <Stack spacing={3}>
-          {/* AWS Region - Read Only */}
-          <TextField
-            label="AWS Region"
-            value={localConfig.region}
-            fullWidth
-            InputProps={{
-              readOnly: true,
-            }}
-            helperText="리전은 AWS 프로필에서 자동으로 설정됩니다"
-          />
-
-          {/* Instance ID */}
-          <TextField
-            label="Connect Instance ID"
-            value={localConfig.instanceId}
-            onChange={(e) => !isMappedProfile && setLocalConfig({ ...localConfig, instanceId: e.target.value })}
-            fullWidth
-            InputProps={{
-              readOnly: isMappedProfile,
-              endAdornment: isMappedProfile && (
-                <Chip label="자동설정" size="small" color="primary" variant="outlined" />
-              ),
-            }}
-            helperText={isMappedProfile ? "프로필 매핑에 의해 자동 설정됨" : "예: 12345678-1234-1234-1234-123456789012"}
-          />
-
-          {/* Environment */}
-          <FormControl fullWidth disabled={isMappedProfile}>
-            <InputLabel>Environment</InputLabel>
-            <Select
-              value={localConfig.environment}
-              label="Environment"
-              onChange={(e) => !isMappedProfile && setLocalConfig({ ...localConfig, environment: e.target.value as any })}
-              endAdornment={isMappedProfile && (
-                <Chip label="자동설정" size="small" color="primary" variant="outlined" sx={{ mr: 3 }} />
-              )}
-            >
-              <MenuItem value="dev">Development</MenuItem>
-              <MenuItem value="stg">Staging</MenuItem>
-              <MenuItem value="prd">Production</MenuItem>
-              <MenuItem value="test">Test</MenuItem>
-            </Select>
-          </FormControl>
-
-          {/* Log Group Name */}
-          <TextField
-            label="CloudWatch Log Group Name"
-            value={localConfig.logGroupName}
-            onChange={(e) => !isMappedProfile && setLocalConfig({ ...localConfig, logGroupName: e.target.value })}
-            fullWidth
-            InputProps={{
-              readOnly: isMappedProfile,
-              endAdornment: isMappedProfile && (
-                <Chip label="자동설정" size="small" color="primary" variant="outlined" />
-              ),
-            }}
-            helperText={isMappedProfile ? "프로필 매핑에 의해 자동 설정됨" : "예: /aws/connect/your-instance"}
-          />
-
           {/* Credential Options */}
           <Typography variant="h6" sx={{ mt: 2 }}>
             인증 설정
           </Typography>
 
-          {/* SSO Profile Selection */}
           <Stack direction="column" spacing={1}>
             {loadingProfiles ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -368,6 +308,7 @@ const Settings: React.FC = () => {
             )}
           </Stack>
 
+
           <Stack direction="row" spacing={2}>
             <Button
               variant="outlined"
@@ -420,6 +361,68 @@ const Settings: React.FC = () => {
               • 로그인되지 않은 경우: <code>aws sso login --profile 프로필명</code> 실행 후 새로고침
             </Typography>
           </Alert>
+
+          {/* AWS Region - Read Only */}
+          <TextField
+            label="AWS Region"
+            value={localConfig.region}
+            fullWidth
+            InputProps={{
+              readOnly: true,
+            }}
+            helperText="리전은 AWS 프로필에서 자동으로 설정됩니다"
+          />
+
+          {/* Instance ID */}
+          <TextField
+            label="Connect Instance ID"
+            value={localConfig.instanceId}
+            onChange={(e) => !isMappedProfile && setLocalConfig({ ...localConfig, instanceId: e.target.value })}
+            fullWidth
+            InputProps={{
+              readOnly: isMappedProfile,
+              endAdornment: isMappedProfile && (
+                <Chip label="자동설정" size="small" color="primary" variant="outlined" />
+              ),
+            }}
+            helperText={isMappedProfile ? "프로필 매핑에 의해 자동 설정됨" : "예: 12345678-1234-1234-1234-123456789012"}
+          />
+
+          {/* Environment */}
+          <FormControl fullWidth disabled={isMappedProfile}>
+            <InputLabel>Environment</InputLabel>
+            <Select
+              value={localConfig.environment}
+              label="Environment"
+              onChange={(e) => !isMappedProfile && setLocalConfig({ ...localConfig, environment: e.target.value as any })}
+              endAdornment={isMappedProfile && (
+                <Chip label="자동설정" size="small" color="primary" variant="outlined" sx={{ mr: 3 }} />
+              )}
+            >
+              <MenuItem value="dev">Development</MenuItem>
+              <MenuItem value="stg">Staging</MenuItem>
+              <MenuItem value="prd">Production</MenuItem>
+              <MenuItem value="test">Test</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* Log Group Name */}
+          <TextField
+            label="CloudWatch Log Group Name"
+            value={localConfig.logGroupName}
+            onChange={(e) => !isMappedProfile && setLocalConfig({ ...localConfig, logGroupName: e.target.value })}
+            fullWidth
+            InputProps={{
+              readOnly: isMappedProfile,
+              endAdornment: isMappedProfile && (
+                <Chip label="자동설정" size="small" color="primary" variant="outlined" />
+              ),
+            }}
+            helperText={isMappedProfile ? "프로필 매핑에 의해 자동 설정됨" : "예: /aws/connect/your-instance"}
+          />
+
+
+
 
           {/* Action Buttons */}
           <Stack direction="row" spacing={2} sx={{ mt: 3 }}>

@@ -149,7 +149,7 @@ const QMAutomationList: React.FC = () => {
   type Order = 'asc' | 'desc';
   type OrderBy = 'connectedToAgentTimestamp' | 'totalProcessingTime' | 'updatedAt' | null;
   const [order, setOrder] = useState<Order>('desc');
-  const [orderBy, setOrderBy] = useState<OrderBy>(null);
+  const [orderBy, setOrderBy] = useState<OrderBy>('updatedAt');
 
   const handleRequestSort = (property: Exclude<OrderBy, null>) => {
     const isAsc = orderBy === property && order === 'asc';

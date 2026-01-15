@@ -111,7 +111,7 @@ function App() {
                 <Router>
                   <Layout>
                     <Routes>
-                      <Route path="/" element={<Dashboard />} />
+                      <Route path="/" element={<QMAutomationList />} />
                       <Route path="/contact-flow/:contactId?" element={<ContactFlowViewer />} />
                       <Route path="/contact-flow/:contactId/flow/:flowName" element={<FlowDetailViewer />} />
                       <Route path="/contact-flow/:contactId/flow/:flowName/module/:moduleName" element={<ModuleDetailViewer />} />

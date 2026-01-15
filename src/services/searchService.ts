@@ -6,7 +6,7 @@
 
 import { AWSConfig } from '@/types/contact.types';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = 'http://localhost:8081';
 
 export interface SearchContact {
   contactId: string;

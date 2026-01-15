@@ -1,6 +1,9 @@
+# docker-compose.deploy.yml
+
 services:
   frontend:
     image: xxxhistxxx/ke-aicc-frontend:latest  # QA 권한이 적용된 이미지
+    platform: linux/amd64
     pull_policy: always
     ports:
       - "3001:80"
@@ -10,6 +13,7 @@ services:
 
   backend:
     image: xxxhistxxx/ke-aicc-backend:latest
+    platform: linux/amd64
     pull_policy: always
     ports:
       - "8081:8081"

@@ -24,9 +24,9 @@ const getApiBaseUrl = (environment: string): string => {
   //   case 'prd':
   //     return 'https://api.example.com';
   //   default:
-  //     return 'http://localhost:8080';
+  //     return 'http://localhost:8081';
   // }
-  return 'http://localhost:8080';
+  return 'http://localhost:8081';
 };
 
 /**

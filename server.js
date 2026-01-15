@@ -7,7 +7,7 @@
  * 1. npm install express @aws-sdk/credential-provider-node @aws-sdk/credential-provider-sso
  * 2. aws sso login --profile <your-profile>
  * 3. node server.js
- * 4. 프론트엔드에서 http://localhost:8080 으로 요청
+ * 4. 프론트엔드에서 http://localhost:8081 으로 요청
  */
 
 const express = require('express');
@@ -24,7 +24,7 @@ const path = require('node:path');
 const ini = require('ini');
 
 const app = express();
-const PORT = 8080;
+const PORT = 8081;
 
 app.use(express.json());
 

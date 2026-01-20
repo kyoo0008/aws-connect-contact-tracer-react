@@ -185,12 +185,40 @@ const QMAutomationDetail: React.FC = () => {
               </Stack>
             </Box>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
             {qmDetail && (
-              <Chip
-                label={getStatusLabel(qmDetail.status)}
-                color={getStatusColor(qmDetail.status)}
-              />
+              <>
+                <Chip
+                  label={`Gemini 평가 상태: ${getStatusLabel(qmDetail.status)}`}
+                  color={getStatusColor(qmDetail.status)}
+                />
+                {qmDetail.qmEvaluationStatus && (
+                  <Tooltip title="QM 평가 상태">
+                    <Chip
+                      size="small"
+                      label={`QM 평가 상태: ${qmDetail.qmEvaluationStatus}`}
+                      variant="outlined"
+                      color={qmDetail.qmEvaluationStatus === 'COMPLETED' ? 'success' : 'default'}
+                    />
+                  </Tooltip>
+                )}
+                <Tooltip title="상담원 확인 여부">
+                  <Chip
+                    size="small"
+                    label={`상담원 확인: ${qmDetail.agentConfirmYN === 'Y' ? '완료' : '미완료'}`}
+                    variant="outlined"
+                    color={qmDetail.agentConfirmYN === 'Y' ? 'success' : 'default'}
+                  />
+                </Tooltip>
+                <Tooltip title="QA 피드백 여부">
+                  <Chip
+                    size="small"
+                    label={`QA 피드백: ${qmDetail.qaFeedbackYN === 'Y' ? '완료' : '미완료'}`}
+                    variant="outlined"
+                    color={qmDetail.qaFeedbackYN === 'Y' ? 'success' : 'default'}
+                  />
+                </Tooltip>
+              </>
             )}
             <Tooltip title="새로고침">
               <IconButton onClick={() => refetch()}>
@@ -773,23 +801,68 @@ const QMAutomationDetail: React.FC = () => {
 const LABEL_MAP: Record<string, string> = {
   // 대항목
   greeting: '인사',
+  LanguageUse: '언어 사용',
   Language_Use: '언어 사용',
   Speed: '속도',
   VoiceProduction: '음성 표현',
-  // 소항목
+  Accuracy: '정확성',
+  Efficiency: '효율성',
+  proactivity: '적극성',
+  WaitManagement: '대기 관리',
+  // 인사 소항목
   opening: '첫인사',
   response: '인사 호응',
+  additionalInquiryCheck: '추가 문의 확인',
   additional_inquiry_check: '추가 문의 확인',
   closing: '끝인사',
+  // 언어 사용 소항목
+  languageQualityScore: '언어 품질 점수',
   language_quality_score: '언어 품질 점수',
+  inappropriateVocabulary: '부적절한 어휘',
   inappropriate_vocabulary: '부적절한 어휘',
+  UnpoliteToneManner: '공손하지 않은 표현',
   Unpolite_Tone_Manner: '공손하지 않은 표현',
+  badHabits: '습관적 표현',
   bad_habits: '습관적 표현',
+  // 속도 소항목
   Interruption_Analysis: '끼어들기 분석',
+  interruptionAnalysis: '끼어들기 분석',
+  pacingUnderstanding: '속도/이해도 분석',
   pacing_understanding: '속도/이해도 분석',
+  // 음성 표현 소항목
   Tone_Manner: '어조/매너',
+  toneManner: '어조/매너',
+  handlingNegativity: '부정적 상황 대처',
   handling_negativity: '부정적 상황 대처',
+  activeListening: '적극적 경청',
   active_listening: '적극적 경청',
+  // 정확성 소항목
+  accuracyScore: '정확성 점수',
+  accuracyIssues: '정확성 문제',
+  completenessCheck: '완결성 확인',
+  explanationStructure: '설명 구조',
+  // 효율성 소항목
+  efficiencyScore: '효율성 점수',
+  callPurposeClarification: '통화 목적 파악',
+  inefficiencyDetection: '비효율 감지',
+  processCompliance: '프로세스 준수',
+  // 적극성 소항목
+  proactivityScore: '적극성 점수',
+  concreteExplanationCheck: '구체적 설명 확인',
+  additionalServiceOffer: '추가 서비스 제안',
+  // 대기 관리 소항목
+  waitManagementScore: '대기 관리 점수',
+  holdTimeManagement: '홀드 시간 관리',
+  waitNotification: '대기 안내',
+  // 프로세스 준수 세부
+  aiccEfficiencyCheck: 'AICC 효율성 체크',
+  leadingStandardProcessCheck: '표준 프로세스 준수',
+  // 증거 컨텍스트
+  triggerSituation: '트리거 상황',
+  agentClarifyingQuestion: '상담원 확인 질문',
+  customerConfirmation: '고객 확인',
+  // 공통
+  feedbackMessage: '피드백',
   feedback_message: '피드백',
 };
 
@@ -955,12 +1028,15 @@ const StateHistoryView: React.FC<{ states: EvaluationState[] }> = ({ states }) =
                   >
                     {config.label}
                   </Typography>
+                  {state.evaluationStatus && (
+                    <StatusChip status={state.evaluationStatus} />
+                  )}
                   {isLatest && (
                     <Chip size="small" label="현재" variant="outlined" color="primary" sx={{ height: 20, fontSize: '0.7rem' }} />
                   )}
                 </Stack>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                  {state.status_reason}
+                  {state.statusReason}
                 </Typography>
               </Box>
             </Box>
@@ -996,7 +1072,102 @@ const hasEventsOrIssues = (value: unknown): value is { events?: EvaluationEvent[
     typeof value === 'object' &&
     value !== null &&
     (('events' in value && Array.isArray((value as Record<string, unknown>).events)) ||
-     ('issues' in value && Array.isArray((value as Record<string, unknown>).issues)))
+      ('issues' in value && Array.isArray((value as Record<string, unknown>).issues)))
+  );
+};
+
+// 점수+레벨 형태 (accuracyScore, efficiencyScore 등)
+const isScoreWithLevel = (value: unknown): value is { score: string; level: string } => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'score' in value &&
+    'level' in value
+  );
+};
+
+// 완결성 체크 (completenessCheck)
+const isCompletenessCheck = (value: unknown): value is { status: string; finalRecapTimestamp?: string; recapContent?: string } => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'status' in value &&
+    ('finalRecapTimestamp' in value || 'recapContent' in value)
+  );
+};
+
+// 설명 구조 (explanationStructure)
+const isExplanationStructure = (value: unknown): value is { rating: string; analysis: string } => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'rating' in value &&
+    'analysis' in value
+  );
+};
+
+// 통화 목적 파악 (callPurposeClarification)
+const isCallPurposeClarification = (value: unknown): value is {
+  clarificationQuality: string;
+  identifiedPurpose: string;
+  evidenceContext?: Record<string, unknown>;
+} => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'clarificationQuality' in value &&
+    'identifiedPurpose' in value
+  );
+};
+
+// 비효율 감지 (inefficiencyDetection)
+const isInefficiencyDetection = (value: unknown): value is {
+  summary: { repetitionCount?: number; misunderstandingCount?: number };
+  details: Array<Record<string, unknown>>;
+} => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'summary' in value &&
+    'details' in value &&
+    Array.isArray((value as Record<string, unknown>).details)
+  );
+};
+
+// 프로세스 준수 (processCompliance)
+const isProcessCompliance = (value: unknown): value is Record<string, { status: string; violationDetail?: string; missingScript?: string }> => {
+  if (typeof value !== 'object' || value === null) return false;
+  const entries = Object.entries(value as Record<string, unknown>);
+  return entries.length > 0 && entries.every(([, v]) =>
+    typeof v === 'object' && v !== null && 'status' in v
+  );
+};
+
+// 구체적 설명 체크 (concreteExplanationCheck)
+const isConcreteExplanationCheck = (value: unknown): value is {
+  situationInquiryPerformed: boolean;
+  executionGuidanceQuality: string;
+  analysisLog?: string;
+} => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'situationInquiryPerformed' in value &&
+    'executionGuidanceQuality' in value
+  );
+};
+
+// 정확성 이슈 (accuracyIssues)
+const isAccuracyIssues = (value: unknown): value is {
+  summary: { misinformationConflictCount?: number; arbitraryJudgmentCount?: number };
+  details: Array<Record<string, unknown>>;
+} => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'summary' in value &&
+    'details' in value &&
+    Array.isArray((value as Record<string, unknown>).details)
   );
 };
 
@@ -1004,6 +1175,19 @@ const hasEventsOrIssues = (value: unknown): value is { events?: EvaluationEvent[
 const EventItemView: React.FC<{ event: EvaluationEvent }> = ({ event }) => {
   const timestamp = event.timestamp ||
     (event.timestamp_start && event.timestamp_end ? `${event.timestamp_start} ~ ${event.timestamp_end}` : '');
+
+  // 감지된 내용 (다양한 필드명 지원)
+  const detectedContent = event.detected_sentence ||
+    (event as Record<string, unknown>).detectedSentence ||
+    (event as Record<string, unknown>).detectedWord;
+
+  // 수정 제안 (다양한 필드명 지원)
+  const correctionContent = event.correction ||
+    (event as Record<string, unknown>).suggestedCorrection;
+
+  // 컨텍스트 (다양한 필드명 지원)
+  const contextContent = event.content_context ||
+    (event as Record<string, unknown>).context;
 
   return (
     <ListItem sx={{ px: 0, alignItems: 'flex-start' }}>
@@ -1024,42 +1208,63 @@ const EventItemView: React.FC<{ event: EvaluationEvent }> = ({ event }) => {
           </Stack>
         }
         secondary={
-          <Box sx={{ mt: 0.5 }}>
-            {event.detected_sentence && (
-              <Typography variant="body2" color="error.main" sx={{ mb: 0.5 }}>
-                감지: "{event.detected_sentence}"
+          <>
+            {detectedContent && (
+              <Typography component="span" variant="body2" color="error.main" sx={{ display: 'block', mb: 0.5 }}>
+                감지: "{String(detectedContent)}"
               </Typography>
             )}
-            {event.correction && (
-              <Typography variant="body2" color="success.main" sx={{ mb: 0.5 }}>
-                수정: "{event.correction}"
+            {correctionContent && (
+              <Typography component="span" variant="body2" color="success.main" sx={{ display: 'block', mb: 0.5 }}>
+                수정 제안: "{String(correctionContent)}"
               </Typography>
             )}
-            {event.content_context && (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                상황: {event.content_context}
+            {contextContent && (
+              <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontStyle: 'italic' }}>
+                상황: {String(contextContent)}
               </Typography>
             )}
             {event.analysis && (
-              <Typography variant="body2" color="text.secondary">
+              <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
                 분석: {event.analysis}
               </Typography>
             )}
             {event.customer_reaction && (
-              <Typography variant="body2" color="text.secondary">
+              <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
                 고객 반응: {event.customer_reaction}
               </Typography>
             )}
             {event.agent_response_quality && (
-              <Typography variant="body2" color="text.secondary">
+              <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
                 상담사 대응: {event.agent_response_quality}
               </Typography>
             )}
-          </Box>
+          </>
         }
       />
     </ListItem>
   );
+};
+
+// 레벨에 따른 색상 가져오기
+const getLevelColor = (level: string): 'success' | 'warning' | 'error' | 'info' | 'default' => {
+  switch (level.toUpperCase()) {
+    case 'GOOD':
+    case 'EXCELLENT':
+    case 'DETAILED':
+    case 'LOGICAL':
+      return 'success';
+    case 'WARNING':
+    case 'AVERAGE':
+    case 'MODERATE':
+      return 'warning';
+    case 'POOR':
+    case 'CRITICAL':
+    case 'FAIL':
+      return 'error';
+    default:
+      return 'info';
+  }
 };
 
 // 소항목 렌더링 컴포넌트
@@ -1067,11 +1272,257 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKe
   const label = getLabel(itemKey);
 
   // feedback_message는 별도 처리
-  if (itemKey === 'feedback_message' && typeof value === 'string') {
+  if ((itemKey === 'feedback_message' || itemKey === 'feedbackMessage') && typeof value === 'string') {
     return (
       <Alert severity="info" sx={{ mt: 2 }}>
         <Typography variant="body2">{value}</Typography>
       </Alert>
+    );
+  }
+
+  // 점수+레벨 형태 (accuracyScore, efficiencyScore 등)
+  if (isScoreWithLevel(value)) {
+    const numScore = parseInt(value.score);
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          <Chip
+            size="small"
+            label={`${value.score}점`}
+            sx={{
+              fontWeight: 600,
+              bgcolor: numScore >= 80 ? 'success.100' : numScore >= 60 ? 'warning.100' : 'error.100',
+              color: numScore >= 80 ? 'success.dark' : numScore >= 60 ? 'warning.dark' : 'error.dark',
+            }}
+          />
+          <Chip size="small" label={value.level} color={getLevelColor(value.level)} variant="outlined" />
+        </Stack>
+      </Box>
+    );
+  }
+
+  // 완결성 체크 (completenessCheck)
+  if (isCompletenessCheck(value)) {
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          <StatusChip status={value.status} />
+        </Stack>
+        {value.finalRecapTimestamp && (
+          <Typography variant="body2" color="text.secondary">
+            최종 확인 시점: {value.finalRecapTimestamp}
+          </Typography>
+        )}
+        {value.recapContent && (
+          <Typography variant="body2" color="text.secondary">
+            확인 내용: {value.recapContent}
+          </Typography>
+        )}
+      </Box>
+    );
+  }
+
+  // 설명 구조 (explanationStructure)
+  if (isExplanationStructure(value)) {
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          <Chip size="small" label={value.rating} color={getLevelColor(value.rating)} />
+        </Stack>
+        <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+          {value.analysis}
+        </Typography>
+      </Box>
+    );
+  }
+
+  // 통화 목적 파악 (callPurposeClarification)
+  if (isCallPurposeClarification(value)) {
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          <Chip size="small" label={value.clarificationQuality} color={getLevelColor(value.clarificationQuality)} />
+        </Stack>
+        <Typography variant="body2" fontWeight={500} sx={{ mb: 1 }}>
+          파악된 목적: {value.identifiedPurpose}
+        </Typography>
+        {value.evidenceContext && (
+          <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'background.paper' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              증거 컨텍스트
+            </Typography>
+            {Object.entries(value.evidenceContext).map(([k, v]) => (
+              <Typography key={k} variant="body2" color="text.secondary" sx={{ mb: 0.25 }}>
+                <strong>{getLabel(k)}:</strong> {String(v)}
+              </Typography>
+            ))}
+          </Paper>
+        )}
+      </Box>
+    );
+  }
+
+  // 비효율 감지 (inefficiencyDetection)
+  if (isInefficiencyDetection(value)) {
+    const { summary, details } = value;
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          {summary.repetitionCount !== undefined && (
+            <Chip size="small" label={`반복 ${summary.repetitionCount}회`} variant="outlined" color={summary.repetitionCount > 0 ? 'warning' : 'success'} />
+          )}
+          {summary.misunderstandingCount !== undefined && (
+            <Chip size="small" label={`오해 ${summary.misunderstandingCount}회`} variant="outlined" color={summary.misunderstandingCount > 0 ? 'warning' : 'success'} />
+          )}
+        </Stack>
+        {details.length > 0 && (
+          <List dense disablePadding>
+            {details.map((detail, idx) => (
+              <ListItem key={idx} sx={{ px: 0, alignItems: 'flex-start' }}>
+                <ListItemIcon sx={{ minWidth: 36, mt: 0.5 }}>
+                  <WarningIcon fontSize="small" color="warning" />
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <>
+                      {detail.timestamp && (
+                        <Typography component="span" variant="body2" fontWeight={600} sx={{ mr: 1 }}>
+                          {String(detail.timestamp)}
+                        </Typography>
+                      )}
+                      {detail.issueType && <Chip size="small" label={String(detail.issueType)} variant="outlined" />}
+                    </>
+                  }
+                  secondary={
+                    <>
+                      {detail.conversationSnippet && (
+                        <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic', mb: 0.5 }}>
+                          "{String(detail.conversationSnippet)}"
+                        </Typography>
+                      )}
+                      {detail.causeAnalysis && (
+                        <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
+                          원인: {String(detail.causeAnalysis)}
+                        </Typography>
+                      )}
+                    </>
+                  }
+                />
+              </ListItem>
+            ))}
+          </List>
+        )}
+      </Box>
+    );
+  }
+
+  // 정확성 이슈 (accuracyIssues)
+  if (isAccuracyIssues(value)) {
+    const { summary, details } = value;
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          {summary.misinformationConflictCount !== undefined && (
+            <Chip size="small" label={`잘못된 정보 ${summary.misinformationConflictCount}건`} variant="outlined" color={summary.misinformationConflictCount > 0 ? 'error' : 'success'} />
+          )}
+          {summary.arbitraryJudgmentCount !== undefined && (
+            <Chip size="small" label={`임의 판단 ${summary.arbitraryJudgmentCount}건`} variant="outlined" color={summary.arbitraryJudgmentCount > 0 ? 'warning' : 'success'} />
+          )}
+        </Stack>
+        {details.length > 0 ? (
+          <List dense disablePadding>
+            {details.map((detail, idx) => (
+              <ListItem key={idx} sx={{ px: 0 }}>
+                <ListItemIcon sx={{ minWidth: 36 }}>
+                  <ErrorIcon fontSize="small" color="error" />
+                </ListItemIcon>
+                <ListItemText
+                  primary={JSON.stringify(detail)}
+                />
+              </ListItem>
+            ))}
+          </List>
+        ) : (
+          <Typography variant="body2" color="success.main">
+            정확성 문제가 감지되지 않았습니다.
+          </Typography>
+        )}
+      </Box>
+    );
+  }
+
+  // 프로세스 준수 (processCompliance)
+  if (isProcessCompliance(value)) {
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+          {label}
+        </Typography>
+        <Stack spacing={1}>
+          {Object.entries(value).map(([checkKey, checkValue]) => (
+            <Paper key={checkKey} variant="outlined" sx={{ p: 1.5, bgcolor: 'background.paper' }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                <Typography variant="body2" fontWeight={500}>
+                  {getLabel(checkKey)}
+                </Typography>
+                <StatusChip status={checkValue.status} />
+              </Stack>
+              {checkValue.violationDetail && (
+                <Typography variant="caption" color="text.secondary">
+                  {checkValue.violationDetail}
+                </Typography>
+              )}
+              {checkValue.missingScript && (
+                <Typography variant="caption" color="text.secondary">
+                  누락 스크립트: {checkValue.missingScript}
+                </Typography>
+              )}
+            </Paper>
+          ))}
+        </Stack>
+      </Box>
+    );
+  }
+
+  // 구체적 설명 체크 (concreteExplanationCheck)
+  if (isConcreteExplanationCheck(value)) {
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          <Chip
+            size="small"
+            label={value.situationInquiryPerformed ? '상황 파악 수행' : '상황 파악 미수행'}
+            color={value.situationInquiryPerformed ? 'success' : 'warning'}
+          />
+          <Chip size="small" label={value.executionGuidanceQuality} color={getLevelColor(value.executionGuidanceQuality)} />
+        </Stack>
+        {value.analysisLog && (
+          <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+            {value.analysisLog}
+          </Typography>
+        )}
+      </Box>
     );
   }
 
@@ -1211,6 +1662,29 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKe
   return null;
 };
 
+// 점수 색상 가져오기
+const getScoreColor = (score: number): string => {
+  if (score >= 80) return 'success.main';
+  if (score >= 60) return 'warning.main';
+  return 'error.main';
+};
+
+// 점수 칩 컴포넌트
+const ScoreChip: React.FC<{ score: string | number; label?: string }> = ({ score, label }) => {
+  const numScore = typeof score === 'string' ? parseInt(score) : score;
+  return (
+    <Chip
+      size="small"
+      label={label ? `${label}: ${score}점` : `${score}점`}
+      sx={{
+        fontWeight: 600,
+        bgcolor: numScore >= 80 ? 'success.100' : numScore >= 60 ? 'warning.100' : 'error.100',
+        color: numScore >= 80 ? 'success.dark' : numScore >= 60 ? 'warning.dark' : 'error.dark',
+      }}
+    />
+  );
+};
+
 // Evaluation Detail View Component - 동적 렌더링
 const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = ({
   evaluationResult,
@@ -1220,10 +1694,27 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
   // 대항목 키 추출 (details의 키들)
   const sectionKeys = Object.keys(details);
 
-  // summary에서 _result로 끝나는 키들 추출하여 대항목별 결과 매핑
+  // summary에서 Result/Score 키들 추출하여 대항목별 결과/점수 매핑
   const getSectionResult = (sectionKey: string): string | undefined => {
-    return summary[`${sectionKey}_result`];
+    // camelCase 변환 (첫 글자 대문자)
+    const capitalizedKey = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1);
+    return summary[`${sectionKey}Result`] || summary[`${capitalizedKey}Result`] || summary[`${sectionKey}_result`];
   };
+
+  const getSectionScore = (sectionKey: string): string | undefined => {
+    const capitalizedKey = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1);
+    return summary[`${sectionKey}Score`] || summary[`${capitalizedKey}Score`] || summary[`${sectionKey}_score`];
+  };
+
+  // 총점 계산
+  const totalScore = React.useMemo(() => {
+    const scores = sectionKeys
+      .map(key => getSectionScore(key))
+      .filter((s): s is string => !!s)
+      .map(s => parseInt(s));
+    if (scores.length === 0) return null;
+    return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  }, [sectionKeys, summary]);
 
   return (
     <Stack spacing={3}>
@@ -1235,36 +1726,33 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
         <Grid container spacing={2}>
           {sectionKeys.map((sectionKey) => {
             const result = getSectionResult(sectionKey);
-            if (!result) return null;
+            const score = getSectionScore(sectionKey);
             return (
               <Grid item xs={6} sm={3} key={sectionKey}>
                 <Stack alignItems="center" spacing={1}>
                   <Typography variant="caption" color="text.secondary">
                     {getLabel(sectionKey)}
                   </Typography>
-                  <StatusChip status={result} />
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    {result && <StatusChip status={result} />}
+                    {score && <ScoreChip score={score} />}
+                  </Stack>
                 </Stack>
               </Grid>
             );
           })}
         </Grid>
-        {summary.score && (
+        {totalScore !== null && (
           <Box sx={{ mt: 2, textAlign: 'center' }}>
             <Typography variant="caption" color="text.secondary">
-              종합 점수
+              평균 점수
             </Typography>
             <Typography
               variant="h4"
               fontWeight={700}
-              color={
-                parseInt(summary.score) >= 80
-                  ? 'success.main'
-                  : parseInt(summary.score) >= 60
-                  ? 'warning.main'
-                  : 'error.main'
-              }
+              color={getScoreColor(totalScore)}
             >
-              {summary.score}점
+              {totalScore}점
             </Typography>
           </Box>
         )}
@@ -1274,9 +1762,15 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
       {sectionKeys.map((sectionKey) => {
         const sectionData = details[sectionKey];
         const sectionResult = getSectionResult(sectionKey);
-        // states와 feedback_message 제외한 소항목들
-        const subItemKeys = Object.keys(sectionData).filter((key) => key !== 'feedback_message' && key !== 'states');
-        const feedbackMessage = sectionData.feedback_message as string | undefined;
+        const sectionScore = getSectionScore(sectionKey);
+        // states, feedbackMessage, *Score 키 제외한 소항목들
+        const subItemKeys = Object.keys(sectionData).filter((key) =>
+          key !== 'feedbackMessage' &&
+          key !== 'feedback_message' &&
+          key !== 'states' &&
+          !key.toLowerCase().endsWith('score')
+        );
+        const feedbackMessage = (sectionData.feedbackMessage || sectionData.feedback_message) as string | undefined;
         const states = sectionData.states as EvaluationState[] | undefined;
         // 현재 상태 (가장 최신 seq)
         const currentState = states && states.length > 0
@@ -1291,6 +1785,7 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
                   {getLabel(sectionKey)}
                 </Typography>
                 {sectionResult && <StatusChip status={sectionResult} />}
+                {sectionScore && <ScoreChip score={sectionScore} />}
                 {currentState && (
                   <EvaluationStatusChip status={currentState.status} />
                 )}

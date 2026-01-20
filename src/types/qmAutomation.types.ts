@@ -111,6 +111,7 @@ export interface ToolDefinition {
 export interface QMAutomationRequestBody {
   prompt?: string;
   contactId?: string;
+  agentUserName?: string;
   model?: string;
   streaming?: boolean;
   useTools?: boolean;
@@ -180,6 +181,9 @@ export interface QMAutomationStatusResponse {
   input?: QMAutomationInput;
   error?: string;
   connectedToAgentTimestamp?: string;
+  agentConfirmYN?: 'Y' | 'N';  // 상담원 확인 여부
+  qaFeedbackYN?: 'Y' | 'N';    // QA 피드백 여부
+  qmEvaluationStatus?: string; // QM 평가 상태
 }
 
 export interface QMAutomationListItem {
@@ -216,7 +220,8 @@ export type EvaluationStatusType =
 export interface EvaluationState {
   seq: number;
   status: EvaluationStatusType;
-  status_reason: string;
+  statusReason: string;
+  evaluationStatus?: 'PASS' | 'FAIL' | 'N/A'; // 해당 상태에서의 평가 결과
 }
 
 // 기본 이벤트 타입 - 다양한 필드를 유연하게 지원

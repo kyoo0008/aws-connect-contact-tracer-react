@@ -875,7 +875,7 @@ app.get('/api/agent/v1/qm-automation/list', async (req, res) => {
 });
 
 /**
- * QM Automation 상세 조회 (requestId로 조회)
+ * QM Automation 상세 조회 (Lambda 호출)
  *
  * GET /api/agent/v1/qm-automation/status?requestId=xxx
  * Headers: x-aws-credentials, x-aws-region, x-environment
@@ -892,46 +892,64 @@ app.get('/api/agent/v1/qm-automation/status', async (req, res) => {
     const environment = req.headers['x-environment'] || 'dev';
     const credentials = await getCredentialsFromRequest(req);
 
-    const dynamoClient = new DynamoDBClient({
+    const lambdaClient = new LambdaClient({
       region,
       credentials,
     });
 
     const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const tableName = `aicc-${prefix}-ddb-gemini-response`;
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
 
-    // pk가 "requestId#<uuid>" 형식
-    const command = new QueryCommand({
-      TableName: tableName,
-      KeyConditionExpression: 'pk = :pk',
-      ExpressionAttributeValues: {
-        ':pk': { S: `requestId#${requestId}` },
+    // Construct ALB-like event payload
+    const payload = {
+      httpMethod: 'GET',
+      path: '/api/agent/v1/qm-automation/status',
+      headers: {
+        'Content-Type': 'application/json'
       },
-      Limit: 1,
+      queryStringParameters: {
+        requestId: requestId
+      }
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
     });
 
-    const response = await dynamoClient.send(command);
+    const response = await lambdaClient.send(command);
 
-    if (!response.Items || response.Items.length === 0) {
-      return res.status(404).json({ error: 'QM Automation not found' });
+    // Lambda (ALB Proxy 타입) 응답 파싱
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(responseData.data || responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Request failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(result.data || result);
     }
-
-    const item = unmarshallItem(response.Items[0]);
-
-    res.json({
-      requestId: item.requestId,
-      contactId: item.contactId,
-      agentId: item.agentId,
-      status: item.status,
-      createdAt: item.sk,
-      completedAt: item.completedAt,
-      connectedToAgentTimestamp: item.connectedToAgentTimestamp,
-      result: item.result,
-      input: item.input,
-      error: item.error,
-    });
   } catch (error) {
-    console.error('Error fetching QM Automation status:', error);
+    console.error('Error invoking QM Automation Status Lambda:', error);
     res.status(500).json({ error: 'Failed to fetch QM Automation status', message: error.message });
   }
 });
@@ -1227,6 +1245,7 @@ app.listen(PORT, () => {
 - GET  /api/agent/v1/qm-automation/status?requestId=xxx   - QM 상세 조회
 - GET  /api/agent/v1/qm-automation/statistics?month=YYYYMM - 월별 QM 통계
 - GET  /api/agent/v1/qm-automation/agent/:agentId/history  - Agent별 QM 이력
+- POST /api/agent/v1/qm-automation                         - QM 상담 내용 분석 
 
 [Health]
 - GET  /health                   - Health check

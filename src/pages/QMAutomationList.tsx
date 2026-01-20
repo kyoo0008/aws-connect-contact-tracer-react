@@ -123,7 +123,7 @@ const QMAutomationList: React.FC = () => {
   const [inputContactId, setInputContactId] = useState(contactId || '');
   const [requestOptions, setRequestOptions] = useState<QMAutomationRequestBody>({
     contactId: contactId || '',
-    model: 'gemini-2.5-pro',
+    model: 'gemini-2.5-flash',
     useDefaultPrompt: true,
     prompt: '',
     useThinking: true,
@@ -587,9 +587,10 @@ const QMAutomationList: React.FC = () => {
                   setRequestOptions({ ...requestOptions, model: e.target.value })
                 }
               >
-                <MenuItem value="gemini-2.5-pro">Gemini 2.5 Pro (권장)</MenuItem>
-                <MenuItem value="gemini-2.5-flash">Gemini 2.5 Flash</MenuItem>
-                <MenuItem value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</MenuItem>
+                <MenuItem value="gemini-2.5-flash">Gemini 2.5 Flash(권장)</MenuItem>
+                <MenuItem value="gemini-2.5-pro">Gemini 2.5 Pro</MenuItem>
+
+
               </Select>
             </FormControl>
 

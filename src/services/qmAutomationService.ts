@@ -190,31 +190,60 @@ export async function getQMAutomationListAll(
 }
 
 /**
- * QM Automation 기간 검색 (Start ~ End)
+ * QM Automation 검색 필터 인터페이스
+ */
+export interface QMAutomationSearchFilters {
+  startMonth?: string;  // YYYYMM format
+  endMonth?: string;    // YYYYMM format
+  agentId?: string;
+  agentUserName?: string;
+  agentCenter?: string;
+  agentConfirmYN?: 'Y' | 'N';
+  qaFeedbackYN?: 'Y' | 'N';
+  qmEvaluationStatus?: string;
+  contactId?: string;
+  limit?: number;
+}
+
+/**
+ * QM Automation 다중 필터 검색 (GET /api/agent/v1/qm-automation/search)
  */
 export async function getQMAutomationListSearch(
   config: AWSConfig,
-  startDate: string,
-  endDate: string
+  filters: QMAutomationSearchFilters
 ): Promise<QMAutomationListItem[]> {
   const apiBaseUrl = getApiBaseUrl(config.environment);
 
   try {
-    const response = await fetch(
-      `${apiBaseUrl}/api/agent/v1/qm-automation/search`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-aws-region': config.region,
-          'x-environment': config.environment,
-          ...(config.credentials && {
-            'x-aws-credentials': JSON.stringify(config.credentials),
-          }),
-        },
-        body: JSON.stringify({ startDate, endDate }),
-      }
-    );
+    // Build query string from filters
+    const params = new URLSearchParams();
+    if (filters.startMonth) params.append('startMonth', filters.startMonth);
+    if (filters.endMonth) params.append('endMonth', filters.endMonth);
+    if (filters.agentId) params.append('agentId', filters.agentId);
+    if (filters.agentUserName) params.append('agentUserName', filters.agentUserName);
+    if (filters.agentCenter) params.append('agentCenter', filters.agentCenter);
+    if (filters.agentConfirmYN) params.append('agentConfirmYN', filters.agentConfirmYN);
+    if (filters.qaFeedbackYN) params.append('qaFeedbackYN', filters.qaFeedbackYN);
+    if (filters.qmEvaluationStatus) params.append('qmEvaluationStatus', filters.qmEvaluationStatus);
+    if (filters.contactId) params.append('contactId', filters.contactId);
+    if (filters.limit) params.append('limit', filters.limit.toString());
+
+    const queryString = params.toString();
+    const url = queryString
+      ? `${apiBaseUrl}/api/agent/v1/qm-automation/search?${queryString}`
+      : `${apiBaseUrl}/api/agent/v1/qm-automation/search`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-aws-region': config.region,
+        'x-environment': config.environment,
+        ...(config.credentials && {
+          'x-aws-credentials': JSON.stringify(config.credentials),
+        }),
+      },
+    });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));

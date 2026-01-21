@@ -9,11 +9,11 @@ export type QMStatus =
   | 'ERROR';
 
 export interface FunctionCallArgs {
-  transcript_authenticated?: boolean;
-  transcript_agent_confirmation?: string;
-  transcript_from?: string;
-  transcript_to?: string;
-  transcript_date?: string;
+  transcriptAuthenticated?: boolean;
+  transcriptAgent_confirmation?: string;
+  transcriptFrom?: string;
+  transcriptTo?: string;
+  transcriptDate?: string;
   [key: string]: unknown;
 }
 
@@ -174,6 +174,8 @@ export interface QMAutomationStatusResponse {
   requestId: string;
   contactId?: string;
   agentId?: string;
+  agentUserName?: string;
+  agentCenter?: string;
   status: QMStatus;
   createdAt?: string;
   completedAt?: string;
@@ -190,6 +192,8 @@ export interface QMAutomationListItem {
   requestId: string;
   contactId: string;
   agentId?: string;
+  agentUserName?: string;
+  agentCenter?: string;
   status: QMStatus;
   createdAt: string;
   completedAt?: string;
@@ -199,6 +203,9 @@ export interface QMAutomationListItem {
   input?: QMAutomationInput;
   result?: QMAutomationResult;
   connectedToAgentTimestamp?: string;
+  agentConfirmYN?: 'Y' | 'N';
+  qaFeedbackYN?: 'Y' | 'N';
+  qmEvaluationStatus?: string;
 }
 
 export interface QMAutomationListResponse {
@@ -227,18 +234,18 @@ export interface EvaluationState {
 // 기본 이벤트 타입 - 다양한 필드를 유연하게 지원
 export interface EvaluationEvent {
   timestamp?: string;
-  timestamp_start?: string;
-  timestamp_end?: string;
+  timestampStart?: string;
+  timestampEnd?: string;
   type?: string;
-  detected_sentence?: string;
+  detectedSentence?: string;
   correction?: string;
   analysis?: string;
-  content_context?: string;
-  apology_used?: boolean;
+  contentContext?: string;
+  apologyUsed?: boolean;
   judgment?: string;
   category?: string;
-  customer_reaction?: string;
-  agent_response_quality?: string;
+  customerReaction?: string;
+  agentResponseQuality?: string;
   [key: string]: unknown; // 추가 필드 허용
 }
 

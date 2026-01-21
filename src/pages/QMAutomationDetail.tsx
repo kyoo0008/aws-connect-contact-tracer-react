@@ -51,13 +51,11 @@ import {
   getQMAutomationStatus,
   getStatusLabel,
   getStatusColor,
-  extractScoreFromResponse,
 } from '@/services/qmAutomationService';
 import {
   QMAutomationStatusResponse,
   FunctionCall,
   FunctionCallResultData,
-  AudioAnalyzeResult,
   EvaluationResult,
   EvaluationEvent,
   EvaluationState,
@@ -80,7 +78,7 @@ const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
 };
 
 const QMAutomationDetail: React.FC = () => {
-  const { contactId, requestId } = useParams<{ contactId: string; requestId: string }>();
+  const { requestId } = useParams<{ requestId: string }>();
   const navigate = useNavigate();
   const { config, isConfigured } = useConfig();
   const [tabValue, setTabValue] = useState(0);
@@ -115,12 +113,12 @@ const QMAutomationDetail: React.FC = () => {
   const score = null; // To-do : 점수 추출 로직 개선 필요
 
   // Validation checks
-  if (!contactId || !requestId) {
+  if (!requestId) {
     return (
       <Container sx={{ mt: 4 }}>
-        <Alert severity="error">Contact ID 또는 Request ID가 제공되지 않았습니다.</Alert>
-        <Button onClick={() => navigate('/')} startIcon={<BackIcon />} sx={{ mt: 2 }}>
-          Dashboard로 돌아가기
+        <Alert severity="error">Request ID가 제공되지 않았습니다.</Alert>
+        <Button onClick={() => navigate('/qm-automation')} startIcon={<BackIcon />} sx={{ mt: 2 }}>
+          목록으로 돌아가기
         </Button>
       </Container>
     );
@@ -158,7 +156,7 @@ const QMAutomationDetail: React.FC = () => {
       <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between">
           <Stack direction="row" alignItems="center" spacing={2}>
-            <IconButton onClick={() => navigate(`/qm-automation/${contactId}`)}>
+            <IconButton onClick={() => navigate('/qm-automation')}>
               <BackIcon />
             </IconButton>
             <Box>
@@ -169,11 +167,14 @@ const QMAutomationDetail: React.FC = () => {
                 <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
                   Request ID: {requestId}
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                  Contact ID: {contactId}
-                </Typography>
                 {qmDetail && (
                   <>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                      Contact ID: {qmDetail.contactId || '-'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      센터: {qmDetail.agentCenter || '-'} | 상담사: {qmDetail.agentUserName || '-'} | Agent ID: {qmDetail.agentId || '-'}
+                    </Typography>
                     <Typography variant="body2" color="text.secondary">
                       상담 연결: {qmDetail.connectedToAgentTimestamp ? dayjs(qmDetail.connectedToAgentTimestamp).format('YYYY-MM-DD HH:mm:ss') : '-'}
                     </Typography>
@@ -323,13 +324,7 @@ const QMAutomationDetail: React.FC = () => {
                       {(() => {
                         const qmTime = qmDetail.result.processingTime || 0;
                         const toolTime = qmDetail.input?.toolResult?.processingTime || 0;
-                        let audioTime = 0;
-                        try {
-                          if (qmDetail.result.audioAnalyzeResult?.body) {
-                            audioTime = JSON.parse(qmDetail.result.audioAnalyzeResult.body).processingTime || 0;
-                          }
-                        } catch (e) { }
-                        return (qmTime + toolTime + audioTime).toFixed(2);
+                        return (qmTime + toolTime).toFixed(2);
                       })()}
                     </Typography>
                     <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
@@ -339,14 +334,6 @@ const QMAutomationDetail: React.FC = () => {
                       {qmDetail.input?.toolResult?.processingTime && (
                         <Typography variant="caption" color="text.secondary">
                           / Tool: {qmDetail.input.toolResult.processingTime.toFixed(1)}s
-                        </Typography>
-                      )}
-                      {qmDetail.result.audioAnalyzeResult?.body && (
-                        <Typography variant="caption" color="text.secondary">
-                          / Audio: {(() => {
-                            try { return JSON.parse(qmDetail.result.audioAnalyzeResult.body).processingTime?.toFixed(1); }
-                            catch { return '0'; }
-                          })()}s
                         </Typography>
                       )}
                     </Stack>
@@ -368,13 +355,7 @@ const QMAutomationDetail: React.FC = () => {
                       {(() => {
                         const qmTokens = qmDetail.result.totalTokens || 0;
                         const toolTokens = qmDetail.input?.toolResult?.tokenUsage?.totalTokens || 0;
-                        let audioTokens = 0;
-                        try {
-                          if (qmDetail.result.audioAnalyzeResult?.body) {
-                            audioTokens = JSON.parse(qmDetail.result.audioAnalyzeResult.body).totalTokens || 0;
-                          }
-                        } catch (e) { }
-                        return (qmTokens + toolTokens + audioTokens).toLocaleString();
+                        return (qmTokens + toolTokens).toLocaleString();
                       })()}
                     </Typography>
                     <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
@@ -384,14 +365,6 @@ const QMAutomationDetail: React.FC = () => {
                       {qmDetail.input?.toolResult?.tokenUsage?.totalTokens && (
                         <Typography variant="caption" color="text.secondary">
                           / Tool: {qmDetail.input.toolResult.tokenUsage.totalTokens.toLocaleString()}
-                        </Typography>
-                      )}
-                      {qmDetail.result.audioAnalyzeResult?.body && (
-                        <Typography variant="caption" color="text.secondary">
-                          / Audio: {(() => {
-                            try { return JSON.parse(qmDetail.result.audioAnalyzeResult.body).totalTokens?.toLocaleString() || '0'; }
-                            catch { return '0'; }
-                          })()}
                         </Typography>
                       )}
                     </Stack>
@@ -435,10 +408,9 @@ const QMAutomationDetail: React.FC = () => {
               onChange={(_, newValue) => setTabValue(newValue)}
               sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
             >
-              <Tab label="QM 평가 결과" />
+              <Tab label="AI 평가 분석 결과" />
               <Tab label="평가 상세" disabled={!qmDetail.result?.evaluationResult} />
               <Tab label="Function Calls" disabled={!qmDetail.input?.toolResult} />
-              {/* <Tab label="오디오 분석" disabled={!qmDetail.result?.audioAnalyzeResult} /> */}
             </Tabs>
 
             <Box sx={{ p: 3 }}>
@@ -739,17 +711,6 @@ const QMAutomationDetail: React.FC = () => {
                 </Stack>
               </TabPanel>
 
-              {/* Audio Analysis Tab */}
-              <TabPanel value={tabValue} index={3}>
-                {qmDetail.result?.audioAnalyzeResult ? (
-                  <AudioAnalysisView
-                    result={qmDetail.result.audioAnalyzeResult}
-                    prompt={qmDetail.input?.audioAnalysisPrompt}
-                  />
-                ) : (
-                  <Typography color="text.secondary">오디오 분석 데이터가 없습니다.</Typography>
-                )}
-              </TabPanel>
             </Box>
           </Paper>
 
@@ -802,7 +763,6 @@ const LABEL_MAP: Record<string, string> = {
   // 대항목
   greeting: '인사',
   LanguageUse: '언어 사용',
-  Language_Use: '언어 사용',
   Speed: '속도',
   VoiceProduction: '음성 표현',
   Accuracy: '정확성',
@@ -813,29 +773,19 @@ const LABEL_MAP: Record<string, string> = {
   opening: '첫인사',
   response: '인사 호응',
   additionalInquiryCheck: '추가 문의 확인',
-  additional_inquiry_check: '추가 문의 확인',
   closing: '끝인사',
   // 언어 사용 소항목
   languageQualityScore: '언어 품질 점수',
-  language_quality_score: '언어 품질 점수',
   inappropriateVocabulary: '부적절한 어휘',
-  inappropriate_vocabulary: '부적절한 어휘',
   UnpoliteToneManner: '공손하지 않은 표현',
-  Unpolite_Tone_Manner: '공손하지 않은 표현',
   badHabits: '습관적 표현',
-  bad_habits: '습관적 표현',
   // 속도 소항목
-  Interruption_Analysis: '끼어들기 분석',
   interruptionAnalysis: '끼어들기 분석',
   pacingUnderstanding: '속도/이해도 분석',
-  pacing_understanding: '속도/이해도 분석',
   // 음성 표현 소항목
-  Tone_Manner: '어조/매너',
   toneManner: '어조/매너',
   handlingNegativity: '부정적 상황 대처',
-  handling_negativity: '부정적 상황 대처',
   activeListening: '적극적 경청',
-  active_listening: '적극적 경청',
   // 정확성 소항목
   accuracyScore: '정확성 점수',
   accuracyIssues: '정확성 문제',
@@ -863,7 +813,6 @@ const LABEL_MAP: Record<string, string> = {
   customerConfirmation: '고객 확인',
   // 공통
   feedbackMessage: '피드백',
-  feedback_message: '피드백',
 };
 
 // 키 이름을 라벨로 변환 (매핑이 없으면 키 이름을 읽기 쉽게 변환)
@@ -1174,19 +1123,18 @@ const isAccuracyIssues = (value: unknown): value is {
 // 이벤트 렌더링 컴포넌트
 const EventItemView: React.FC<{ event: EvaluationEvent }> = ({ event }) => {
   const timestamp = event.timestamp ||
-    (event.timestamp_start && event.timestamp_end ? `${event.timestamp_start} ~ ${event.timestamp_end}` : '');
+    (event.timestampStart && event.timestampEnd ? `${event.timestampStart} ~ ${event.timestampEnd}` : '');
 
-  // 감지된 내용 (다양한 필드명 지원)
-  const detectedContent = event.detected_sentence ||
-    (event as Record<string, unknown>).detectedSentence ||
+  // 감지된 내용
+  const detectedContent = event.detectedSentence ||
     (event as Record<string, unknown>).detectedWord;
 
-  // 수정 제안 (다양한 필드명 지원)
+  // 수정 제안
   const correctionContent = event.correction ||
     (event as Record<string, unknown>).suggestedCorrection;
 
-  // 컨텍스트 (다양한 필드명 지원)
-  const contextContent = event.content_context ||
+  // 컨텍스트
+  const contextContent = event.contentContext ||
     (event as Record<string, unknown>).context;
 
   return (
@@ -1229,14 +1177,14 @@ const EventItemView: React.FC<{ event: EvaluationEvent }> = ({ event }) => {
                 분석: {event.analysis}
               </Typography>
             )}
-            {event.customer_reaction && (
+            {event.customerReaction && (
               <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
-                고객 반응: {event.customer_reaction}
+                고객 반응: {event.customerReaction}
               </Typography>
             )}
-            {event.agent_response_quality && (
+            {event.agentResponseQuality && (
               <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
-                상담사 대응: {event.agent_response_quality}
+                상담사 대응: {event.agentResponseQuality}
               </Typography>
             )}
           </>
@@ -1271,8 +1219,8 @@ const getLevelColor = (level: string): 'success' | 'warning' | 'error' | 'info' 
 const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKey, value }) => {
   const label = getLabel(itemKey);
 
-  // feedback_message는 별도 처리
-  if ((itemKey === 'feedback_message' || itemKey === 'feedbackMessage') && typeof value === 'string') {
+  // feedbackMessage는 별도 처리
+  if (itemKey === 'feedbackMessage' && typeof value === 'string') {
     return (
       <Alert severity="info" sx={{ mt: 2 }}>
         <Typography variant="body2">{value}</Typography>
@@ -1766,11 +1714,10 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
         // states, feedbackMessage, *Score 키 제외한 소항목들
         const subItemKeys = Object.keys(sectionData).filter((key) =>
           key !== 'feedbackMessage' &&
-          key !== 'feedback_message' &&
           key !== 'states' &&
           !key.toLowerCase().endsWith('score')
         );
-        const feedbackMessage = (sectionData.feedbackMessage || sectionData.feedback_message) as string | undefined;
+        const feedbackMessage = sectionData.feedbackMessage as string | undefined;
         const states = sectionData.states as EvaluationState[] | undefined;
         // 현재 상태 (가장 최신 seq)
         const currentState = states && states.length > 0
@@ -1819,233 +1766,5 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
   );
 };
 
-// Audio Analysis Sub-component
-const AudioAnalysisView: React.FC<{ result: AudioAnalyzeResult; prompt?: string }> = ({
-  result,
-  prompt,
-}) => {
-  // Parse body if available
-  const parsedBody = React.useMemo(() => {
-    if (!result.body) return null;
-    try {
-      return JSON.parse(result.body);
-    } catch (e) {
-      console.error('Failed to parse audio analysis body', e);
-      return null;
-    }
-  }, [result.body]);
-
-  // Try to parse audioAnalysisResponse if it is a JSON string
-  const analysisResponse = React.useMemo(() => {
-    if (!parsedBody?.audioAnalysisResponse) return null;
-    try {
-      if (typeof parsedBody.audioAnalysisResponse === 'string') {
-        // Check if it looks like JSON
-        if (parsedBody.audioAnalysisResponse.trim().startsWith('{')) {
-          return JSON.parse(parsedBody.audioAnalysisResponse);
-        }
-        return parsedBody.audioAnalysisResponse;
-      }
-      return parsedBody.audioAnalysisResponse;
-    } catch (e) {
-      return parsedBody.audioAnalysisResponse;
-    }
-  }, [parsedBody]);
-
-  // Merge structured data from result or parsed body/response
-  const customerDissatisfaction =
-    result.customer_dissatisfaction || analysisResponse?.customer_dissatisfaction;
-  const agentInterruption =
-    result.agent_interruption || analysisResponse?.agent_interruption;
-  const summary = result.summary || analysisResponse?.summary;
-
-  return (
-    <Stack spacing={3}>
-      {/* Input Prompt Section */}
-      {prompt && (
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-            <InfoIcon color="info" />
-            <Typography variant="subtitle1" fontWeight={600}>
-              분석 프롬프트
-            </Typography>
-          </Stack>
-          <Box
-            sx={{
-              p: 2,
-              bgcolor: 'grey.50',
-              borderRadius: 1,
-              maxHeight: '200px',
-              overflow: 'auto',
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-              whiteSpace: 'pre-wrap',
-            }}
-          >
-            {prompt}
-          </Box>
-        </Paper>
-      )}
-
-      {/* Analysis Metadata from Parsed Body */}
-      {parsedBody && (
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-            분석 메타데이터
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary">처리 시간</Typography>
-              <Typography variant="body2">{parsedBody.processingTime?.toFixed(2)}s</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary">총 토큰</Typography>
-              <Typography variant="body2">{parsedBody.totalTokens?.toLocaleString()}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary">입력 토큰</Typography>
-              <Typography variant="body2">{parsedBody.inputTokens?.toLocaleString()}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary">출력 토큰</Typography>
-              <Typography variant="body2">{parsedBody.outputTokens?.toLocaleString()}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
-              <Typography variant="body2">
-                {((parsedBody.totalTokens || 0) - ((parsedBody.inputTokens || 0) + (parsedBody.outputTokens || 0))).toLocaleString()}
-              </Typography>
-            </Grid>
-          </Grid>
-        </Paper>
-      )}
-
-      {/* Summary */}
-      {(summary || result.summary) && (
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-            분석 요약
-          </Typography>
-          <Typography variant="body2">{summary || result.summary}</Typography>
-        </Paper>
-      )}
-
-      {/* Raw Response Text if we couldn't parse specific fields but have response */}
-      {analysisResponse && !customerDissatisfaction && !agentInterruption && !summary && (
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-            분석 결과 (Raw)
-          </Typography>
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 2,
-              bgcolor: 'grey.50',
-              maxHeight: '400px',
-              overflow: 'auto',
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-              whiteSpace: 'pre-wrap',
-            }}
-          >
-            {typeof analysisResponse === 'string'
-              ? analysisResponse
-              : JSON.stringify(analysisResponse, null, 2)}
-          </Paper>
-        </Paper>
-      )}
-
-      {/* Customer Dissatisfaction */}
-      {customerDissatisfaction && (
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-            {customerDissatisfaction.detected ? (
-              <WarningIcon color="warning" />
-            ) : (
-              <CheckIcon color="success" />
-            )}
-            <Typography variant="subtitle1" fontWeight={600}>
-              고객 불만족
-            </Typography>
-            <Chip
-              size="small"
-              label={customerDissatisfaction.detected ? '감지됨' : '감지 안됨'}
-              color={customerDissatisfaction.detected ? 'warning' : 'success'}
-            />
-          </Stack>
-          {customerDissatisfaction.detected && (
-            <List dense>
-              <ListItem>
-                <ListItemIcon>
-                  <InfoIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="심각도"
-                  secondary={customerDissatisfaction.severity || '-'}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemIcon>
-                  <InfoIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="사유"
-                  secondary={customerDissatisfaction.reason || '-'}
-                />
-              </ListItem>
-              {customerDissatisfaction.timestamp_range && (
-                <ListItem>
-                  <ListItemIcon>
-                    <TimeIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="발생 구간"
-                    secondary={customerDissatisfaction.timestamp_range}
-                  />
-                </ListItem>
-              )}
-            </List>
-          )}
-        </Paper>
-      )}
-
-      {/* Agent Interruption */}
-      {agentInterruption && (
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-            {agentInterruption.detected ? (
-              <WarningIcon color="warning" />
-            ) : (
-              <CheckIcon color="success" />
-            )}
-            <Typography variant="subtitle1" fontWeight={600}>
-              상담사 끼어들기
-            </Typography>
-            <Chip
-              size="small"
-              label={agentInterruption.detected ? '감지됨' : '감지 안됨'}
-              color={agentInterruption.detected ? 'warning' : 'success'}
-            />
-          </Stack>
-          {agentInterruption.detected && agentInterruption.instances && agentInterruption.instances.length > 0 && (
-            <List dense>
-              {agentInterruption.instances.map((instance: any, index: number) => (
-                <ListItem key={index}>
-                  <ListItemIcon>
-                    <AudioIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={instance.timestamp}
-                    secondary={instance.description}
-                  />
-                </ListItem>
-              ))}
-            </List>
-          )}
-        </Paper>
-      )}
-    </Stack>
-  );
-};
 
 export default QMAutomationDetail;

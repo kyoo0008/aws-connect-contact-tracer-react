@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -29,9 +29,10 @@ import {
   FormControl,
   InputLabel,
   TextField,
-  InputAdornment,
   TablePagination,
   TableSortLabel,
+  Collapse,
+  Grid,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -40,12 +41,14 @@ import {
   Settings as SettingsIcon,
   PlayArrow as PlayIcon,
   Search as SearchIcon,
+  FilterList as FilterListIcon,
+  Clear as ClearIcon,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useConfig } from '@/contexts/ConfigContext';
 import {
-  getQMAutomationListByContactId,
   getQMAutomationListSearch,
+  QMAutomationSearchFilters,
   requestQMAutomation,
   getStatusLabel,
   getStatusColor,
@@ -66,44 +69,44 @@ const DEFAULT_TOOL_DEFINITIONS_JSON = JSON.stringify([
         "parameters": {
           "type": "OBJECT",
           "properties": {
-            "transcript_authenticated": {
+            "transcriptAuthenticated": {
               "type": "BOOLEAN",
               "description": "본인 확인 요청 여부 (true: 요청함, false: 요청하지 않음)"
             },
-            "transcript_agent_confirmation": {
+            "transcriptAgent_confirmation": {
               "type": "STRING",
               "description": "상담사가 본인 확인을 요청한 발화 내용"
             }
           },
           "required": [
-            "transcript_authenticated"
+            "transcriptAuthenticated"
           ]
         },
         "enabled": true
       },
       {
         "name": "PNR_Itinerary_Detected",
-        "description": "상담 전체를 분석하여 최종 확정된 여정만 호출합니다. 중복 호출 금지. \\n            - 왕복: 가는 편 1회 + 오는 편 1회 = 최대 2회 \\n            - 편도: 1회만 호출 \\n            - 출발지(from), 도착지(to), 날짜(date)가 모두 명확한 경우에만 호출 \\n            - 대화 중 언급된 모든 날짜/장소가 아닌, 최종 확정된 여정만 호출 \\n \\n            **중요: 파라미터는 반드시 아래 형식으로 추출** \\n            - transcript_from, transcript_to: IATA 3-letter 공항코드 (예: ICN, LAX, NRT) \\n            - transcript_date: DDMMYY 형식 (예: 301225) \\n            - 대화에서 년도가 언급되지 않은 경우 #{currentYear}년을 기준으로 합니다. (오늘: #{currentDateKorean})",
+        "description": "상담 전체를 분석하여 최종 확정된 여정만 호출합니다. 중복 호출 금지. \\n            - 왕복: 가는 편 1회 + 오는 편 1회 = 최대 2회 \\n            - 편도: 1회만 호출 \\n            - 출발지(from), 도착지(to), 날짜(date)가 모두 명확한 경우에만 호출 \\n            - 대화 중 언급된 모든 날짜/장소가 아닌, 최종 확정된 여정만 호출 \\n \\n            **중요: 파라미터는 반드시 아래 형식으로 추출** \\n            - transcriptFrom, transcriptTo: IATA 3-letter 공항코드 (예: ICN, LAX, NRT) \\n            - transcriptDate: DDMMYY 형식 (예: 301225) \\n            - 대화에서 년도가 언급되지 않은 경우 #{currentYear}년을 기준으로 합니다. (오늘: #{currentDateKorean})",
         "parameters": {
           "type": "OBJECT",
           "properties": {
-            "transcript_from": {
+            "transcriptFrom": {
               "type": "STRING",
               "description": "IATA 3-letter 공항코드 (예: ICN, GMP, LAX, JFK). 도시명이 언급된 경우 해당 주요 공항코드로 변환"
             },
-            "transcript_to": {
+            "transcriptTo": {
               "type": "STRING",
               "description": "IATA 3-letter 공항코드 (예: ICN, GMP, LAX, JFK). 도시명이 언급된 경우 해당 주요 공항코드로 변환"
             },
-            "transcript_date": {
+            "transcriptDate": {
               "type": "STRING",
               "description": "출발 날짜를 DDMMYY 형식으로 (예: 301225). 상대적 표현(내일, 다음주)은 절대 날짜로 변환 필요"
             }
           },
           "required": [
-            "transcript_from",
-            "transcript_to",
-            "transcript_date"
+            "transcriptFrom",
+            "transcriptTo",
+            "transcriptDate"
           ]
         },
         "enabled": false
@@ -113,16 +116,14 @@ const DEFAULT_TOOL_DEFINITIONS_JSON = JSON.stringify([
 ], null, 2);
 
 const QMAutomationList: React.FC = () => {
-  const { contactId } = useParams<{ contactId: string }>();
   const navigate = useNavigate();
   const { config, isConfigured } = useConfig();
   const queryClient = useQueryClient();
 
   // State for new request dialog
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [inputContactId, setInputContactId] = useState(contactId || '');
   const [requestOptions, setRequestOptions] = useState<QMAutomationRequestBody>({
-    contactId: contactId || '',
+    contactId: '',
     model: 'gemini-2.5-flash',
     useDefaultPrompt: true,
     prompt: '',
@@ -140,6 +141,28 @@ const QMAutomationList: React.FC = () => {
   // Search Date Range State (Default: Last 30 days)
   const [startDate, setStartDate] = useState<Dayjs | null>(dayjs().subtract(30, 'day'));
   const [endDate, setEndDate] = useState<Dayjs | null>(dayjs());
+
+  // Search Filters State (for input fields)
+  const [searchFilters, setSearchFilters] = useState<QMAutomationSearchFilters>({
+    contactId: '',
+    agentUserName: '',
+    agentCenter: '',
+    agentConfirmYN: undefined,
+    qaFeedbackYN: undefined,
+    qmEvaluationStatus: '',
+  });
+  // Applied filters (used in query)
+  const [appliedFilters, setAppliedFilters] = useState<QMAutomationSearchFilters>({
+    contactId: '',
+    agentUserName: '',
+    agentCenter: '',
+    agentConfirmYN: undefined,
+    qaFeedbackYN: undefined,
+    qmEvaluationStatus: '',
+  });
+  const [appliedStartDate, setAppliedStartDate] = useState<Dayjs | null>(dayjs().subtract(30, 'day'));
+  const [appliedEndDate, setAppliedEndDate] = useState<Dayjs | null>(dayjs());
+  const [showFilters, setShowFilters] = useState(true);
 
   // Pagination state
   const [page, setPage] = useState(0);
@@ -160,16 +183,23 @@ const QMAutomationList: React.FC = () => {
   const getProcessingTime = (item: QMAutomationListItem) => {
     const qmTime = Number(item.result?.processingTime ?? item.processingTime ?? 0);
     const toolTime = Number(item.input?.toolResult?.processingTime ?? 0);
-    let audioTime = 0;
-    if (item.result?.audioAnalyzeResult?.body) {
-      try {
-        const body = JSON.parse(item.result.audioAnalyzeResult.body);
-        audioTime = Number(body.processingTime ?? 0);
-      } catch (e) {
-        // ignore parsing error
-      }
+
+    return qmTime + toolTime;
+  };
+
+  // Handle search action
+  const handleSearch = () => {
+    setAppliedFilters({ ...searchFilters });
+    setAppliedStartDate(startDate);
+    setAppliedEndDate(endDate);
+    setPage(0);
+  };
+
+  // Handle Enter key in search fields
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch();
     }
-    return qmTime + toolTime + audioTime;
   };
 
   // Fetch QM Automation list
@@ -179,19 +209,32 @@ const QMAutomationList: React.FC = () => {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['qm-automation-list', contactId, startDate?.format('YYYY-MM-DD'), endDate?.format('YYYY-MM-DD')],
+    queryKey: [
+      'qm-automation-list',
+      appliedStartDate?.format('YYYYMM'),
+      appliedEndDate?.format('YYYYMM'),
+      appliedFilters.contactId,
+      appliedFilters.agentUserName,
+      appliedFilters.agentCenter,
+      appliedFilters.agentConfirmYN,
+      appliedFilters.qaFeedbackYN,
+      appliedFilters.qmEvaluationStatus,
+    ],
     queryFn: async () => {
-      if (contactId) {
-        return getQMAutomationListByContactId(contactId, config);
-      } else {
-        // Search by Date Range
-        if (!startDate || !endDate) return [];
-        return getQMAutomationListSearch(
-          config,
-          startDate.format('YYYY-MM-DD'),
-          endDate.format('YYYY-MM-DD')
-        );
-      }
+      // Search with filters
+      if (!appliedStartDate || !appliedEndDate) return [];
+      const filters: QMAutomationSearchFilters = {
+        startMonth: appliedStartDate.format('YYYYMM'),
+        endMonth: appliedEndDate.format('YYYYMM'),
+      };
+      if (appliedFilters.contactId) filters.contactId = appliedFilters.contactId;
+      if (appliedFilters.agentUserName) filters.agentUserName = appliedFilters.agentUserName;
+      if (appliedFilters.agentCenter) filters.agentCenter = appliedFilters.agentCenter;
+      if (appliedFilters.agentConfirmYN) filters.agentConfirmYN = appliedFilters.agentConfirmYN;
+      if (appliedFilters.qaFeedbackYN) filters.qaFeedbackYN = appliedFilters.qaFeedbackYN;
+      if (appliedFilters.qmEvaluationStatus) filters.qmEvaluationStatus = appliedFilters.qmEvaluationStatus;
+
+      return getQMAutomationListSearch(config, filters);
     },
     enabled: isConfigured,
   });
@@ -205,8 +248,7 @@ const QMAutomationList: React.FC = () => {
     onSuccess: (response) => {
       setDialogOpen(false);
       // Navigate to detail page with requestId from response
-      const targetContactId = requestOptions.contactId || contactId || 'view';
-      navigate(`/qm-automation/${targetContactId}/detail/${response.requestId}`);
+      navigate(`/qm-automation/detail/${response.requestId}`);
     },
     onError: (error: Error) => {
       // Error will be displayed in the UI via createQMMutation.error
@@ -233,16 +275,8 @@ const QMAutomationList: React.FC = () => {
     });
   };
 
-  const handleRowClick = (requestId: string, itemContactId?: string) => {
-    const targetContactId = contactId || itemContactId || 'view';
-    navigate(`/qm-automation/${targetContactId}/detail/${requestId}`);
-  };
-
-  const handleSearch = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (inputContactId.trim()) {
-      navigate(`/qm-automation/${inputContactId.trim()}`);
-    }
+  const handleRowClick = (requestId: string) => {
+    navigate(`/qm-automation/detail/${requestId}`);
   };
 
   const handleChangePage = (event: unknown, newPage: number) => {
@@ -253,14 +287,6 @@ const QMAutomationList: React.FC = () => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
-
-  // Sync input with URL param
-  React.useEffect(() => {
-    if (contactId) {
-      setInputContactId(contactId);
-      setRequestOptions(prev => ({ ...prev, contactId }));
-    }
-  }, [contactId]);
 
   if (!isConfigured || !config.credentials) {
     return (
@@ -325,37 +351,27 @@ const QMAutomationList: React.FC = () => {
               </Stack>
 
 
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: 1, maxWidth: 400 }}>
-                <Box component="form" onSubmit={handleSearch} sx={{ flex: 1 }}>
-                  <TextField
-                    size="small"
-                    fullWidth
-                    placeholder="Contact ID 검색..."
-                    value={inputContactId}
-                    onChange={(e) => setInputContactId(e.target.value)}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchIcon color="action" />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Box>
-                <Button
-                  variant="contained"
-                  size="medium"
-                  onClick={handleSearch}
-                  disabled={!inputContactId.trim()}
-                  sx={{ minWidth: '80px' }}
-                >
-                  검색
-                </Button>
-              </Stack>
+              <Button
+                variant="contained"
+                size="medium"
+                onClick={handleSearch}
+                startIcon={<SearchIcon />}
+                sx={{ minWidth: '80px' }}
+              >
+                검색
+              </Button>
             </Stack>
           </Stack>
 
           <Stack direction="row" spacing={1}>
+            <Tooltip title="필터">
+              <IconButton
+                onClick={() => setShowFilters(!showFilters)}
+                color={showFilters ? 'primary' : 'default'}
+              >
+                <FilterListIcon />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="새로고침">
               <IconButton onClick={() => refetch()}>
                 <RefreshIcon />
@@ -373,6 +389,130 @@ const QMAutomationList: React.FC = () => {
 
           </Stack>
         </Stack>
+
+        {/* Advanced Filters */}
+        <Collapse in={showFilters}>
+          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="Contact ID"
+                  placeholder="예: 12345678-..."
+                  value={searchFilters.contactId || ''}
+                  onChange={(e) =>
+                    setSearchFilters({ ...searchFilters, contactId: e.target.value })
+                  }
+                  onKeyDown={handleKeyDown}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="상담사 (Username)"
+                  placeholder="예: user@example.com"
+                  value={searchFilters.agentUserName || ''}
+                  onChange={(e) =>
+                    setSearchFilters({ ...searchFilters, agentUserName: e.target.value })
+                  }
+                  onKeyDown={handleKeyDown}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={2}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="센터"
+                  placeholder="예: Seoul"
+                  value={searchFilters.agentCenter || ''}
+                  onChange={(e) =>
+                    setSearchFilters({ ...searchFilters, agentCenter: e.target.value })
+                  }
+                  onKeyDown={handleKeyDown}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={2}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>상담원 확인</InputLabel>
+                  <Select
+                    value={searchFilters.agentConfirmYN || ''}
+                    label="상담원 확인"
+                    onChange={(e) =>
+                      setSearchFilters({
+                        ...searchFilters,
+                        agentConfirmYN: e.target.value as 'Y' | 'N' | undefined || undefined,
+                      })
+                    }
+                  >
+                    <MenuItem value="">전체</MenuItem>
+                    <MenuItem value="Y">확인됨</MenuItem>
+                    <MenuItem value="N">미확인</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6} md={2}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>QA 피드백</InputLabel>
+                  <Select
+                    value={searchFilters.qaFeedbackYN || ''}
+                    label="QA 피드백"
+                    onChange={(e) =>
+                      setSearchFilters({
+                        ...searchFilters,
+                        qaFeedbackYN: e.target.value as 'Y' | 'N' | undefined || undefined,
+                      })
+                    }
+                  >
+                    <MenuItem value="">전체</MenuItem>
+                    <MenuItem value="Y">피드백 있음</MenuItem>
+                    <MenuItem value="N">피드백 없음</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6} md={2}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>평가 상태</InputLabel>
+                  <Select
+                    value={searchFilters.qmEvaluationStatus || ''}
+                    label="평가 상태"
+                    onChange={(e) =>
+                      setSearchFilters({
+                        ...searchFilters,
+                        qmEvaluationStatus: e.target.value || undefined,
+                      })
+                    }
+                  >
+                    <MenuItem value="">전체</MenuItem>
+                    <MenuItem value="COMPLETED">완료</MenuItem>
+                    <MenuItem value="PENDING">대기</MenuItem>
+                    <MenuItem value="PROCESSING">처리중</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<ClearIcon />}
+                  onClick={() =>
+                    setSearchFilters({
+                      contactId: '',
+                      agentUserName: '',
+                      agentCenter: '',
+                      agentConfirmYN: undefined,
+                      qaFeedbackYN: undefined,
+                      qmEvaluationStatus: '',
+                    })
+                  }
+                >
+                  필터 초기화
+                </Button>
+              </Grid>
+            </Grid>
+          </Box>
+        </Collapse>
       </Paper>
 
       {/* Loading */}
@@ -399,15 +539,13 @@ const QMAutomationList: React.FC = () => {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             기간을 조정하거나 새 QM 분석을 요청하세요.
           </Typography>
-          {contactId && (
-            <Button
-              variant="contained"
-              startIcon={<PlayIcon />}
-              onClick={() => setDialogOpen(true)}
-            >
-              첫 번째 QM 분석 시작
-            </Button>
-          )}
+          <Button
+            variant="contained"
+            startIcon={<PlayIcon />}
+            onClick={() => setDialogOpen(true)}
+          >
+            첫 번째 QM 분석 시작
+          </Button>
         </Paper>
       )}
 
@@ -420,7 +558,11 @@ const QMAutomationList: React.FC = () => {
                 <TableRow sx={{ bgcolor: 'grey.100' }}>
                   <TableCell>Request ID</TableCell>
                   <TableCell>Contact ID</TableCell>
+                  <TableCell>센터</TableCell>
+                  <TableCell>상담사</TableCell>
                   <TableCell>상태</TableCell>
+                  <TableCell>상담원 확인</TableCell>
+                  <TableCell>QA 피드백</TableCell>
                   <TableCell>모델</TableCell>
                   <TableCell>
                     <TableSortLabel
@@ -476,7 +618,7 @@ const QMAutomationList: React.FC = () => {
                     <TableRow
                       key={item.requestId}
                       hover
-                      onClick={() => handleRowClick(item.requestId, item.contactId)}
+                      onClick={() => handleRowClick(item.requestId)}
                       sx={{ cursor: 'pointer' }}
                     >
                       <TableCell>
@@ -490,10 +632,36 @@ const QMAutomationList: React.FC = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
+                        <Typography variant="body2" noWrap sx={{ maxWidth: 100 }}>
+                          {item.agentCenter || '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
+                          {item.agentUserName || '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
                         <Chip
                           label={getStatusLabel(item.status)}
                           color={getStatusColor(item.status)}
                           size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={item.agentConfirmYN === 'Y' ? '확인됨' : '미확인'}
+                          color={item.agentConfirmYN === 'Y' ? 'success' : 'default'}
+                          size="small"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={item.qaFeedbackYN === 'Y' ? '있음' : '없음'}
+                          color={item.qaFeedbackYN === 'Y' ? 'info' : 'default'}
+                          size="small"
+                          variant="outlined"
                         />
                       </TableCell>
                       <TableCell>
@@ -513,18 +681,7 @@ const QMAutomationList: React.FC = () => {
                           {(() => {
                             const qmTime = Number(item.result?.processingTime ?? item.processingTime ?? 0);
                             const toolTime = Number(item.input?.toolResult?.processingTime ?? 0);
-
-                            let audioTime = 0;
-                            if (item.result?.audioAnalyzeResult?.body) {
-                              try {
-                                const body = JSON.parse(item.result.audioAnalyzeResult.body);
-                                audioTime = Number(body.processingTime ?? 0);
-                              } catch (e) {
-                                // ignore parsing error
-                              }
-                            }
-
-                            const totalTime = qmTime + toolTime + audioTime;
+                            const totalTime = qmTime + toolTime;
                             return totalTime > 0 ? `${totalTime.toFixed(2)}초` : '-';
                           })()}
                         </Typography>

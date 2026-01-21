@@ -47,13 +47,6 @@ export interface AgentInterruption {
   }>;
 }
 
-export interface AudioAnalyzeResult {
-  customer_dissatisfaction?: CustomerDissatisfaction;
-  agent_interruption?: AgentInterruption;
-  summary?: string;
-  body?: string;
-}
-
 export interface QMAutomationResult {
   message: string;
   projectId: string;
@@ -68,7 +61,6 @@ export interface QMAutomationResult {
   outputTokens: number;
   totalTokens: number;
   functionCalls?: FunctionCall[];
-  audioAnalyzeResult?: AudioAnalyzeResult;
   thinkingText?: string;
   errorDetails?: any; // 에러 상세 정보 (Lambda 에러 응답)
   evaluationResult?: EvaluationResult; // QM 평가 상세 결과

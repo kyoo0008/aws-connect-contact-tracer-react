@@ -96,6 +96,90 @@ const theme = createTheme({
         },
       },
     },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          fontWeight: 500,
+          borderRadius: 6,
+        },
+        filled: {
+          backgroundColor: '#F5F5F5',
+          color: '#616161',
+          '&:hover': {
+            backgroundColor: '#EEEEEE',
+          },
+          '&.MuiChip-colorPrimary': {
+            backgroundColor: '#FFF4E5',
+            color: '#663C00',
+            '&:hover': {
+              backgroundColor: '#FFEAD2',
+            },
+          },
+          '&.MuiChip-colorSecondary': {
+            backgroundColor: '#E8EAF6',
+            color: '#1A237E',
+            '&:hover': {
+              backgroundColor: '#D1D9FF',
+            },
+          },
+          '&.MuiChip-colorError': {
+            backgroundColor: '#FFEBEE',
+            color: '#B71C1C',
+            '&:hover': {
+              backgroundColor: '#FFD1D1',
+            },
+          },
+          '&.MuiChip-colorSuccess': {
+            backgroundColor: '#E8F5E9',
+            color: '#1B5E20',
+            '&:hover': {
+              backgroundColor: '#D8ECDA',
+            },
+          },
+          '&.MuiChip-colorInfo': {
+            backgroundColor: '#E3F2FD',
+            color: '#0D47A1',
+            '&:hover': {
+              backgroundColor: '#D1E9FF',
+            },
+          },
+          '&.MuiChip-colorWarning': {
+            backgroundColor: '#FFF3E0',
+            color: '#E65100',
+            '&:hover': {
+              backgroundColor: '#FFE0B2',
+            },
+          },
+        },
+        outlined: {
+          '&.MuiChip-colorPrimary': {
+            borderColor: '#FFB84D',
+            color: '#CC7A00',
+            backgroundColor: 'rgba(255, 184, 77, 0.04)',
+          },
+          '&.MuiChip-colorSuccess': {
+            borderColor: '#81C784',
+            color: '#2E7D32',
+            backgroundColor: 'rgba(129, 199, 132, 0.08)',
+          },
+          '&.MuiChip-colorError': {
+            borderColor: '#E57373',
+            color: '#C62828',
+            backgroundColor: 'rgba(229, 115, 115, 0.08)',
+          },
+          '&.MuiChip-colorInfo': {
+            borderColor: '#64B5F6',
+            color: '#1565C0',
+            backgroundColor: 'rgba(100, 181, 246, 0.08)',
+          },
+          '&.MuiChip-colorWarning': {
+            borderColor: '#FFB74D',
+            color: '#EF6C00',
+            backgroundColor: 'rgba(255, 183, 77, 0.08)',
+          },
+        },
+      },
+    },
   },
 });
 

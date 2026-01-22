@@ -11,6 +11,9 @@ import {
   QMAutomationStatusResponse,
   QMAutomationListItem,
   QMStatus,
+  BulkAgentActionRequest,
+  BulkAgentActionResponse,
+  BulkQAFeedbackRequest,
 } from '@/types/qmAutomation.types';
 import { AWSConfig } from '@/types/contact.types';
 
@@ -459,4 +462,234 @@ export async function pollQMAutomationUntilComplete(
   }
 
   throw new Error('QM Automation polling timeout');
+}
+
+// ============================================
+// QM 평가 상태 변경 API (이의제기, 확인, QA 피드백)
+// ============================================
+
+/**
+ * 평가 카테고리 타입
+ */
+export type EvaluationCategory =
+  | 'accuracy'
+  | 'efficiency'
+  | 'greeting'
+  | 'languageUse'
+  | 'proactivity'
+  | 'speed'
+  | 'voiceProduction'
+  | 'waitManagement';
+
+/**
+ * 상담사 확인 요청
+ */
+export interface AgentConfirmRequest {
+  requestId: string;
+  category: EvaluationCategory;
+  userId: string;
+  userName?: string;
+}
+
+/**
+ * 상담사 이의제기 요청
+ */
+export interface AgentObjectionRequest {
+  requestId: string;
+  category: EvaluationCategory;
+  reason: string;
+  userId: string;
+  userName?: string;
+}
+
+/**
+ * QA 피드백 요청
+ */
+export interface QAFeedbackRequest {
+  requestId: string;
+  category: EvaluationCategory;
+  action: 'accept' | 'reject';
+  reason: string;
+  userId: string;
+  userName?: string;
+}
+
+/**
+ * 상태 변경 응답
+ */
+export interface EvaluationStateUpdateResponse {
+  success: boolean;
+  message: string;
+  updatedState?: {
+    category: EvaluationCategory;
+    currentStatus: string;
+    evaluationStatus: string;
+    qmEvaluationStatus: string;
+    agentConfirmYN: 'Y' | 'N';
+    qaFeedbackYN: 'Y' | 'N';
+  };
+}
+
+/**
+ * 상담사 확인 API
+ * POST /api/agent/v1/qm-automation/confirm
+ */
+export async function submitAgentConfirm(
+  request: AgentConfirmRequest,
+  config: AWSConfig
+): Promise<EvaluationStateUpdateResponse> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation/confirm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-aws-region': config.region,
+      'x-environment': config.environment,
+      ...(config.credentials && {
+        'x-aws-credentials': JSON.stringify(config.credentials),
+      }),
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `확인 처리 실패: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+/**
+ * 상담사 이의제기 API
+ * POST /api/agent/v1/qm-automation/objection
+ */
+export async function submitAgentObjection(
+  request: AgentObjectionRequest,
+  config: AWSConfig
+): Promise<EvaluationStateUpdateResponse> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation/objection`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-aws-region': config.region,
+      'x-environment': config.environment,
+      ...(config.credentials && {
+        'x-aws-credentials': JSON.stringify(config.credentials),
+      }),
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `이의제기 처리 실패: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+/**
+ * QA 피드백 API (이의제기 승인/거절)
+ * POST /api/agent/v1/qm-automation/qa-feedback
+ */
+export async function submitQAFeedback(
+  request: QAFeedbackRequest,
+  config: AWSConfig
+): Promise<EvaluationStateUpdateResponse> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation/qa-feedback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-aws-region': config.region,
+      'x-environment': config.environment,
+      ...(config.credentials && {
+        'x-aws-credentials': JSON.stringify(config.credentials),
+      }),
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `QA 피드백 처리 실패: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+// ============================================
+// 벌크 액션 API
+// ============================================
+
+/**
+ * 벌크 상담사 액션 API (확인/이의제기 일괄 처리)
+ * POST /api/agent/v1/qm-automation/agent-bulk-action
+ */
+export async function submitBulkAgentAction(
+  request: BulkAgentActionRequest,
+  config: AWSConfig
+): Promise<BulkAgentActionResponse> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation/agent-bulk-action`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-aws-region': config.region,
+      'x-environment': config.environment,
+      ...(config.credentials && {
+        'x-aws-credentials': JSON.stringify(config.credentials),
+      }),
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `벌크 처리 실패: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+/**
+ * 벌크 QA 피드백 API (이의제기 승인/거절 일괄 처리)
+ * POST /api/agent/v1/qm-automation/qa-bulk-feedback
+ */
+export async function submitBulkQAFeedback(
+  request: BulkQAFeedbackRequest,
+  config: AWSConfig
+): Promise<BulkAgentActionResponse> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation/qa-bulk-feedback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-aws-region': config.region,
+      'x-environment': config.environment,
+      ...(config.credentials && {
+        'x-aws-credentials': JSON.stringify(config.credentials),
+      }),
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `벌크 QA 피드백 처리 실패: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
 }

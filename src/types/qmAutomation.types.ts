@@ -211,6 +211,7 @@ export interface QMAutomationListResponse {
 // 대항목 상태 타입
 export type EvaluationStatusType =
   | 'GEMINI_EVAL_COMPLETED'        // AI QM 평가 완료
+  | 'AGENT_CONFIRM_COMPLETED'      // 상담원 확인 완료
   | 'AGENT_OBJECTION_REQUESTED'    // 상담원 이의제기 요청됨
   | 'QA_AGENT_OBJECTION_ACCEPTED'  // QA가 상담원 이의제기 수용
   | 'QA_AGENT_OBJECTION_REJECTED'; // QA가 상담원 이의제기 거절
@@ -221,6 +222,8 @@ export interface EvaluationState {
   status: EvaluationStatusType;
   statusReason: string;
   evaluationStatus?: 'PASS' | 'FAIL' | 'N/A'; // 해당 상태에서의 평가 결과
+  updatedAt?: string;  // 상태 변경 시간 (ISO timestamp)
+  updatedBy?: string;  // 상태 변경자 (userName)
 }
 
 // 기본 이벤트 타입 - 다양한 필드를 유연하게 지원
@@ -251,4 +254,71 @@ export interface EvaluationSectionData {
 export interface EvaluationResult {
   details: Record<string, EvaluationSectionData>; // 대항목 > 소항목 + states 동적 구조
   summary: Record<string, string>; // 요약 정보 (점수, 결과 등)
+}
+
+// ============================================
+// 벌크 액션 관련 타입 정의
+// ============================================
+
+/**
+ * 벌크 액션 항목
+ */
+export interface BulkActionItem {
+  category: string;
+  action: 'confirm' | 'object';
+  reason?: string; // 이의제기 시 필수
+}
+
+/**
+ * 벌크 상담사 액션 요청 DTO
+ */
+export interface BulkAgentActionRequest {
+  requestId: string;
+  actions: BulkActionItem[];
+  userId: string;
+  userName?: string;
+}
+
+/**
+ * 벌크 액션 결과 항목
+ */
+export interface BulkActionResultItem {
+  category: string;
+  success: boolean;
+  newStatus?: string;
+  evaluationStatus?: string;
+  error?: string;
+}
+
+/**
+ * 벌크 상담사 액션 응답 DTO
+ */
+export interface BulkAgentActionResponse {
+  requestId: string;
+  totalActions: number;
+  successCount: number;
+  failureCount: number;
+  results: BulkActionResultItem[];
+  qmEvaluationStatus?: string;
+  agentConfirmYN?: 'Y' | 'N';
+  qaFeedbackYN?: 'Y' | 'N';
+}
+
+/**
+ * 벌크 QA 피드백 항목
+ */
+export interface BulkQAFeedbackItem {
+  category: string;
+  action: 'accept' | 'reject';
+  reason: string;
+}
+
+/**
+ * 벌크 QA 피드백 요청 DTO
+ */
+export interface BulkQAFeedbackRequest {
+  requestId: string;
+  actions: BulkQAFeedbackItem[];
+  userId: string;
+  userName?: string;
 }

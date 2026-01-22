@@ -36,7 +36,6 @@ import {
   Warning as WarningIcon,
   Info as InfoIcon,
   Psychology as AIIcon,
-  Headset as AudioIcon,
   Functions as FunctionIcon,
   AccessTime as TimeIcon,
   Token as TokenIcon,
@@ -51,7 +50,22 @@ import {
   getQMAutomationStatus,
   getStatusLabel,
   getStatusColor,
+  submitAgentConfirm,
+  submitAgentObjection,
+  submitQAFeedback,
+  submitBulkAgentAction,
+  submitBulkQAFeedback,
+  EvaluationCategory,
 } from '@/services/qmAutomationService';
+import EvaluationStateModal, {
+  ModalAction,
+  ModalSubmitData,
+} from '@/components/EvaluationStateModal/EvaluationStateModal';
+import BulkEvaluationModal, {
+  BulkModalAction,
+  BulkModalSubmitData,
+  CategoryInfo,
+} from '@/components/EvaluationStateModal/BulkEvaluationModal';
 import {
   QMAutomationStatusResponse,
   FunctionCall,
@@ -206,7 +220,7 @@ const QMAutomationDetail: React.FC = () => {
                 <Tooltip title="상담원 확인 여부">
                   <Chip
                     size="small"
-                    label={`상담원 확인: ${qmDetail.agentConfirmYN === 'Y' ? '완료' : '미완료'}`}
+                    label={`상담원 확인 여부: ${qmDetail.agentConfirmYN}`}
                     variant="outlined"
                     color={qmDetail.agentConfirmYN === 'Y' ? 'success' : 'default'}
                   />
@@ -214,7 +228,7 @@ const QMAutomationDetail: React.FC = () => {
                 <Tooltip title="QA 피드백 여부">
                   <Chip
                     size="small"
-                    label={`QA 피드백: ${qmDetail.qaFeedbackYN === 'Y' ? '완료' : '미완료'}`}
+                    label={`QA 피드백 여부: ${qmDetail.qaFeedbackYN}`}
                     variant="outlined"
                     color={qmDetail.qaFeedbackYN === 'Y' ? 'success' : 'default'}
                   />
@@ -541,7 +555,13 @@ const QMAutomationDetail: React.FC = () => {
               {/* Evaluation Detail Tab */}
               <TabPanel value={tabValue} index={1}>
                 {qmDetail.result?.evaluationResult ? (
-                  <EvaluationDetailView evaluationResult={qmDetail.result.evaluationResult} />
+                  <EvaluationDetailView
+                    evaluationResult={qmDetail.result.evaluationResult}
+                    requestId={requestId}
+                    onStateChange={() => refetch()}
+                    defaultUserId={qmDetail.agentId}
+                    defaultUserName={qmDetail.agentUserName}
+                  />
                 ) : (
                   <Typography color="text.secondary">평가 상세 데이터가 없습니다.</Typography>
                 )}
@@ -758,17 +778,64 @@ const QMAutomationDetail: React.FC = () => {
   );
 };
 
+// DynamoDB 형식 데이터를 JavaScript 객체로 변환하는 유틸리티 함수
+const convertDynamoDBValue = (value: unknown): unknown => {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== 'object') return value;
+
+  const obj = value as Record<string, unknown>;
+
+  // DynamoDB 타입 체크
+  if ('S' in obj && Object.keys(obj).length === 1) {
+    return obj.S; // String
+  }
+  if ('N' in obj && Object.keys(obj).length === 1) {
+    const num = parseFloat(obj.N as string);
+    return isNaN(num) ? obj.N : num; // Number
+  }
+  if ('BOOL' in obj && Object.keys(obj).length === 1) {
+    return obj.BOOL; // Boolean
+  }
+  if ('NULL' in obj && Object.keys(obj).length === 1) {
+    return null; // Null
+  }
+  if ('L' in obj && Object.keys(obj).length === 1) {
+    // List
+    return (obj.L as unknown[]).map(item => convertDynamoDBValue(item));
+  }
+  if ('M' in obj && Object.keys(obj).length === 1) {
+    // Map
+    const map = obj.M as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(map)) {
+      result[key] = convertDynamoDBValue(map[key]);
+    }
+    return result;
+  }
+
+  // 일반 객체 (재귀적으로 처리)
+  if (Array.isArray(value)) {
+    return value.map(item => convertDynamoDBValue(item));
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    result[key] = convertDynamoDBValue(obj[key]);
+  }
+  return result;
+};
+
 // 라벨 매핑 (알려진 키에 대한 한글 라벨, 없으면 키 이름 그대로 표시)
 const LABEL_MAP: Record<string, string> = {
   // 대항목
   greeting: '인사',
-  LanguageUse: '언어 사용',
-  Speed: '속도',
-  VoiceProduction: '음성 표현',
-  Accuracy: '정확성',
-  Efficiency: '효율성',
+  languageUse: '언어 사용',
+  speed: '속도',
+  voiceProduction: '음성 표현',
+  accuracy: '정확성',
+  efficiency: '효율성',
   proactivity: '적극성',
-  WaitManagement: '대기 관리',
+  waitManagement: '대기 관리',
   // 인사 소항목
   opening: '첫인사',
   response: '인사 호응',
@@ -777,7 +844,7 @@ const LABEL_MAP: Record<string, string> = {
   // 언어 사용 소항목
   languageQualityScore: '언어 품질 점수',
   inappropriateVocabulary: '부적절한 어휘',
-  UnpoliteToneManner: '공손하지 않은 표현',
+  unpoliteToneManner: '공손하지 않은 표현',
   badHabits: '습관적 표현',
   // 속도 소항목
   interruptionAnalysis: '끼어들기 분석',
@@ -804,6 +871,7 @@ const LABEL_MAP: Record<string, string> = {
   waitManagementScore: '대기 관리 점수',
   holdTimeManagement: '홀드 시간 관리',
   waitNotification: '대기 안내',
+  holdProcessEvaluation: '대기 처리 평가',
   // 프로세스 준수 세부
   aiccEfficiencyCheck: 'AICC 효율성 체크',
   leadingStandardProcessCheck: '표준 프로세스 준수',
@@ -859,6 +927,14 @@ const getEvaluationStatusConfig = (status: EvaluationStatusType) => {
         label: 'AI 평가 완료',
         color: 'info' as const,
         icon: <AIIcon fontSize="small" />,
+        bgColor: 'info.50',
+        borderColor: 'info.main',
+      };
+    case 'AGENT_CONFIRM_COMPLETED':
+      return {
+        label: '상담원 확인 완료',
+        color: 'info' as const,
+        icon: <InfoIcon fontSize="small" />,
         bgColor: 'info.50',
         borderColor: 'info.main',
       };
@@ -969,7 +1045,7 @@ const StateHistoryView: React.FC<{ states: EvaluationState[] }> = ({ states }) =
                 })}
               </Box>
               <Box sx={{ flex: 1 }}>
-                <Stack direction="row" alignItems="center" spacing={1}>
+                <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
                   <Typography
                     variant="body2"
                     fontWeight={isLatest ? 600 : 400}
@@ -984,9 +1060,24 @@ const StateHistoryView: React.FC<{ states: EvaluationState[] }> = ({ states }) =
                     <Chip size="small" label="현재" variant="outlined" color="primary" sx={{ height: 20, fontSize: '0.7rem' }} />
                   )}
                 </Stack>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                  {state.statusReason}
-                </Typography>
+                {state.statusReason && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                    {state.statusReason}
+                  </Typography>
+                )}
+                {/* updatedAt, updatedBy 표시 */}
+                <Stack direction="row" spacing={1} sx={{ mt: 0.5 }} flexWrap="wrap">
+                  {state.updatedAt && (
+                    <Typography variant="caption" color="text.disabled">
+                      {dayjs(state.updatedAt).format('YYYY-MM-DD HH:mm:ss')}
+                    </Typography>
+                  )}
+                  {state.updatedBy && (
+                    <Typography variant="caption" color="text.disabled">
+                      by {state.updatedBy}
+                    </Typography>
+                  )}
+                </Stack>
               </Box>
             </Box>
           );
@@ -1106,6 +1197,40 @@ const isConcreteExplanationCheck = (value: unknown): value is {
   );
 };
 
+// 대기 처리 평가 (holdProcessEvaluation)
+interface HoldProcessDetail {
+  seq: number;
+  durationSec: number;
+  gapStartTime: string;
+  gapEndTime: string;
+  holdType: string;
+  isPreHoldValid: boolean;
+  isPostHoldValid: boolean;
+  preHoldContent: string;
+  postHoldContent: string;
+}
+
+interface HoldProcessEvaluation {
+  details: HoldProcessDetail[];
+  summary: {
+    finalResult: string;
+    totalHoldsDetected: number;
+    violationLongHold: number;
+    violationShortHold: number;
+  };
+}
+
+const isHoldProcessEvaluation = (value: unknown): value is HoldProcessEvaluation => {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (!('details' in v) || !('summary' in v)) return false;
+  if (!Array.isArray(v.details)) return false;
+  // holdProcessEvaluation 특정 필드 확인 (finalResult, totalHoldsDetected 등)
+  const summary = v.summary as Record<string, unknown> | undefined;
+  if (!summary || typeof summary !== 'object') return false;
+  return 'finalResult' in summary || 'totalHoldsDetected' in summary || 'violationLongHold' in summary;
+};
+
 // 정확성 이슈 (accuracyIssues)
 const isAccuracyIssues = (value: unknown): value is {
   summary: { misinformationConflictCount?: number; arbitraryJudgmentCount?: number };
@@ -1137,6 +1262,15 @@ const EventItemView: React.FC<{ event: EvaluationEvent }> = ({ event }) => {
   const contextContent = event.contentContext ||
     (event as Record<string, unknown>).context;
 
+  // 습관적 표현 관련 필드 (badHabits)
+  const habitType = (event as Record<string, unknown>).habitType as string | undefined;
+  const habitContent = (event as Record<string, unknown>).content as string | undefined;
+  const habitCount = (event as Record<string, unknown>).count as number | undefined;
+
+  // 오류 문장/이유 (languageQualityScore)
+  const errorSentence = (event as Record<string, unknown>).errorSentence as string | undefined;
+  const reason = (event as Record<string, unknown>).reason as string | undefined;
+
   return (
     <ListItem sx={{ px: 0, alignItems: 'flex-start' }}>
       <ListItemIcon sx={{ minWidth: 36, mt: 0.5 }}>
@@ -1152,11 +1286,32 @@ const EventItemView: React.FC<{ event: EvaluationEvent }> = ({ event }) => {
             )}
             {event.type && <Chip size="small" label={event.type} variant="outlined" />}
             {event.category && <Chip size="small" label={event.category} variant="outlined" />}
+            {habitType && <Chip size="small" label={habitType} color="warning" variant="outlined" />}
             {event.judgment && <StatusChip status={event.judgment} />}
+            {habitCount !== undefined && habitCount > 1 && (
+              <Chip size="small" label={`${habitCount}회`} color="error" />
+            )}
           </Stack>
         }
         secondary={
           <>
+            {/* 습관적 표현 (badHabits) */}
+            {habitContent && (
+              <Typography component="span" variant="body2" color="warning.main" sx={{ display: 'block', mb: 0.5, fontWeight: 500 }}>
+                습관적 표현: "{habitContent}"
+              </Typography>
+            )}
+            {/* 오류 문장 (languageQualityScore) */}
+            {errorSentence && (
+              <Typography component="span" variant="body2" color="error.main" sx={{ display: 'block', mb: 0.5 }}>
+                오류: "{errorSentence}"
+              </Typography>
+            )}
+            {reason && (
+              <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                이유: {reason}
+              </Typography>
+            )}
             {detectedContent && (
               <Typography component="span" variant="body2" color="error.main" sx={{ display: 'block', mb: 0.5 }}>
                 감지: "{String(detectedContent)}"
@@ -1216,8 +1371,11 @@ const getLevelColor = (level: string): 'success' | 'warning' | 'error' | 'info' 
 };
 
 // 소항목 렌더링 컴포넌트
-const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKey, value }) => {
+const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKey, value: rawValue }) => {
   const label = getLabel(itemKey);
+
+  // DynamoDB 형식 데이터를 JavaScript 객체로 변환
+  const value = convertDynamoDBValue(rawValue);
 
   // feedbackMessage는 별도 처리
   if (itemKey === 'feedbackMessage' && typeof value === 'string') {
@@ -1474,6 +1632,125 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKe
     );
   }
 
+  // 대기 처리 평가 (holdProcessEvaluation)
+  if (isHoldProcessEvaluation(value)) {
+    const { details, summary } = value;
+    const totalViolations = (summary.violationLongHold || 0) + (summary.violationShortHold || 0);
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2, flexWrap: 'wrap' }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          <StatusChip status={summary.finalResult} />
+          <Chip size="small" label={`총 ${summary.totalHoldsDetected}건 감지`} variant="outlined" />
+          {totalViolations > 0 && (
+            <Chip size="small" label={`위반 ${totalViolations}건`} color="error" />
+          )}
+        </Stack>
+
+        {/* 요약 정보 */}
+        <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: 'background.paper' }}>
+          <Stack direction="row" spacing={3} flexWrap="wrap">
+            <Typography variant="body2">
+              <strong>긴 대기 위반:</strong> {summary.violationLongHold || 0}건
+            </Typography>
+            <Typography variant="body2">
+              <strong>짧은 대기 위반:</strong> {summary.violationShortHold || 0}건
+            </Typography>
+          </Stack>
+        </Paper>
+
+        {/* 상세 내역 */}
+        {details.length > 0 && (
+          <Stack spacing={1.5}>
+            {details.map((detail, idx) => {
+              const hasPreViolation = !detail.isPreHoldValid && detail.preHoldContent !== '없음';
+              const hasPostViolation = !detail.isPostHoldValid;
+              const isLongHold = detail.holdType?.includes('LONG');
+
+              return (
+                <Paper
+                  key={idx}
+                  variant="outlined"
+                  sx={{
+                    p: 1.5,
+                    bgcolor: 'background.paper',
+                    borderColor: (hasPreViolation || hasPostViolation) ? 'warning.main' : 'divider',
+                    borderWidth: (hasPreViolation || hasPostViolation) ? 2 : 1,
+                  }}
+                >
+                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
+                    <Typography variant="body2" fontWeight={600}>
+                      #{detail.seq}
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={`${detail.gapStartTime} ~ ${detail.gapEndTime}`}
+                      variant="outlined"
+                      icon={<TimeIcon />}
+                    />
+                    <Chip
+                      size="small"
+                      label={`${detail.durationSec}초`}
+                      color={isLongHold ? 'error' : 'warning'}
+                    />
+                    <Chip
+                      size="small"
+                      label={detail.holdType}
+                      variant="outlined"
+                      color={isLongHold ? 'error' : 'default'}
+                    />
+                  </Stack>
+
+                  <Grid container spacing={2}>
+                    {/* 대기 전 멘트 */}
+                    <Grid item xs={12} md={6}>
+                      <Box sx={{ p: 1, bgcolor: detail.isPreHoldValid ? 'success.50' : 'warning.50', borderRadius: 1 }}>
+                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
+                          <Typography variant="caption" fontWeight={600}>
+                            대기 전 멘트
+                          </Typography>
+                          {detail.isPreHoldValid ? (
+                            <CheckIcon fontSize="small" color="success" />
+                          ) : (
+                            <WarningIcon fontSize="small" color="warning" />
+                          )}
+                        </Stack>
+                        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                          {detail.preHoldContent || '없음'}
+                        </Typography>
+                      </Box>
+                    </Grid>
+
+                    {/* 대기 후 멘트 */}
+                    <Grid item xs={12} md={6}>
+                      <Box sx={{ p: 1, bgcolor: detail.isPostHoldValid ? 'success.50' : 'warning.50', borderRadius: 1 }}>
+                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
+                          <Typography variant="caption" fontWeight={600}>
+                            대기 후 멘트
+                          </Typography>
+                          {detail.isPostHoldValid ? (
+                            <CheckIcon fontSize="small" color="success" />
+                          ) : (
+                            <WarningIcon fontSize="small" color="warning" />
+                          )}
+                        </Stack>
+                        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                          {detail.postHoldContent || '없음'}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              );
+            })}
+          </Stack>
+        )}
+      </Box>
+    );
+  }
+
   // status + reason 형태의 항목
   if (isStatusItem(value)) {
     const cushionWords = (value as Record<string, unknown>).cushion_words_used as string[] | undefined;
@@ -1633,14 +1910,121 @@ const ScoreChip: React.FC<{ score: string | number; label?: string }> = ({ score
   );
 };
 
+// 종료 상태 Set - 상태 다이어그램 기준
+const TERMINAL_STATUSES = new Set([
+  'AGENT_CONFIRM_COMPLETED',
+  'QA_AGENT_OBJECTION_ACCEPTED',
+  'QA_AGENT_OBJECTION_REJECTED',
+]);
+
 // Evaluation Detail View Component - 동적 렌더링
-const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = ({
+interface EvaluationDetailViewProps {
+  evaluationResult: EvaluationResult;
+  requestId: string;
+  onStateChange: () => void;
+  defaultUserId?: string;
+  defaultUserName?: string;
+}
+
+const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
   evaluationResult,
+  requestId,
+  onStateChange,
+  defaultUserId,
+  defaultUserName,
 }) => {
+  const { config } = useConfig();
   const { details, summary } = evaluationResult;
 
-  // 대항목 키 추출 (details의 키들)
-  const sectionKeys = Object.keys(details);
+  // 단건 모달 상태 관리
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalAction, setModalAction] = useState<ModalAction>('confirm');
+  const [selectedCategory, setSelectedCategory] = useState<EvaluationCategory>('greeting');
+  const [selectedCategoryLabel, setSelectedCategoryLabel] = useState('');
+  const [selectedCurrentStatus, setSelectedCurrentStatus] = useState('');
+  const [selectedEvaluationStatus, setSelectedEvaluationStatus] = useState<string | undefined>();
+
+  // 벌크 모달 상태 관리
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkModalAction, setBulkModalAction] = useState<BulkModalAction>('bulk-confirm');
+
+  // 모달 열기
+  const handleOpenModal = (
+    action: ModalAction,
+    category: EvaluationCategory,
+    categoryLabel: string,
+    currentStatus: string,
+    evaluationStatus?: string
+  ) => {
+    setModalAction(action);
+    setSelectedCategory(category);
+    setSelectedCategoryLabel(categoryLabel);
+    setSelectedCurrentStatus(currentStatus);
+    setSelectedEvaluationStatus(evaluationStatus);
+    setModalOpen(true);
+  };
+
+  // 벌크 모달 열기
+  const handleOpenBulkModal = (action: BulkModalAction) => {
+    setBulkModalAction(action);
+    setBulkModalOpen(true);
+  };
+
+  // 모달 제출 처리
+  const handleModalSubmit = async (data: ModalSubmitData) => {
+    const { action, category, reason, userId, userName } = data;
+
+    if (action === 'confirm') {
+      await submitAgentConfirm(
+        { requestId, category, userId, userName },
+        config
+      );
+    } else if (action === 'objection') {
+      await submitAgentObjection(
+        { requestId, category, reason, userId, userName },
+        config
+      );
+    } else if (action === 'qa-accept') {
+      await submitQAFeedback(
+        { requestId, category, action: 'accept', reason, userId, userName },
+        config
+      );
+    } else if (action === 'qa-reject') {
+      await submitQAFeedback(
+        { requestId, category, action: 'reject', reason, userId, userName },
+        config
+      );
+    }
+
+    // 상태 변경 후 데이터 새로고침
+    onStateChange();
+  };
+
+  // 벌크 모달 제출 처리
+  const handleBulkModalSubmit = async (data: BulkModalSubmitData) => {
+    const { action, actions, userId, userName } = data;
+
+    let response;
+    if (action === 'bulk-confirm' || action === 'bulk-objection') {
+      response = await submitBulkAgentAction(
+        { requestId, actions: actions as any, userId, userName },
+        config
+      );
+    } else {
+      response = await submitBulkQAFeedback(
+        { requestId, actions: actions as any, userId, userName },
+        config
+      );
+    }
+
+    // 상태 변경 후 데이터 새로고침
+    onStateChange();
+
+    return response.results;
+  };
+
+  // 대항목 키 추출 (details의 키들) - 알파벳 순 정렬
+  const sectionKeys = Object.keys(details).sort((a, b) => a.localeCompare(b));
 
   // summary에서 Result/Score 키들 추출하여 대항목별 결과/점수 매핑
   const getSectionResult = (sectionKey: string): string | undefined => {
@@ -1663,6 +2047,51 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
     if (scores.length === 0) return null;
     return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
   }, [sectionKeys, summary]);
+
+  // 벌크 모달용 카테고리 정보 생성
+  const categoryInfoList: CategoryInfo[] = React.useMemo(() => {
+    return sectionKeys.map((key) => {
+      const sectionData = details[key];
+      const states = sectionData.states as EvaluationState[] | undefined;
+      const currentState = states && states.length > 0
+        ? states.reduce((latest, current) => current.seq > latest.seq ? current : latest, states[0])
+        : undefined;
+
+      return {
+        key,
+        label: getLabel(key),
+        currentStatus: currentState?.status || '',
+        evaluationStatus: currentState?.evaluationStatus,
+        states,
+      };
+    });
+  }, [sectionKeys, details]);
+
+  // 벌크 액션 가능 여부 계산
+  const bulkActionAvailability = React.useMemo(() => {
+    let confirmCount = 0;
+    let objectionCount = 0;
+    let qaFeedbackCount = 0;
+
+    categoryInfoList.forEach((cat) => {
+      const currentState = cat.states && cat.states.length > 0
+        ? cat.states.reduce((latest, current) => current.seq > latest.seq ? current : latest, cat.states[0])
+        : undefined;
+
+      if (currentState && !TERMINAL_STATUSES.has(currentState.status)) {
+        if (currentState.status === 'GEMINI_EVAL_COMPLETED') {
+          confirmCount++;
+          if (currentState.evaluationStatus === 'FAIL') {
+            objectionCount++;
+          }
+        } else if (currentState.status === 'AGENT_OBJECTION_REQUESTED') {
+          qaFeedbackCount++;
+        }
+      }
+    });
+
+    return { confirmCount, objectionCount, qaFeedbackCount };
+  }, [categoryInfoList]);
 
   return (
     <Stack spacing={3}>
@@ -1706,6 +2135,70 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
         )}
       </Paper>
 
+      {/* 벌크 액션 버튼 섹션 */}
+      {(bulkActionAvailability.confirmCount > 0 ||
+        bulkActionAvailability.objectionCount > 0 ||
+        bulkActionAvailability.qaFeedbackCount > 0) && (
+          <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
+            <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
+              <Typography variant="subtitle2" fontWeight={600}>
+                일괄 처리:
+              </Typography>
+
+              {bulkActionAvailability.confirmCount > 0 && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="success"
+                  startIcon={<CheckIcon />}
+                  onClick={() => handleOpenBulkModal('bulk-confirm')}
+                >
+                  일괄 확인 ({bulkActionAvailability.confirmCount})
+                </Button>
+              )}
+
+              {bulkActionAvailability.objectionCount > 0 && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                  startIcon={<ObjectionIcon />}
+                  onClick={() => handleOpenBulkModal('bulk-objection')}
+                >
+                  일괄 이의제기 ({bulkActionAvailability.objectionCount})
+                </Button>
+              )}
+
+              {bulkActionAvailability.qaFeedbackCount > 0 && (
+                <>
+                  <Divider orientation="vertical" flexItem />
+                  <Typography variant="body2" color="text.secondary">
+                    QA 피드백:
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="success"
+                    startIcon={<AcceptIcon />}
+                    onClick={() => handleOpenBulkModal('bulk-qa-accept')}
+                  >
+                    일괄 승인 ({bulkActionAvailability.qaFeedbackCount})
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    startIcon={<RejectIcon />}
+                    onClick={() => handleOpenBulkModal('bulk-qa-reject')}
+                  >
+                    일괄 거절 ({bulkActionAvailability.qaFeedbackCount})
+                  </Button>
+                </>
+              )}
+            </Stack>
+          </Paper>
+        )}
+
       {/* 대항목별 섹션 - 동적 렌더링 */}
       {sectionKeys.map((sectionKey) => {
         const sectionData = details[sectionKey];
@@ -1724,12 +2217,19 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
           ? states.reduce((latest, current) => current.seq > latest.seq ? current : latest, states[0])
           : undefined;
 
+        // 상태에 따른 버튼 표시 여부 결정
+        const isTerminalState = currentState && TERMINAL_STATUSES.has(currentState.status);
+        const isGeminiCompleted = currentState?.status === 'GEMINI_EVAL_COMPLETED';
+        const isObjectionRequested = currentState?.status === 'AGENT_OBJECTION_REQUESTED';
+        const isFail = currentState?.evaluationStatus === 'FAIL';
+        const categoryLabel = getLabel(sectionKey);
+
         return (
           <Accordion key={sectionKey} defaultExpanded>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Stack direction="row" alignItems="center" spacing={2} sx={{ flexWrap: 'wrap' }}>
                 <Typography variant="subtitle1" fontWeight={600}>
-                  {getLabel(sectionKey)}
+                  {categoryLabel}
                 </Typography>
                 {sectionResult && <StatusChip status={sectionResult} />}
                 {sectionScore && <ScoreChip score={sectionScore} />}
@@ -1739,6 +2239,121 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
               </Stack>
             </AccordionSummary>
             <AccordionDetails>
+              {/* 액션 버튼 섹션 */}
+              {!isTerminalState && (
+                <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1, border: '1px dashed', borderColor: 'grey.300' }}>
+                  <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
+                    <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
+                      상태 변경:
+                    </Typography>
+
+                    {/* 상담사 확인 버튼 - GEMINI_EVAL_COMPLETED 상태에서만 */}
+                    {isGeminiCompleted && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="success"
+                        startIcon={<CheckIcon />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenModal(
+                            'confirm',
+                            sectionKey as EvaluationCategory,
+                            categoryLabel,
+                            currentState?.status || '',
+                            currentState?.evaluationStatus
+                          );
+                        }}
+                      >
+                        확인
+                      </Button>
+                    )}
+
+                    {/* 상담사 이의제기 버튼 - GEMINI_EVAL_COMPLETED 상태이고 FAIL인 경우만 */}
+                    {isGeminiCompleted && isFail && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        startIcon={<ObjectionIcon />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenModal(
+                            'objection',
+                            sectionKey as EvaluationCategory,
+                            categoryLabel,
+                            currentState?.status || '',
+                            currentState?.evaluationStatus
+                          );
+                        }}
+                      >
+                        이의제기
+                      </Button>
+                    )}
+
+                    {/* QA 피드백 버튼 - AGENT_OBJECTION_REQUESTED 상태에서만 */}
+                    {isObjectionRequested && (
+                      <>
+                        <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+                        <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
+                          QA 피드백:
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="success"
+                          startIcon={<AcceptIcon />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenModal(
+                              'qa-accept',
+                              sectionKey as EvaluationCategory,
+                              categoryLabel,
+                              currentState?.status || '',
+                              currentState?.evaluationStatus
+                            );
+                          }}
+                        >
+                          승인
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          startIcon={<RejectIcon />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenModal(
+                              'qa-reject',
+                              sectionKey as EvaluationCategory,
+                              categoryLabel,
+                              currentState?.status || '',
+                              currentState?.evaluationStatus
+                            );
+                          }}
+                        >
+                          거절
+                        </Button>
+                      </>
+                    )}
+
+                    {/* 종료 상태 안내 */}
+                    {!isGeminiCompleted && !isObjectionRequested && (
+                      <Typography variant="caption" color="text.secondary">
+                        현재 상태에서는 변경할 수 없습니다.
+                      </Typography>
+                    )}
+                  </Stack>
+                </Box>
+              )}
+
+              {/* 종료 상태 안내 */}
+              {isTerminalState && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  이 카테고리는 종료 상태입니다. 더 이상 상태를 변경할 수 없습니다.
+                </Alert>
+              )}
+
               {/* 상태 히스토리 */}
               {states && states.length > 0 && (
                 <StateHistoryView states={states} />
@@ -1762,6 +2377,31 @@ const EvaluationDetailView: React.FC<{ evaluationResult: EvaluationResult }> = (
           </Accordion>
         );
       })}
+
+      {/* 상태 변경 모달 */}
+      <EvaluationStateModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSubmit={handleModalSubmit}
+        action={modalAction}
+        category={selectedCategory}
+        categoryLabel={selectedCategoryLabel}
+        currentStatus={selectedCurrentStatus}
+        evaluationStatus={selectedEvaluationStatus}
+        defaultUserId={defaultUserId}
+        defaultUserName={defaultUserName}
+      />
+
+      {/* 벌크 상태 변경 모달 */}
+      <BulkEvaluationModal
+        open={bulkModalOpen}
+        onClose={() => setBulkModalOpen(false)}
+        onSubmit={handleBulkModalSubmit}
+        action={bulkModalAction}
+        categories={categoryInfoList}
+        defaultUserId={defaultUserId}
+        defaultUserName={defaultUserName}
+      />
     </Stack>
   );
 };

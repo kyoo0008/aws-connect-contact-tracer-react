@@ -893,7 +893,7 @@ app.get('/api/agent/v1/qm-automation/search', async (req, res) => {
     // Construct ALB-like event payload with all query parameters
     const queryStringParameters = {};
     const allowedParams = [
-      'startMonth', 'endMonth', 'agentId', 'agentUserName',
+      'startMonth', 'endMonth', 'agentId', 'agentUserName', 'agentCenter',
       'agentConfirmYN', 'qaFeedbackYN', 'qmEvaluationStatus', 'contactId', 'limit'
     ];
 
@@ -954,6 +954,412 @@ app.get('/api/agent/v1/qm-automation/search', async (req, res) => {
   }
 });
 
+// ========================================
+// QM Evaluation State APIs (이의제기/확인)
+// ========================================
+
+/**
+ * 상담사 확인 (Agent Confirm)
+ * 상태: GEMINI_EVAL_COMPLETED → AGENT_CONFIRM_COMPLETED
+ *
+ * POST /api/agent/v1/qm-automation/confirm
+ * Body: { requestId, category, userId, userName? }
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ */
+app.post('/api/agent/v1/qm-automation/confirm', async (req, res) => {
+  try {
+    const requestBody = req.body;
+    const { requestId, category, userId } = requestBody;
+
+    // 필수 파라미터 검증
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+    if (!category) {
+      return res.status(400).json({ error: 'category is required' });
+    }
+    if (!userId || userId.trim() === '') {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req);
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    const payload = {
+      httpMethod: 'POST',
+      path: '/api/agent/v1/qm-automation/confirm',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(responseData.data || responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Request failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(result.data || result);
+    }
+  } catch (error) {
+    console.error('Error invoking Agent Confirm Lambda:', error);
+    res.status(500).json({ error: 'Failed to confirm evaluation', message: error.message });
+  }
+});
+
+/**
+ * 상담사 이의제기 (Agent Objection)
+ * 상태: GEMINI_EVAL_COMPLETED → AGENT_OBJECTION_REQUESTED (FAIL인 경우만)
+ *
+ * POST /api/agent/v1/qm-automation/objection
+ * Body: { requestId, category, reason, userId, userName? }
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ */
+app.post('/api/agent/v1/qm-automation/objection', async (req, res) => {
+  try {
+    const requestBody = req.body;
+    const { requestId, category, reason, userId } = requestBody;
+
+    // 필수 파라미터 검증
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+    if (!category) {
+      return res.status(400).json({ error: 'category is required' });
+    }
+    if (!reason || reason.trim() === '') {
+      return res.status(400).json({ error: 'reason is required' });
+    }
+    if (!userId || userId.trim() === '') {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req);
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    const payload = {
+      httpMethod: 'POST',
+      path: '/api/agent/v1/qm-automation/objection',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(responseData.data || responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Request failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(result.data || result);
+    }
+  } catch (error) {
+    console.error('Error invoking Agent Objection Lambda:', error);
+    res.status(500).json({ error: 'Failed to submit objection', message: error.message });
+  }
+});
+
+/**
+ * QA 피드백 (이의 승인/거절)
+ * 상태: AGENT_OBJECTION_REQUESTED → QA_AGENT_OBJECTION_ACCEPTED 또는 QA_AGENT_OBJECTION_REJECTED
+ *
+ * POST /api/agent/v1/qm-automation/qa-feedback
+ * Body: { requestId, category, action: 'accept'|'reject', reason, userId, userName? }
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ */
+app.post('/api/agent/v1/qm-automation/qa-feedback', async (req, res) => {
+  try {
+    const requestBody = req.body;
+    const { requestId, category, action, reason, userId } = requestBody;
+
+    // 필수 파라미터 검증
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+    if (!category) {
+      return res.status(400).json({ error: 'category is required' });
+    }
+    if (!action || !['accept', 'reject'].includes(action)) {
+      return res.status(400).json({ error: "action is required and must be 'accept' or 'reject'" });
+    }
+    if (!reason || reason.trim() === '') {
+      return res.status(400).json({ error: 'reason is required' });
+    }
+    if (!userId || userId.trim() === '') {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req);
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    const payload = {
+      httpMethod: 'POST',
+      path: '/api/agent/v1/qm-automation/qa-feedback',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(responseData.data || responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Request failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(result.data || result);
+    }
+  } catch (error) {
+    console.error('Error invoking QA Feedback Lambda:', error);
+    res.status(500).json({ error: 'Failed to submit QA feedback', message: error.message });
+  }
+});
+
+/**
+ * 벌크 상담사 액션 API (확인/이의제기 일괄 처리)
+ * POST /api/agent/v1/qm-automation/bulk-action
+ * Body: { requestId, actions: [{ category, action, reason? }], userId, userName? }
+ */
+app.post('/api/agent/v1/qm-automation/agent-bulk-action', async (req, res) => {
+  try {
+    const { requestId, actions, userId, userName } = req.body;
+
+    if (!requestId || !actions || !Array.isArray(actions) || actions.length === 0 || !userId) {
+      return res.status(400).json({
+        error: 'requestId, actions (array), userId are required'
+      });
+    }
+
+    const credentials = getCredentialsFromRequest(req);
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials
+    });
+
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+    const payload = {
+      httpMethod: 'POST',
+      path: '/api/agent/v1/qm-automation/agent-bulk-action',
+      body: JSON.stringify({ requestId, actions, userId, userName })
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload)
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(new TextDecoder().decode(response.Payload));
+
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Bulk action failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+      res.status(statusCode).json(responseData.data || responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Bulk action failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+      res.status(statusCode).json(result.data || result);
+    }
+  } catch (error) {
+    console.error('Error invoking Bulk Agent Action Lambda:', error);
+    res.status(500).json({ error: 'Failed to process bulk agent action', message: error.message });
+  }
+});
+
+/**
+ * 벌크 QA 피드백 API (이의제기 승인/거절 일괄 처리)
+ * POST /api/agent/v1/qm-automation/qa-bulk-feedback
+ * Body: { requestId, actions: [{ category, action, reason }], userId, userName? }
+ * Lambda expects: { requestId, feedbacks: [{ category, action, reason }], userId, userName? }
+ */
+app.post('/api/agent/v1/qm-automation/qa-bulk-feedback', async (req, res) => {
+  try {
+    const { requestId, actions, userId, userName } = req.body;
+
+    if (!requestId || !actions || !Array.isArray(actions) || actions.length === 0 || !userId) {
+      return res.status(400).json({
+        error: 'requestId, actions (array), userId are required'
+      });
+    }
+
+    const credentials = getCredentialsFromRequest(req);
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials
+    });
+
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+    // Lambda expects 'feedbacks' field instead of 'actions'
+    const payload = {
+      httpMethod: 'POST',
+      path: '/api/agent/v1/qm-automation/qa-bulk-feedback',
+      body: JSON.stringify({ requestId, feedbacks: actions, userId, userName })
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload)
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(new TextDecoder().decode(response.Payload));
+
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Bulk QA feedback failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+      res.status(statusCode).json(responseData.data || responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Bulk QA feedback failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+      res.status(statusCode).json(result.data || result);
+    }
+  } catch (error) {
+    console.error('Error invoking Bulk QA Feedback Lambda:', error);
+    res.status(500).json({ error: 'Failed to process bulk QA feedback', message: error.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
@@ -993,7 +1399,13 @@ app.listen(PORT, () => {
 [QM Automation APIs] (Lambda Invoke)
 - POST /api/agent/v1/qm-automation                              - QM 상담 내용 분석
 - GET  /api/agent/v1/qm-automation/status?requestId=xxx         - QM 상세 조회
-- GET  /api/agent/v1/qm-automation/search                       - QM 검색 (다중 필터) 
+- GET  /api/agent/v1/qm-automation/search                       - QM 검색 (다중 필터)
+
+[QM Evaluation State APIs] (이의제기/확인)
+- POST /api/agent/v1/qm-automation/confirm                      - 상담사 확인 (GEMINI_EVAL_COMPLETED → AGENT_CONFIRM_COMPLETED)
+- POST /api/agent/v1/qm-automation/objection                    - 상담사 이의제기 (GEMINI_EVAL_COMPLETED → AGENT_OBJECTION_REQUESTED)
+- POST /api/agent/v1/qm-automation/qa-feedback                  - QA 피드백 (accept: ACCEPTED, reject: REJECTED)
+- POST /api/agent/v1/qm-automation/bulk-action                  - 벌크 상담사/QA 액션 (확인/이의제기 or 승인/거절 일괄 처리)
 
 [Health]
 - GET  /health                   - Health check

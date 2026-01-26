@@ -104,6 +104,7 @@ export interface QMAutomationRequestBody {
   prompt?: string;
   contactId?: string;
   agentUserName?: string;
+  qaAgentUserId?: string;
   model?: string;
   streaming?: boolean;
   useTools?: boolean;
@@ -168,6 +169,10 @@ export interface QMAutomationStatusResponse {
   agentId?: string;
   agentUserName?: string;
   agentCenter?: string;
+  agentUserFullName?: string;
+  qaAgentUserId?: string;
+  qaAgentUserName?: string;
+  qaAgentUserFullName?: string;
   status: QMStatus;
   createdAt?: string;
   completedAt?: string;
@@ -186,6 +191,7 @@ export interface QMAutomationListItem {
   agentId?: string;
   agentUserName?: string;
   agentCenter?: string;
+  qaAgentUserName?: string;
   status: QMStatus;
   createdAt: string;
   completedAt?: string;

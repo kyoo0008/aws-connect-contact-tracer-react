@@ -124,6 +124,7 @@ const QMAutomationList: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [requestOptions, setRequestOptions] = useState<QMAutomationRequestBody>({
     contactId: '',
+    qaAgentUserId: '',
     model: 'gemini-2.5-flash',
     useDefaultPrompt: true,
     prompt: '',
@@ -150,6 +151,7 @@ const QMAutomationList: React.FC = () => {
     agentConfirmYN: undefined,
     qaFeedbackYN: undefined,
     qmEvaluationStatus: '',
+    qaAgentUserName: '',
   });
   // Applied filters (used in query)
   const [appliedFilters, setAppliedFilters] = useState<QMAutomationSearchFilters>({
@@ -159,6 +161,7 @@ const QMAutomationList: React.FC = () => {
     agentConfirmYN: undefined,
     qaFeedbackYN: undefined,
     qmEvaluationStatus: '',
+    qaAgentUserName: '',
   });
   const [appliedStartDate, setAppliedStartDate] = useState<Dayjs | null>(dayjs().subtract(30, 'day'));
   const [appliedEndDate, setAppliedEndDate] = useState<Dayjs | null>(dayjs());
@@ -219,6 +222,7 @@ const QMAutomationList: React.FC = () => {
       appliedFilters.agentConfirmYN,
       appliedFilters.qaFeedbackYN,
       appliedFilters.qmEvaluationStatus,
+      appliedFilters.qaAgentUserName,
     ],
     queryFn: async () => {
       // Search with filters
@@ -233,6 +237,7 @@ const QMAutomationList: React.FC = () => {
       if (appliedFilters.agentConfirmYN) filters.agentConfirmYN = appliedFilters.agentConfirmYN;
       if (appliedFilters.qaFeedbackYN) filters.qaFeedbackYN = appliedFilters.qaFeedbackYN;
       if (appliedFilters.qmEvaluationStatus) filters.qmEvaluationStatus = appliedFilters.qmEvaluationStatus;
+      if (appliedFilters.qaAgentUserName) filters.qaAgentUserName = appliedFilters.qaAgentUserName;
 
       return getQMAutomationListSearch(config, filters);
     },
@@ -411,11 +416,24 @@ const QMAutomationList: React.FC = () => {
                 <TextField
                   size="small"
                   fullWidth
-                  label="상담사 (Username)"
+                  label="상담사 이메일"
                   placeholder="예: user@example.com"
                   value={searchFilters.agentUserName || ''}
                   onChange={(e) =>
                     setSearchFilters({ ...searchFilters, agentUserName: e.target.value })
+                  }
+                  onKeyDown={handleKeyDown}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={2}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="QA 이메일"
+                  placeholder="예: user@example.com"
+                  value={searchFilters.qaAgentUserName || ''}
+                  onChange={(e) =>
+                    setSearchFilters({ ...searchFilters, qaAgentUserName: e.target.value })
                   }
                   onKeyDown={handleKeyDown}
                 />
@@ -504,6 +522,7 @@ const QMAutomationList: React.FC = () => {
                       agentConfirmYN: undefined,
                       qaFeedbackYN: undefined,
                       qmEvaluationStatus: '',
+                      qaAgentUserName: ''
                     })
                   }
                 >
@@ -560,6 +579,7 @@ const QMAutomationList: React.FC = () => {
                   <TableCell>Contact ID</TableCell>
                   <TableCell>센터</TableCell>
                   <TableCell>상담사</TableCell>
+                  <TableCell>QA</TableCell>
                   <TableCell>상태</TableCell>
                   <TableCell>상담원 확인</TableCell>
                   <TableCell>QA 피드백</TableCell>
@@ -639,6 +659,11 @@ const QMAutomationList: React.FC = () => {
                       <TableCell>
                         <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
                           {item.agentUserName || '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
+                          {item.qaAgentUserName || '-'}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -733,6 +758,16 @@ const QMAutomationList: React.FC = () => {
               onChange={(e) =>
                 setRequestOptions({ ...requestOptions, contactId: e.target.value })
               }
+            />
+
+            <TextField
+              label="QA Agent User ID"
+              fullWidth
+              value={requestOptions.qaAgentUserId}
+              onChange={(e) =>
+                setRequestOptions({ ...requestOptions, qaAgentUserId: e.target.value })
+              }
+              helperText="QA 담당자 사용자 ID (선택사항)"
             />
 
             <FormControl fullWidth>

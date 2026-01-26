@@ -33,6 +33,74 @@ const getApiBaseUrl = (environment: string): string => {
 };
 
 /**
+ * 이메일 형식 검증
+ */
+function isEmailFormat(value: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(value);
+}
+
+/**
+ * UUID v4 형식 검증
+ */
+function isUuidV4(value: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(value);
+}
+
+/**
+ * 백엔드 API를 통해 이메일로 사용자 ID(UUID) 조회
+ * 백엔드에서 AWS Connect SearchUsers API를 호출
+ */
+async function searchUserIdByEmail(
+  email: string,
+  config: AWSConfig
+): Promise<string | null> {
+  try {
+    const apiBaseUrl = getApiBaseUrl(config.environment);
+
+    const response = await fetch(
+      `${apiBaseUrl}/api/agent/v1/connect/search-user?username=${encodeURIComponent(email)}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-aws-region': config.region,
+          'x-environment': config.environment,
+          'x-instance-id': config.instanceId,
+          ...(config.credentials && {
+            'x-aws-credentials': JSON.stringify(config.credentials),
+          }),
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.warn(`User not found for email: ${email}`);
+        return null;
+      }
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+      const errorMessage = errorData.message || errorData.error || `사용자 검색 실패: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+
+    // 백엔드에서 { userId: "uuid-here" } 형태로 반환
+    if (data.userId) {
+      return data.userId;
+    }
+
+    console.warn(`User not found for email: ${email}`);
+    return null;
+  } catch (error) {
+    console.error('Error searching user by email:', error);
+    throw new Error(`사용자 검색 실패: ${(error as Error).message}`);
+  }
+}
+
+/**
  * QM Automation 분석 요청
  */
 export async function requestQMAutomation(
@@ -40,6 +108,31 @@ export async function requestQMAutomation(
   config: AWSConfig
 ): Promise<QMAutomationResponse> {
   const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  // qaAgentUserId가 이메일 형식이면 UUID로 변환
+  let processedRequestBody = { ...requestBody };
+
+  // if (requestBody.qaAgentUserId) {
+  //   const qaAgentUserId = requestBody.qaAgentUserId.trim();
+
+  //   // 이미 UUID v4 형식이면 그대로 사용
+  //   if (isUuidV4(qaAgentUserId)) {
+  //     processedRequestBody.qaAgentUserId = qaAgentUserId;
+  //   }
+  //   // 이메일 형식이면 AWS Connect API로 UUID 조회
+  //   else if (isEmailFormat(qaAgentUserId)) {
+  //     const userId = await searchUserIdByEmail(qaAgentUserId, config);
+  //     if (userId) {
+  //       processedRequestBody.qaAgentUserId = userId;
+  //     } else {
+  //       throw new Error(`QA 담당자를 찾을 수 없습니다: ${qaAgentUserId}`);
+  //     }
+  //   }
+  //   // 그 외의 경우는 에러
+  //   else {
+  //     throw new Error(`유효하지 않은 QA Agent User ID 형식입니다. 이메일 또는 UUID를 입력해주세요: ${qaAgentUserId}`);
+  //   }
+  // }
 
   const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation`, {
     method: 'POST',
@@ -51,7 +144,7 @@ export async function requestQMAutomation(
         'x-aws-credentials': JSON.stringify(config.credentials),
       }),
     },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify(processedRequestBody),
   });
 
   if (!response.ok) {
@@ -205,6 +298,7 @@ export interface QMAutomationSearchFilters {
   qaFeedbackYN?: 'Y' | 'N';
   qmEvaluationStatus?: string;
   contactId?: string;
+  qaAgentUserName?: string,
   limit?: number;
 }
 
@@ -228,6 +322,7 @@ export async function getQMAutomationListSearch(
     if (filters.agentConfirmYN) params.append('agentConfirmYN', filters.agentConfirmYN);
     if (filters.qaFeedbackYN) params.append('qaFeedbackYN', filters.qaFeedbackYN);
     if (filters.qmEvaluationStatus) params.append('qmEvaluationStatus', filters.qmEvaluationStatus);
+    if (filters.qaAgentUserName) params.append('qaAgentUserName', filters.qaAgentUserName);
     if (filters.contactId) params.append('contactId', filters.contactId);
     if (filters.limit) params.append('limit', filters.limit.toString());
 

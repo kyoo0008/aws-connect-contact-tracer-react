@@ -43,6 +43,11 @@ import {
   ThumbUp as AcceptIcon,
   ThumbDown as RejectIcon,
   History as HistoryIcon,
+  Person as PersonIcon,
+  SupervisorAccount as QAIcon,
+  Business as BusinessIcon,
+  Email as EmailIcon,
+  Badge as BadgeIcon,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -173,7 +178,7 @@ const QMAutomationDetail: React.FC = () => {
             <IconButton onClick={() => navigate('/qm-automation')}>
               <BackIcon />
             </IconButton>
-            <Box>
+            <Box sx={{ flex: 1 }}>
               <Typography variant="h5" fontWeight={600}>
                 QM 분석 상세
               </Typography>
@@ -186,8 +191,8 @@ const QMAutomationDetail: React.FC = () => {
                     <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
                       Contact ID: {qmDetail.contactId || '-'}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      센터: {qmDetail.agentCenter || '-'} | 상담사: {qmDetail.agentUserName || '-'} | Agent ID: {qmDetail.agentId || '-'}
+                    <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                      상담원 센터: {qmDetail.agentCenter || '-'}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       상담 연결: {qmDetail.connectedToAgentTimestamp ? dayjs(qmDetail.connectedToAgentTimestamp).format('YYYY-MM-DD HH:mm:ss') : '-'}
@@ -198,51 +203,179 @@ const QMAutomationDetail: React.FC = () => {
                   </>
                 )}
               </Stack>
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                {qmDetail && (
+                  <>
+                    <Chip
+                      label={`Gemini 평가 상태: ${getStatusLabel(qmDetail.status)}`}
+                      color={getStatusColor(qmDetail.status)}
+                    />
+                    {qmDetail.qmEvaluationStatus && (
+                      <Tooltip title="QM 평가 상태">
+                        <Chip
+                          size="small"
+                          label={`QM 평가 상태: ${qmDetail.qmEvaluationStatus}`}
+                          variant="outlined"
+                          color={qmDetail.qmEvaluationStatus === 'COMPLETED' ? 'success' : 'default'}
+                        />
+                      </Tooltip>
+                    )}
+                    <Tooltip title="상담원 확인 여부">
+                      <Chip
+                        size="small"
+                        label={`상담원 확인 여부: ${qmDetail.agentConfirmYN}`}
+                        variant="outlined"
+                        color={qmDetail.agentConfirmYN === 'Y' ? 'success' : 'default'}
+                      />
+                    </Tooltip>
+                    <Tooltip title="QA 피드백 여부">
+                      <Chip
+                        size="small"
+                        label={`QA 피드백 여부: ${qmDetail.qaFeedbackYN}`}
+                        variant="outlined"
+                        color={qmDetail.qaFeedbackYN === 'Y' ? 'success' : 'default'}
+                      />
+                    </Tooltip>
+                  </>
+                )}
+                <Tooltip title="새로고침">
+                  <IconButton onClick={() => refetch()}>
+                    <RefreshIcon />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
             </Box>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-            {qmDetail && (
-              <>
-                <Chip
-                  label={`Gemini 평가 상태: ${getStatusLabel(qmDetail.status)}`}
-                  color={getStatusColor(qmDetail.status)}
-                />
-                {qmDetail.qmEvaluationStatus && (
-                  <Tooltip title="QM 평가 상태">
-                    <Chip
-                      size="small"
-                      label={`QM 평가 상태: ${qmDetail.qmEvaluationStatus}`}
-                      variant="outlined"
-                      color={qmDetail.qmEvaluationStatus === 'COMPLETED' ? 'success' : 'default'}
-                    />
-                  </Tooltip>
-                )}
-                <Tooltip title="상담원 확인 여부">
-                  <Chip
-                    size="small"
-                    label={`상담원 확인 여부: ${qmDetail.agentConfirmYN}`}
-                    variant="outlined"
-                    color={qmDetail.agentConfirmYN === 'Y' ? 'success' : 'default'}
-                  />
-                </Tooltip>
-                <Tooltip title="QA 피드백 여부">
-                  <Chip
-                    size="small"
-                    label={`QA 피드백 여부: ${qmDetail.qaFeedbackYN}`}
-                    variant="outlined"
-                    color={qmDetail.qaFeedbackYN === 'Y' ? 'success' : 'default'}
-                  />
-                </Tooltip>
-              </>
-            )}
-            <Tooltip title="새로고침">
-              <IconButton onClick={() => refetch()}>
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Stack>
+
+
         </Stack>
       </Paper>
+
+      {/* Agent & QA Information Cards */}
+      {qmDetail && (
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          {/* Agent Information Card */}
+          <Grid item xs={12} md={6}>
+            <Card elevation={2}>
+              <CardContent>
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                  <PersonIcon color="primary" />
+                  <Typography variant="h6" fontWeight={600}>
+                    상담사 정보
+                  </Typography>
+                </Stack>
+                <Divider sx={{ mb: 2 }} />
+                <Stack spacing={1.5}>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <BadgeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>
+                      이름
+                    </Typography>
+                    <Typography variant="body2" fontWeight={500}>
+                      {qmDetail.agentUserFullName || '-'}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <EmailIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>
+                      이메일
+                    </Typography>
+                    <Typography variant="body2" fontWeight={500} sx={{ fontFamily: 'monospace' }}>
+                      {qmDetail.agentUserName || '-'}
+                    </Typography>
+                  </Stack>
+                  {/* <Stack direction="row" alignItems="center" spacing={1}>
+                    <BusinessIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>
+                      센터
+                    </Typography>
+                    <Typography variant="body2" fontWeight={500}>
+                      {qmDetail.agentCenter || '-'}
+                    </Typography>
+                  </Stack> */}
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <InfoIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>
+                      Agent ID
+                    </Typography>
+                    <Typography variant="body2" fontWeight={500} sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                      {qmDetail.agentId || '-'}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <CheckIcon fontSize="small" sx={{ color: qmDetail.agentConfirmYN === 'Y' ? 'success.main' : 'text.secondary' }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>
+                      확인 여부
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={qmDetail.agentConfirmYN === 'Y' ? '확인됨' : '미확인'}
+                      color={qmDetail.agentConfirmYN === 'Y' ? 'success' : 'default'}
+                      variant="outlined"
+                    />
+                  </Stack>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* QA Information Card */}
+          <Grid item xs={12} md={6}>
+            <Card elevation={2}>
+              <CardContent>
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                  <QAIcon color="secondary" />
+                  <Typography variant="h6" fontWeight={600}>
+                    QA 담당자 정보
+                  </Typography>
+                </Stack>
+                <Divider sx={{ mb: 2 }} />
+                <Stack spacing={1.5}>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <BadgeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>
+                      이름
+                    </Typography>
+                    <Typography variant="body2" fontWeight={500}>
+                      {qmDetail.qaAgentUserFullName || '-'}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <EmailIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>
+                      이메일
+                    </Typography>
+                    <Typography variant="body2" fontWeight={500} sx={{ fontFamily: 'monospace' }}>
+                      {qmDetail.qaAgentUserName || '-'}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <InfoIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>
+                      QA User ID
+                    </Typography>
+                    <Typography variant="body2" fontWeight={500} sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                      {qmDetail.qaAgentUserId || '-'}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <CheckIcon fontSize="small" sx={{ color: qmDetail.qaFeedbackYN === 'Y' ? 'success.main' : 'text.secondary' }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>
+                      피드백 여부
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={qmDetail.qaFeedbackYN === 'Y' ? '완료' : '미완료'}
+                      color={qmDetail.qaFeedbackYN === 'Y' ? 'success' : 'default'}
+                      variant="outlined"
+                    />
+                  </Stack>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      )}
 
       {/* Loading */}
       {isLoading && (
@@ -1165,13 +1298,14 @@ const isInefficiencyDetection = (value: unknown): value is {
   summary: { repetitionCount?: number; misunderstandingCount?: number };
   details: Array<Record<string, unknown>>;
 } => {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'summary' in value &&
-    'details' in value &&
-    Array.isArray((value as Record<string, unknown>).details)
-  );
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+
+  if (!('summary' in v) || !('details' in v) || !Array.isArray(v.details)) return false;
+
+  // summary 내부의 고유 키 확인
+  const summary = v.summary as Record<string, unknown>;
+  return 'repetitionCount' in summary || 'misunderstandingCount' in summary;
 };
 
 // 프로세스 준수 (processCompliance)
@@ -1236,13 +1370,14 @@ const isAccuracyIssues = (value: unknown): value is {
   summary: { misinformationConflictCount?: number; arbitraryJudgmentCount?: number };
   details: Array<Record<string, unknown>>;
 } => {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'summary' in value &&
-    'details' in value &&
-    Array.isArray((value as Record<string, unknown>).details)
-  );
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+
+  if (!('summary' in v) || !('details' in v) || !Array.isArray(v.details)) return false;
+
+  // summary 내부의 고유 키 확인
+  const summary = v.summary as Record<string, unknown>;
+  return 'misinformationConflictCount' in summary || 'arbitraryJudgmentCount' in summary;
 };
 
 // 이벤트 렌더링 컴포넌트

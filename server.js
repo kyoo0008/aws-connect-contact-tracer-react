@@ -32,12 +32,41 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, x-aws-credentials, x-aws-region, x-environment');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, x-aws-credentials, x-aws-region, x-environment, x-instance-id');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
   next();
 });
+
+// ========================================
+// Helper Functions
+// ========================================
+
+/**
+ * credentials 파싱 및 expiration Date 변환
+ */
+function parseCredentials(credentialsHeader) {
+  if (!credentialsHeader) {
+    return null;
+  }
+
+  const credentials = JSON.parse(credentialsHeader);
+
+  // Handle both lowercase 'expiration' and uppercase 'Expiration'
+  if (credentials.expiration && typeof credentials.expiration === 'string') {
+    credentials.expiration = new Date(credentials.expiration);
+  } else if (credentials.Expiration && typeof credentials.Expiration === 'string') {
+    credentials.expiration = new Date(credentials.Expiration);
+    delete credentials.Expiration; // Remove uppercase version
+  }
+
+  return credentials;
+}
+
+// ========================================
+// API Endpoints
+// ========================================
 
 /**
  * AWS SSO 자격 증명을 가져오는 엔드포인트
@@ -70,7 +99,9 @@ app.post('/api/aws/credentials', async (req, res) => {
       accessKeyId: credentials.accessKeyId,
       secretAccessKey: credentials.secretAccessKey,
       sessionToken: credentials.sessionToken,
-      expiration: credentials.expiration,
+      expiration: credentials.expiration instanceof Date
+        ? credentials.expiration.toISOString()
+        : credentials.expiration,
     });
   } catch (error) {
     console.error('Error fetching credentials:', error);
@@ -126,7 +157,9 @@ app.get('/api/aws/auto-credentials', async (req, res) => {
         accessKeyId: credentials.accessKeyId,
         secretAccessKey: credentials.secretAccessKey,
         sessionToken: credentials.sessionToken,
-        expiration: credentials.expiration,
+        expiration: credentials.expiration instanceof Date
+          ? credentials.expiration.toISOString()
+          : credentials.expiration,
       },
       profile: selectedProfile,
       region: selectedRegion,
@@ -384,6 +417,111 @@ app.post('/api/search/agent', async (req, res) => {
   } catch (error) {
     console.error('Error searching agent:', error);
     res.status(500).json({ error: 'Failed to search agent', message: error.message });
+  }
+});
+
+/**
+ * Connect 사용자 검색 (Username으로 User ID 조회)
+ *
+ * GET /api/agent/v1/connect/search-user?username=xxx
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ *
+ * Response: { userId: "uuid-v4" }
+ */
+app.get('/api/agent/v1/connect/search-user', async (req, res) => {
+  try {
+    const { username } = req.query;
+    const credentials = parseCredentials(req.headers['x-aws-credentials']);
+    const region = req.headers['x-aws-region'];
+    const environment = req.headers['x-environment'];
+    let instanceId = req.headers['x-instance-id'];
+
+    console.log('[search-user] Request info:', {
+      username,
+      region,
+      environment,
+      instanceId,
+      credentialsPresent: !!credentials,
+      credentialsKeys: credentials ? Object.keys(credentials) : [],
+    });
+
+    if (!username) {
+      return res.status(400).json({ error: 'username is required' });
+    }
+
+    if (!credentials) {
+      return res.status(400).json({ error: 'credentials are required' });
+    }
+
+    // instanceId가 헤더에 없으면 AWS 환경 설정에서 가져오기 (fallback)
+    if (!instanceId) {
+      try {
+        const awsConfigPath = path.join(os.homedir(), '.aws', 'config');
+        const configContent = fs.readFileSync(awsConfigPath, 'utf-8');
+        const config = ini.parse(configContent);
+
+        // 프로필에서 instanceId 찾기
+        for (const [key, value] of Object.entries(config)) {
+          if (key.includes(environment) && value.connect_instance_id) {
+            instanceId = value.connect_instance_id;
+            break;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to read AWS config file:', error);
+      }
+    }
+
+    if (!instanceId) {
+      return res.status(400).json({ error: 'instanceId not found. Please provide x-instance-id header or configure it in AWS config file.' });
+    }
+
+    // Debug: Log credentials structure (without sensitive values)
+    console.log('[search-user] Credentials structure:', {
+      hasAccessKeyId: !!credentials.accessKeyId,
+      hasSecretAccessKey: !!credentials.secretAccessKey,
+      hasSessionToken: !!credentials.sessionToken,
+      hasExpiration: !!credentials.expiration,
+      expirationIsDate: credentials.expiration instanceof Date,
+    });
+
+    const connectClient = new ConnectClient({
+      region,
+      credentials,
+    });
+
+    // SearchUsers 명령 실행
+    const command = new SearchUsersCommand({
+      InstanceId: instanceId,
+      SearchFilter: {
+        TagFilter: {
+          OrConditions: [],
+          AndConditions: [],
+          TagCondition: undefined,
+        },
+      },
+      SearchCriteria: {
+        StringCondition: {
+          FieldName: 'Username',
+          Value: username,
+          ComparisonType: 'EXACT',
+        },
+      },
+      MaxResults: 1,
+    });
+
+    const response = await connectClient.send(command);
+
+    // 사용자를 찾았으면 첫 번째 사용자의 ID 반환
+    if (response.Users && response.Users.length > 0 && response.Users[0].Id) {
+      return res.json({ userId: response.Users[0].Id });
+    }
+
+    // 사용자를 찾지 못함
+    return res.status(404).json({ error: 'User not found', username });
+  } catch (error) {
+    console.error('Error searching Connect user:', error);
+    res.status(500).json({ error: 'Failed to search Connect user', message: error.message });
   }
 });
 
@@ -684,17 +822,6 @@ app.post('/api/search/lambda-error', async (req, res) => {
 // ========================================
 
 /**
- * credentials 파싱 및 expiration Date 변환
- */
-function parseCredentials(credentialsHeader) {
-  const credentials = JSON.parse(credentialsHeader);
-  if (credentials.expiration && typeof credentials.expiration === 'string') {
-    credentials.expiration = new Date(credentials.expiration);
-  }
-  return credentials;
-}
-
-/**
  * 요청 헤더에서 credentials 가져오기 또는 기본 provider 사용
  */
 async function getCredentialsFromRequest(req) {
@@ -894,7 +1021,7 @@ app.get('/api/agent/v1/qm-automation/search', async (req, res) => {
     const queryStringParameters = {};
     const allowedParams = [
       'startMonth', 'endMonth', 'agentId', 'agentUserName', 'agentCenter',
-      'agentConfirmYN', 'qaFeedbackYN', 'qmEvaluationStatus', 'contactId', 'limit'
+      'agentConfirmYN', 'qaFeedbackYN', 'qmEvaluationStatus', 'contactId', 'qaAgentUserName'
     ];
 
     for (const param of allowedParams) {
@@ -1390,11 +1517,12 @@ app.listen(PORT, () => {
 - POST /api/aws/region           - 프로필에서 리전 가져오기
 
 [Search APIs]
-- POST /api/search/customer      - Customer 검색 (Phone/ProfileID/Skypass)
-- POST /api/search/agent         - Agent 검색 (UUID/Email/Name)
-- POST /api/search/contact-flow  - Contact Flow 이름으로 검색
-- POST /api/search/dnis          - DNIS로 검색
-- POST /api/search/lambda-error  - Lambda 에러 로그 검색
+- POST /api/search/customer                          - Customer 검색 (Phone/ProfileID/Skypass)
+- POST /api/search/agent                             - Agent 검색 (UUID/Email/Name)
+- GET  /api/agent/v1/connect/search-user             - Connect 사용자 검색 (Username → User ID)
+- POST /api/search/contact-flow                      - Contact Flow 이름으로 검색
+- POST /api/search/dnis                              - DNIS로 검색
+- POST /api/search/lambda-error                      - Lambda 에러 로그 검색
 
 [QM Automation APIs] (Lambda Invoke)
 - POST /api/agent/v1/qm-automation                              - QM 상담 내용 분석

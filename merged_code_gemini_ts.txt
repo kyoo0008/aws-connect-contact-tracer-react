@@ -1,0 +1,5093 @@
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/app.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { logger } from '@/common/packages/logger';
+
+import { routeRequest } from './handler-router';
+
+export const handler = async (event: ALBEvent): Promise<ALBResult> => {
+  const httpMethod = event.httpMethod;
+  const path = event.path;
+  logger.info('[adapter][in][handler] Requested from ALB');
+  logger.info(`[adapter][in][handler] httpMethod: ${httpMethod}, path: ${path}`);
+  logger.info(
+    `[adapter][in][handler] queryParameters: ${JSON.stringify(event.queryStringParameters)} body: ${JSON.stringify(event.body)}`,
+  );
+  return await routeRequest(httpMethod, path, event);
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handler-router.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { HttpError } from '@/common/exception/http-error';
+import { InternalServerError } from '@/common/exception/internal-server-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { getErrorMessage } from '@/common/exception/util';
+import { logger } from '@/common/packages/logger';
+
+import * as handlers from './handlers';
+
+type RouteHandler = (event: ALBEvent) => Promise<ALBResult>;
+
+const routeHandlers: { [method: string]: { [path: string]: RouteHandler } } = {
+  GET: {
+    '/api/agent/v1/qm-automation/status': handlers.getQMAutomationStatus,
+    '/api/agent/v1/qm-automation/search': handlers.getQMAutomationSearch,
+    '/api/agent/v1/qm-automation/search-deprecated': handlers.getQMAutomationSearchDeprecated,
+    '/api/agent/v1/qm-evaluation-form': handlers.getEvaluationForms,
+  },
+  POST: {
+    '/api/agent/v1/qm-automation': handlers.postQMAutomation,
+    '/api/agent/v1/qm-automation/objection': handlers.postAgentObjection,
+    '/api/agent/v1/qm-automation/confirm': handlers.postAgentConfirm,
+    '/api/agent/v1/qm-automation/qa-bulk-feedback': handlers.postQABulkFeedback,
+    '/api/agent/v1/qm-automation/qa-feedback': handlers.postQAFeedback,
+    '/api/agent/v1/qm-automation/agent-bulk-action': handlers.postAgentBulkAction,
+    '/api/agent/v1/qm-evaluation-form': handlers.postEvaluationForm,
+  },
+  PUT: {
+    '/api/agent/v1/qm-evaluation-form': handlers.putEvaluationForm,
+  },
+};
+
+// export async function routeRequest(
+//   httpMethod: string,
+//   path: string,
+//   event: ALBEvent,
+// ): Promise<ALBResult> {
+//   try {
+//     // 정적 라우트 확인
+//     const handler = routeHandlers[httpMethod]?.[path];
+//     if (handler) {
+//       return await handler(event);
+//     }
+
+//     throw new NotFoundError('Not Found: Unknown event type');
+//   } catch (error: unknown) {
+//     if (error instanceof HttpError) {
+//       return error.handleAlb();
+//     } else {
+//       const errorMessage = getErrorMessage(error);
+//       logger.error(
+//         `[adapter][in][routeRequest] Error in ${httpMethod} ${path}, error message ${errorMessage}`,
+//       );
+//       return new InternalServerError(errorMessage).handleAlb();
+//     }
+//   }
+// }
+
+/**
+ * 동적 라우트 패턴 정의
+ * 패턴은 순서대로 매칭되므로, 더 구체적인 패턴을 먼저 배치
+ */
+interface DynamicRoute {
+  pattern: RegExp;
+  handler: RouteHandler;
+}
+
+const dynamicRouteHandlers: { [method: string]: DynamicRoute[] } = {
+  GET: [
+    // GET /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems
+    {
+      pattern: /^\/api\/agent\/v1\/qm-evaluation-form\/[^/]+\/categories\/[^/]+\/subitems$/,
+      handler: handlers.getSubItems,
+    },
+    // GET /api/agent/v1/qm-evaluation-form/{formId}/categories
+    {
+      pattern: /^\/api\/agent\/v1\/qm-evaluation-form\/[^/]+\/categories$/,
+      handler: handlers.getCategories,
+    },
+    // GET /api/agent/v1/qm-evaluation-form/{formId}
+    {
+      pattern: /^\/api\/agent\/v1\/qm-evaluation-form\/[^/]+$/,
+      handler: handlers.getEvaluationForm,
+    },
+  ],
+  POST: [
+    // POST /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems
+    {
+      pattern: /^\/api\/agent\/v1\/qm-evaluation-form\/[^/]+\/categories\/[^/]+\/subitems$/,
+      handler: handlers.postSubItem,
+    },
+    // POST /api/agent/v1/qm-evaluation-form/{formId}/categories
+    {
+      pattern: /^\/api\/agent\/v1\/qm-evaluation-form\/[^/]+\/categories$/,
+      handler: handlers.postCategory,
+    },
+  ],
+  PUT: [
+    // PUT /api/agent/v1/qm-evaluation-form/{formId}
+    {
+      pattern: /^\/api\/agent\/v1\/qm-evaluation-form\/[^/]+$/,
+      handler: handlers.putEvaluationForm,
+    },
+  ],
+  DELETE: [
+    // DELETE /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems/{subItemId}
+    {
+      pattern: /^\/api\/agent\/v1\/qm-evaluation-form\/[^/]+\/categories\/[^/]+\/subitems\/[^/]+$/,
+      handler: handlers.deleteSubItem,
+    },
+    // DELETE /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}
+    {
+      pattern: /^\/api\/agent\/v1\/qm-evaluation-form\/[^/]+\/categories\/[^/]+$/,
+      handler: handlers.deleteCategory,
+    },
+    // DELETE /api/agent/v1/qm-evaluation-form/{formId}
+    {
+      pattern: /^\/api\/agent\/v1\/qm-evaluation-form\/[^/]+$/,
+      handler: handlers.deleteEvaluationForm,
+    },
+  ],
+};
+
+/**
+ * HTTP 요청을 적절한 핸들러로 라우팅
+ */
+export async function routeRequest(
+  httpMethod: string,
+  path: string,
+  event: ALBEvent,
+): Promise<ALBResult> {
+  try {
+    // 1. 정적 라우트 확인
+    const staticHandler = routeHandlers[httpMethod]?.[path];
+    if (staticHandler) {
+      return await staticHandler(event);
+    }
+
+    // 2. 동적 라우트 확인
+    const dynamicRoutes = dynamicRouteHandlers[httpMethod];
+    if (dynamicRoutes) {
+      for (const route of dynamicRoutes) {
+        if (route.pattern.test(path)) {
+          return await route.handler(event);
+        }
+      }
+    }
+
+    // 3. 매칭되는 라우트 없음
+    throw new NotFoundError('Not Found: Unknown endpoint');
+  } catch (error: unknown) {
+    if (error instanceof HttpError) {
+      return error.handleAlb();
+    } else {
+      const errorMessage = getErrorMessage(error);
+      logger.error(
+        `[QmEvaluationForm][routeRequest] Error in ${httpMethod} ${path}, error: ${errorMessage}`,
+      );
+      return new InternalServerError(errorMessage).handleAlb();
+    }
+  }
+}
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/dto/qm-evaluation-form.dto.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import {
+  EvaluationCategory,
+  EvaluationCriterion,
+  EvaluationSubItem,
+  QmEvaluationFormStatus,
+} from '@/domain/models/qm-evaluation-form';
+
+// ========================
+// Form Request DTOs
+// ========================
+
+export interface CreateFormRequestDTO {
+  formName: string;
+  description?: string;
+  status?: QmEvaluationFormStatus;
+}
+
+export interface UpdateFormRequestDTO {
+  formName?: string;
+  description?: string;
+  status?: QmEvaluationFormStatus;
+}
+
+// ========================
+// Category Request DTOs
+// ========================
+
+export interface CreateCategoryRequestDTO {
+  categoryId: string;
+  categoryName: string;
+  displayOrder: number;
+  enabled?: boolean;
+  weight?: number;
+  promptSection?: string;
+  feedbackMessageTemplate?: string;
+}
+
+export interface UpdateCategoryRequestDTO {
+  categoryName?: string;
+  displayOrder?: number;
+  enabled?: boolean;
+  weight?: number;
+  promptSection?: string;
+  feedbackMessageTemplate?: string;
+}
+
+// ========================
+// SubItem Request DTOs
+// ========================
+
+export interface CreateSubItemRequestDTO {
+  subItemId: string;
+  subItemName: string;
+  displayOrder: number;
+  evaluationCriteria: EvaluationCriterion[];
+  outputJsonSchema?: Record<string, unknown>;
+}
+
+export interface UpdateSubItemRequestDTO {
+  subItemName?: string;
+  displayOrder?: number;
+  evaluationCriteria?: EvaluationCriterion[];
+  outputJsonSchema?: Record<string, unknown>;
+}
+
+// ========================
+// Response DTOs
+// ========================
+
+export interface FormListItemDTO {
+  formId: string;
+  formName: string;
+  description?: string;
+  version: string;
+  status: QmEvaluationFormStatus;
+  categoryCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FormListResponseDTO {
+  items: FormListItemDTO[];
+  count: number;
+}
+
+export interface FormDetailResponseDTO {
+  formId: string;
+  formName: string;
+  description?: string;
+  version: string;
+  status: QmEvaluationFormStatus;
+  categories: EvaluationCategory[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface CategoryListResponseDTO {
+  formId: string;
+  categories: EvaluationCategory[];
+  count: number;
+}
+
+export interface SubItemListResponseDTO {
+  formId: string;
+  categoryId: string;
+  subItems: EvaluationSubItem[];
+  count: number;
+}
+
+export interface SuccessMessageDTO {
+  message: string;
+}
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/dto/gemini.dto.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { InvocationType } from '@aws-sdk/client-lambda';
+
+/**
+ * Worker Lambda (gemini-handler/app.py)에 전달할 입력 데이터 인터페이스
+ */
+export interface WorkerLambdaPayload {
+  pk?: string;
+  sk?: string;
+  input: WorkerInput;
+  invocationType?: InvocationType;
+  useTools?: boolean;
+}
+
+/**
+ * Tool 파라미터 스키마 정의
+ */
+export interface ToolParameterSchema {
+  type: string;
+  description: string;
+}
+
+/**
+ * Tool 파라미터 정의
+ */
+export interface ToolParameters {
+  type: string;
+  properties: Record<string, ToolParameterSchema>;
+  required: string[];
+}
+
+/**
+ * Function Declaration 정의
+ */
+export interface FunctionDeclaration {
+  name: string;
+  description: string;
+  parameters: ToolParameters;
+  /** Tool 사용 여부 (기본값: true) */
+  enabled?: boolean;
+}
+
+/**
+ * Tool 정의
+ */
+export interface ToolDefinition {
+  functionDeclarations: FunctionDeclaration[];
+}
+
+/**
+ * Tool 호출 결과 인터페이스
+ */
+export interface ToolProcessingResult {
+  functionCalls?: FunctionCall[];
+  functionCallResults?: FunctionCallResultData[];
+  toolWorkerRequestId?: string;
+  processingTime?: string;
+  tokenUsage?: TokenUsage;
+  geminiModel?: string;
+  toolPrompt?: string;
+  thinkingText?: string;
+}
+
+export interface TokenUsage {
+  inputTokens?: string;
+  outputTokens?: string;
+  totalTokens?: string;
+}
+
+export interface WorkerInput {
+  action: string;
+  prompt: string;
+  model?: string;
+  streaming: boolean;
+  contactId?: string;
+  useTools?: boolean;
+  toolRequestId?: string;
+  useThinking?: boolean;
+  thinkingBudget?: number;
+  maxOutputTokens?: number;
+  temperature?: number;
+  tools?: ToolDefinition[];
+  systemInstruction?: string;
+  cachedContent?: string;
+  cachedContentTtl?: number;
+  useContextCaching?: boolean;
+  useAudioAnalysis?: boolean;
+  audioPresignedUrl?: string;
+  audioOriginalKey?: string;
+  type?: 'QM_Automation' | 'Tool_Retriever';
+  toolResult?: ToolProcessingResult;
+}
+
+export interface RequestBody {
+  prompt?: string;
+  contactId?: string;
+  model?: string;
+  streaming?: boolean;
+  useTools?: boolean;
+  useDefaultPrompt?: boolean;
+  useThinking?: boolean;
+  thinkingBudget?: number;
+  maxOutputTokens?: number;
+  temperature?: number;
+  useContextCaching?: boolean;
+  useAudioAnalysis?: boolean;
+  audioPresignedUrl?: string;
+  audioOriginalKey?: string;
+  /** true: 기본 Tool 정의 사용, false: body.toolDefinitions 사용 (기본값: true) */
+  useDefaultToolDefinitions?: boolean;
+  /** useDefaultToolDefinitions가 false일 때 사용할 Tool 정의 */
+  qaAgentUserName?: string;
+  qaAgentUserId?: string;
+  toolDefinitions?: ToolDefinition[];
+}
+
+/**
+ * Transcript 항목 인터페이스
+ */
+export interface TranscriptItem {
+  BeginOffsetMillis: number;
+  Content: string;
+  EndOffsetMillis: number;
+  Id: string;
+  LoudnessScore?: number[];
+  ParticipantId: string;
+  Sentiment?: string;
+}
+
+/**
+ * Transcript 원본 데이터 인터페이스
+ */
+export interface TranscriptData {
+  Transcript?: TranscriptItem[];
+  [key: string]: unknown;
+}
+
+/**
+ * Transcript 조회 결과 인터페이스
+ */
+export interface TranscriptResult {
+  withMetadata: string;
+  withoutMetadata: string;
+}
+
+/**
+ * Function Call 인터페이스
+ * Gemini에서 반환된 Function Call 정보
+ */
+export interface FunctionCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/**
+ * DOB_Authenticate Function Call의 args 타입
+ */
+export interface DOBAuthenticateArgs {
+  transcriptAuthenticated: boolean;
+  transcriptAgentConfirmation?: string;
+}
+
+/**
+ * PNR_Itinerary_Detected Function Call의 args 타입
+ */
+export interface PNRItineraryDetectedArgs {
+  transcriptFrom: string;
+  transcriptTo: string;
+  transcriptDate: string;
+}
+
+/**
+ * Audio 분석 결과 인터페이스
+ */
+export interface AudioAnalysisResult {
+  presignedUrl: string;
+  originalKey: string;
+  bucketName: string;
+  analysisReason: string;
+  focusAreas?: string[];
+}
+
+/**
+ * Function Call 처리 결과
+ */
+export interface FunctionCallResultData {
+  functionCallId: string;
+  name: string;
+  success: boolean;
+  data?: Record<string, unknown>;
+  error?: string;
+}
+
+/**
+ * Function Call + 처리 결과를 포함한 인터페이스
+ * DynamoDB 저장용
+ */
+export interface FunctionCallWithResult extends FunctionCall {
+  functionCallResult?: FunctionCallResultData;
+}
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/dto/qm-evaluation-state.dto.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+/**
+ * QM 평가 대항목 상태 타입
+ *
+ * 상태 흐름:
+ * 1. GEMINI_EVAL_COMPLETED: AI QM 평가 완료 (초기 상태)
+ * 2. 상담원 액션:
+ *    - AGENT_CONFIRM_COMPLETED: 상담원 확인 완료 (종료)
+ *    - AGENT_OBJECTION_REQUESTED: 상담원 이의제기 요청
+ * 3. QA 액션 (이의제기 후):
+ *    - QA_AGENT_OBJECTION_ACCEPTED: QA가 이의제기 수용 (종료)
+ *    - QA_AGENT_OBJECTION_REJECTED: QA가 이의제기 거절 (종료)
+ */
+export type EvaluationStateStatus =
+  | 'GEMINI_EVAL_COMPLETED'
+  | 'AGENT_CONFIRM_COMPLETED'
+  | 'AGENT_OBJECTION_REQUESTED'
+  | 'QA_AGENT_OBJECTION_ACCEPTED'
+  | 'QA_AGENT_OBJECTION_REJECTED';
+
+/**
+ * QM 평가 상태 이력 항목
+ */
+export interface EvaluationStateItem {
+  /** 순서 (0부터 시작, 상태 변경 시마다 1씩 증가) */
+  seq: number;
+  /** 상태 */
+  status: EvaluationStateStatus;
+  /** 상태 변경 사유 (이의제기 사유, 수용/거절 사유 등) */
+  statusReason: string;
+  /** 평가 결과 (PASS or FAIL) */
+  evaluationStatus: 'PASS' | 'FAIL';
+  /** 상태 변경 시간 */
+  updatedAt?: string;
+  /** 상태 변경자 */
+  updatedBy?: string;
+}
+
+/**
+ * QM 평가 대항목 타입
+ */
+export type EvaluationCategory =
+  | 'accuracy'
+  | 'efficiency'
+  | 'greeting'
+  | 'languageUse'
+  | 'proactivity'
+  | 'speed'
+  | 'voiceProduction'
+  | 'waitManagement';
+
+/**
+ * 상담원 이의제기 요청 DTO
+ */
+export interface AgentObjectionRequestDTO {
+  /** 요청 ID */
+  requestId: string;
+  /** 이의제기할 대항목 */
+  category: EvaluationCategory;
+  /** 이의제기 사유 */
+  reason: string;
+  /** 사용자 ID */
+  userId: string;
+  /** 사용자 이름 (선택) */
+  userName?: string;
+}
+
+/**
+ * 상담원 확인 요청 DTO
+ */
+export interface AgentConfirmRequestDTO {
+  /** 요청 ID */
+  requestId: string;
+  /** 확인할 대항목 */
+  category: EvaluationCategory;
+  /** 사용자 ID */
+  userId: string;
+  /** 사용자 이름 (선택) */
+  userName?: string;
+}
+
+/**
+ * QA 피드백 요청 DTO
+ */
+export interface QAFeedbackRequestDTO {
+  /** 요청 ID */
+  requestId: string;
+  /** 피드백할 대항목 */
+  category: EvaluationCategory;
+  /** 피드백 액션 (수용/거절) */
+  action: 'accept' | 'reject';
+  /** 피드백 사유 */
+  reason: string;
+  /** QA 사용자 ID */
+  userId: string;
+  /** QA 사용자 이름 (선택) */
+  userName?: string;
+}
+
+/**
+ * 상태 업데이트 응답 DTO
+ */
+export interface StateUpdateResponseDTO {
+  /** 요청 ID */
+  requestId: string;
+  /** 업데이트된 대항목 */
+  category: EvaluationCategory;
+  /** 새로운 상태 */
+  newStatus: EvaluationStateStatus;
+  /** 전체 QM 평가 상태 */
+  qmEvaluationStatus: string;
+  /** QA 피드백 여부 */
+  qaFeedbackYN: string;
+  /** 상담원 확인 여부 */
+  agentConfirmYN: string;
+}
+
+/**
+ * 대항목별 상태 요약
+ */
+export interface CategoryStateSummary {
+  category: EvaluationCategory;
+  currentStatus: EvaluationStateStatus;
+  evaluationStatus: 'PASS' | 'FAIL';
+  stateCount: number;
+}
+
+/**
+ * 전체 QM 평가 상태 요약 응답 DTO
+ */
+export interface QMEvaluationStateSummaryDTO {
+  requestId: string;
+  qmEvaluationStatus: string;
+  qaFeedbackYN: string;
+  agentConfirmYN: string;
+  categories: CategoryStateSummary[];
+}
+
+/**
+ * 벌크 작업 액션 타입
+ */
+export interface BulkActionItem {
+  /** 대항목 */
+  category: EvaluationCategory;
+  /** 액션 타입 (확인 또는 이의제기) */
+  action: 'confirm' | 'object';
+  /** 이의제기 사유 (action이 'object'일 때 필수) */
+  reason?: string;
+}
+
+/**
+ * 벌크 작업 요청 DTO
+ */
+export interface BulkAgentActionRequestDTO {
+  /** 요청 ID */
+  requestId: string;
+  /** 벌크 액션 리스트 */
+  actions: BulkActionItem[];
+  /** 사용자 ID */
+  userId: string;
+  /** 사용자 이름 (선택) */
+  userName?: string;
+}
+
+/**
+ * 벌크 작업 결과 항목
+ */
+export interface BulkActionResultItem {
+  /** 대항목 */
+  category: EvaluationCategory;
+  /** 성공 여부 */
+  success: boolean;
+  /** 새로운 상태 (성공 시) */
+  newStatus?: EvaluationStateStatus;
+  /** 에러 메시지 (실패 시) */
+  error?: string;
+}
+
+/**
+ * 벌크 작업 응답 DTO
+ */
+export interface BulkAgentActionResponseDTO {
+  /** 요청 ID */
+  requestId: string;
+  /** 전체 액션 수 */
+  totalActions: number;
+  /** 성공한 액션 수 */
+  successCount: number;
+  /** 실패한 액션 수 */
+  failureCount: number;
+  /** 각 액션별 결과 */
+  results: BulkActionResultItem[];
+  /** 전체 QM 평가 상태 */
+  qmEvaluationStatus: string;
+  /** QA 피드백 여부 */
+  qaFeedbackYN: string;
+  /** 상담원 확인 여부 */
+  agentConfirmYN: string;
+}
+
+/**
+ * QA 벌크 피드백 액션 타입
+ */
+export interface BulkQAFeedbackItem {
+  /** 대항목 */
+  category: EvaluationCategory;
+  /** 피드백 액션 (수용/거절) */
+  action: 'accept' | 'reject';
+  /** 피드백 사유 */
+  reason: string;
+}
+
+/**
+ * QA 벌크 피드백 요청 DTO
+ */
+export interface BulkQAFeedbackRequestDTO {
+  /** 요청 ID */
+  requestId: string;
+  /** 벌크 피드백 리스트 */
+  feedbacks: BulkQAFeedbackItem[];
+  /** QA 사용자 ID */
+  userId: string;
+  /** QA 사용자 이름 (선택) */
+  userName?: string;
+}
+
+/**
+ * QA 벌크 피드백 응답 DTO
+ */
+export interface BulkQAFeedbackResponseDTO {
+  /** 요청 ID */
+  requestId: string;
+  /** 전체 피드백 수 */
+  totalFeedbacks: number;
+  /** 성공한 피드백 수 */
+  successCount: number;
+  /** 실패한 피드백 수 */
+  failureCount: number;
+  /** 각 피드백별 결과 */
+  results: BulkActionResultItem[];
+  /** 전체 QM 평가 상태 */
+  qmEvaluationStatus: string;
+  /** QA 피드백 여부 */
+  qaFeedbackYN: string;
+  /** 상담원 확인 여부 */
+  agentConfirmYN: string;
+}
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/dto/tool-definitions.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ToolDefinition } from './gemini.dto';
+import { EnabledTools } from '../prompts/tool-retriever-prompt';
+
+/**
+ * 사용 가능한 Tool 목록 반환
+ * Gemini Function Calling에 사용되는 Tool들을 정의
+ * To-do : Admin Portal에서 제어 가능한 항목이 있으면 반영할 수 있도록 개선 필요
+ */
+export function getAvailableTools(): ToolDefinition[] {
+  return [
+    {
+      functionDeclarations: [
+        {
+          name: 'DOB_Authenticate',
+          description: `
+            상담사가 고객에게 본인 확인을 요청/질문한 경우 1회 호출합니다.
+            본인 확인 질문/요청 시점에 호출하세요. 확인 완료 여부와 무관합니다.
+            예: "생년월일 확인 부탁드립니다", "본인 확인을 위해 생년월일 말씀해주세요", "고객님 성함과 생년월일 확인 부탁드려요"
+          `.trim(),
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              transcriptAuthenticated: {
+                type: 'BOOLEAN',
+                description: '본인 확인 요청 여부 (true: 요청함, false: 요청하지 않음)',
+              },
+              transcriptAgentConfirmation: {
+                type: 'STRING',
+                description: '상담사가 본인 확인을 요청한 발화 내용',
+              },
+            },
+            required: ['transcriptAuthenticated'],
+          },
+          enabled: true,
+        },
+        {
+          name: 'PNR_Itinerary_Detected',
+          description: `
+            상담 전체를 분석하여 최종 확정된 여정만 호출합니다. 중복 호출 금지.
+            - 왕복: 가는 편 1회 + 오는 편 1회 = 최대 2회
+            - 편도: 1회만 호출
+            - 출발지(from), 도착지(to), 날짜(date)가 모두 명확한 경우에만 호출
+            - 대화 중 언급된 모든 날짜/장소가 아닌, 최종 확정된 여정만 호출
+
+            **중요: 파라미터는 반드시 아래 형식으로 추출**
+            - transcriptFrom, transcriptTo: IATA 3-letter 공항코드 (예: ICN, LAX, NRT)
+            - transcriptDate: DDMMYY 형식 (예: 301225)
+            - 대화에서 년도가 언급되지 않은 경우 현재 년도(${new Date().getFullYear()})를 기준으로 합니다
+          `.trim(),
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              transcriptFrom: {
+                type: 'STRING',
+                description:
+                  'IATA 3-letter 공항코드 (예: ICN, GMP, LAX, JFK). 도시명이 언급된 경우 해당 주요 공항코드로 변환',
+              },
+              transcriptTo: {
+                type: 'STRING',
+                description:
+                  'IATA 3-letter 공항코드 (예: ICN, GMP, LAX, JFK). 도시명이 언급된 경우 해당 주요 공항코드로 변환',
+              },
+              transcriptDate: {
+                type: 'STRING',
+                description: `출발 날짜를 DDMMYY 형식으로 (예: 301225). 상대적 표현(내일, 다음주)은 절대 날짜로 변환 필요. 년도가 언급되지 않은 경우 현재 년도(${new Date().getFullYear()})를 기준으로 합니다`,
+              },
+            },
+            required: ['transcriptFrom', 'transcriptTo', 'transcriptDate'],
+          },
+          enabled: false,
+        },
+      ],
+    },
+  ];
+}
+
+/**
+ * enabled가 true인 Tool만 필터링하여 반환
+ * enabled가 undefined인 경우 기본값 true로 처리
+ */
+export function filterEnabledTools(tools: ToolDefinition[]): ToolDefinition[] {
+  return tools
+    .map((tool) => ({
+      ...tool,
+      functionDeclarations: tool.functionDeclarations.filter(
+        (declaration) => declaration.enabled !== false,
+      ),
+    }))
+    .filter((tool) => tool.functionDeclarations.length > 0);
+}
+
+/**
+ * Tool 정의에서 EnabledTools 객체 추출
+ */
+export function getEnabledToolsFromDefinitions(tools: ToolDefinition[]): EnabledTools {
+  const enabledTools: EnabledTools = {};
+
+  for (const tool of tools) {
+    for (const declaration of tool.functionDeclarations) {
+      const enabled = declaration.enabled !== false;
+      if (declaration.name === 'DOB_Authenticate') {
+        enabledTools.DOB_Authenticate = enabled;
+      } else if (declaration.name === 'PNR_Itinerary_Detected') {
+        enabledTools.PNR_Itinerary_Detected = enabled;
+      }
+    }
+  }
+
+  return enabledTools;
+}
+
+/**
+ * ToolDefinition 유효성 검사 결과
+ */
+export interface ToolDefinitionValidationResult {
+  isValid: boolean;
+  errors: string[];
+}
+
+/**
+ * ToolDefinition 배열의 유효성을 검사
+ * @param tools - 검사할 ToolDefinition 배열
+ * @returns 유효성 검사 결과
+ */
+export function validateToolDefinitions(tools: unknown): ToolDefinitionValidationResult {
+  const errors: string[] = [];
+
+  // 배열 여부 확인
+  if (!Array.isArray(tools)) {
+    return { isValid: false, errors: ['toolDefinitions must be an array'] };
+  }
+
+  // 빈 배열 확인
+  if (tools.length === 0) {
+    return { isValid: false, errors: ['toolDefinitions must not be empty'] };
+  }
+
+  tools.forEach((tool, toolIndex) => {
+    // ToolDefinition 구조 확인
+    if (!tool || typeof tool !== 'object') {
+      errors.push(`toolDefinitions[${toolIndex}]: must be an object`);
+      return;
+    }
+
+    // functionDeclarations 필드 확인
+    if (!('functionDeclarations' in tool)) {
+      errors.push(`toolDefinitions[${toolIndex}]: missing functionDeclarations`);
+      return;
+    }
+
+    if (!Array.isArray(tool.functionDeclarations)) {
+      errors.push(`toolDefinitions[${toolIndex}].functionDeclarations: must be an array`);
+      return;
+    }
+
+    if (tool.functionDeclarations.length === 0) {
+      errors.push(`toolDefinitions[${toolIndex}].functionDeclarations: must not be empty`);
+      return;
+    }
+
+    // 각 FunctionDeclaration 검사
+    tool.functionDeclarations.forEach((declaration: unknown, declIndex: number) => {
+      const prefix = `toolDefinitions[${toolIndex}].functionDeclarations[${declIndex}]`;
+
+      if (!declaration || typeof declaration !== 'object') {
+        errors.push(`${prefix}: must be an object`);
+        return;
+      }
+
+      const decl = declaration as Record<string, unknown>;
+
+      // name 필드 검사
+      if (!decl.name || typeof decl.name !== 'string') {
+        errors.push(`${prefix}.name: must be a non-empty string`);
+      }
+
+      // description 필드 검사
+      if (!decl.description || typeof decl.description !== 'string') {
+        errors.push(`${prefix}.description: must be a non-empty string`);
+      }
+
+      // parameters 필드 검사
+      if (!decl.parameters || typeof decl.parameters !== 'object') {
+        errors.push(`${prefix}.parameters: must be an object`);
+      } else {
+        const params = decl.parameters as Record<string, unknown>;
+
+        // parameters.type 검사
+        if (!params.type || typeof params.type !== 'string') {
+          errors.push(`${prefix}.parameters.type: must be a string`);
+        }
+
+        // parameters.properties 검사
+        if (!params.properties || typeof params.properties !== 'object') {
+          errors.push(`${prefix}.parameters.properties: must be an object`);
+        }
+
+        // parameters.required 검사
+        if (!Array.isArray(params.required)) {
+          errors.push(`${prefix}.parameters.required: must be an array`);
+        }
+      }
+    });
+  });
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+}
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/dto/index.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+export * from './gemini.dto';
+export * from './tool-definitions';
+export * from './qm-evaluation-state.dto';
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/prompts/tool-retriever-prompt.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ToolDefinition } from '../dto/gemini.dto';
+
+/**
+ * 동적 파라미터 맵 - 템플릿 변수와 값을 매핑
+ */
+interface DynamicParameters {
+  [key: string]: string | number;
+}
+
+/**
+ * 현재 시점의 동적 파라미터 값을 생성
+ * @returns 동적 파라미터 맵
+ */
+function getDynamicParameters(): DynamicParameters {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+
+  return {
+    currentYear: year,
+    currentMonth: month,
+    currentDay: day,
+    currentDate: `${year}-${month}-${day}`,
+    currentTime: `${hours}:${minutes}:${seconds}`,
+    currentTimestamp: `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`,
+    currentDateKorean: `${year}년 ${Number.parseInt(month)}월 ${Number.parseInt(day)}일`,
+  };
+}
+
+/**
+ * 문자열 내의 동적 파라미터를 실제 값으로 치환
+ * 지원하는 템플릿 변수:
+ * - #{currentYear}: 현재 년도 (예: 2026)
+ * - #{currentMonth}: 현재 월 (예: 01)
+ * - #{currentDay}: 현재 일 (예: 09)
+ * - #{currentDate}: 현재 날짜 (예: 2026-01-09)
+ * - #{currentTime}: 현재 시간 (예: 14:30:00)
+ * - #{currentTimestamp}: 현재 타임스탬프 (예: 2026-01-09 14:30:00)
+ * - #{currentDateKorean}: 현재 날짜 한국어 (예: 2026년 1월 9일)
+ *
+ * @param text - 템플릿 변수가 포함된 문자열
+ * @returns 동적 파라미터가 치환된 문자열
+ */
+export function replaceDynamicParameters(text: string): string {
+  const params = getDynamicParameters();
+  let result = text;
+
+  for (const [key, value] of Object.entries(params)) {
+    const pattern = new RegExp(String.raw`\#\{${key}\}`, 'g');
+    result = result.replace(pattern, String(value));
+  }
+
+  return result;
+}
+
+/**
+ * 활성화된 Tool 이름 목록
+ */
+export interface EnabledTools {
+  DOB_Authenticate?: boolean;
+  PNR_Itinerary_Detected?: boolean;
+}
+
+/**
+ * 각 Tool에 대한 프롬프트 섹션 생성
+ */
+function getDOBAuthenticatePrompt(): string {
+  return `
+### 본인 인증 확인 (DOB_Authenticate)
+- 상담사가 고객에게 본인 확인을 **요청/질문**한 경우 1회 호출
+- 예: "생년월일 확인 부탁드립니다", "본인 확인을 위해 생년월일 말씀해주세요", "고객님 성함과 생년월일 확인 부탁드려요"
+- **주의**: 본인 확인 질문/요청 시점에 호출. 확인 완료 여부와 무관`;
+}
+
+function getPNRItineraryDetectedPrompt(): string {
+  return `
+### 여정 정보 (PNR_Itinerary_Detected)
+- 상담 전체를 분석하여 **최종 확정된 여정**만 호출 (중복 호출 금지)
+- 출발지(from), 도착지(to), 날짜(date)가 모두 확인된 완전한 여정만 대상
+- **왕복 여정인 경우**: 가는 편 1회, 오는 편 1회 = 최대 2회만 호출
+- **편도 여정인 경우**: 1회만 호출
+- **주의사항**:
+  - 대화 중 언급된 모든 날짜/장소를 호출하지 말 것
+  - 변경 전 여정이 아닌, 최종 확정된 여정만 호출
+  - 출발지, 도착지, 날짜 중 하나라도 불명확하면 호출하지 말 것
+  - 공항/도시명 → IATA 3-letter 코드로 변환
+    - 서울/인천 → ICN
+    - 김포 → GMP
+    - 로스앤젤레스/LA → LAX
+    - 도쿄 → NRT 또는 HND
+  - 날짜 → DDMMYY 형식으로 변환
+    - "12월 25일" → 251225
+    - "내일" → (오늘 기준 +1일 계산)
+    - "다음주 월요일" → (해당 날짜 계산)
+    - **년도가 언급되지 않은 경우 현재 년도(${new Date().getFullYear()})를 기준으로 합니다**`;
+}
+
+/**
+ * Tool Retriever Prompt Template
+ *
+ * This prompt guides the Gemini AI model to analyze customer service transcripts
+ * and trigger appropriate function calls based on the conversation content.
+ *
+ * @param transcript - 상담 스크립트
+ * @param enabledTools - 활성화된 Tool 목록 (기본값: 모든 Tool 활성화)
+ */
+export function getToolRetrieverPrompt(
+  transcript: string,
+  enabledTools: EnabledTools = {},
+): string {
+  // 기본값: 모든 Tool 활성화
+  const tools = {
+    DOB_Authenticate: enabledTools.DOB_Authenticate !== false,
+    PNR_Itinerary_Detected: enabledTools.PNR_Itinerary_Detected !== false,
+  };
+
+  // 활성화된 Tool에 대한 프롬프트 섹션 생성
+  const toolSections: string[] = [];
+  let sectionNumber = 1;
+
+  if (tools.DOB_Authenticate) {
+    toolSections.push(getDOBAuthenticatePrompt().replace('###', `### ${sectionNumber++}.`));
+  }
+  if (tools.PNR_Itinerary_Detected) {
+    toolSections.push(getPNRItineraryDetectedPrompt().replace('###', `### ${sectionNumber++}.`));
+  }
+
+  // 활성화된 Tool이 없는 경우
+  if (toolSections.length === 0) {
+    return '';
+  }
+
+  const TOOL_RETRIEVER_PROMPT = `
+당신은 항공사 콜센터 상담 분석 시스템입니다.
+
+<task>
+아래 상담 스크립트를 **전체적으로 분석**하여, 최종 결과만 함수로 호출하세요.
+텍스트로 응답하지 말고, 함수 호출(Function Calling)을 통해 결과를 반환하세요.
+
+## 감지해야 할 상황
+${toolSections.join('\n')}
+
+## 중요 규칙
+- 각 함수는 **최소한으로** 호출하세요
+- 동일한 여정을 중복 호출하지 마세요
+- 불완전한 정보(출발지/도착지/날짜 누락)는 호출하지 마세요
+</task>
+
+<transcript>
+${transcript}
+</transcript>
+`;
+  return TOOL_RETRIEVER_PROMPT;
+}
+
+/**
+ * 커스텀 ToolDefinition 배열에서 동적으로 프롬프트를 생성
+ *
+ * @param transcript - 상담 스크립트
+ * @param toolDefinitions - 커스텀 Tool 정의 배열
+ * @returns 동적으로 생성된 프롬프트
+ */
+export function getCustomToolRetrieverPrompt(
+  transcript: string,
+  toolDefinitions: ToolDefinition[],
+): string {
+  // Tool 정의에서 활성화된 함수들의 설명을 추출하여 프롬프트 섹션 생성
+  const toolSections: string[] = [];
+  let sectionNumber = 1;
+
+  for (const tool of toolDefinitions) {
+    for (const declaration of tool.functionDeclarations) {
+      // enabled가 false가 아닌 경우만 포함 (기본값: true)
+      if (declaration.enabled !== false) {
+        // description에 동적 파라미터 치환 적용
+        const processedDescription = replaceDynamicParameters(declaration.description);
+
+        const paramDescriptions = Object.entries(declaration.parameters.properties || {})
+          .map(([key, value]) => {
+            const desc = (value as { description?: string }).description || '';
+            // 파라미터 description에도 동적 파라미터 치환 적용
+            return `  - ${key}: ${replaceDynamicParameters(desc)}`;
+          })
+          .join('\n');
+
+        toolSections.push(`
+### ${sectionNumber++}. ${declaration.name}
+${processedDescription}
+${paramDescriptions ? `\n**파라미터:**\n${paramDescriptions}` : ''}`);
+      }
+    }
+  }
+
+  // 활성화된 Tool이 없는 경우
+  if (toolSections.length === 0) {
+    return '';
+  }
+
+  return `
+당신은 항공사 콜센터 상담 분석 시스템입니다.
+
+<task>
+아래 상담 스크립트를 **전체적으로 분석**하여, 적절한 함수를 호출하세요.
+텍스트로 응답하지 말고, 함수 호출(Function Calling)을 통해 결과를 반환하세요.
+
+## 사용 가능한 함수
+${toolSections.join('\n')}
+
+## 중요 규칙
+- 각 함수는 **필요한 경우에만** 호출하세요
+- 스크립트에서 관련 정보를 찾을 수 없으면 함수를 호출하지 마세요
+</task>
+
+<transcript>
+${transcript}
+</transcript>
+`;
+}
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/prompts/qm-automation-prompt.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { GeminiConnectAdapter } from '@/adapters/out/gemini/connect';
+
+/**
+ * QM Automation Dynamic Prompt
+ *
+ * System Instruction + Context Caching 구조에서 동적으로 변하는 부분만 담당합니다.
+ * - 조건부 추가 프롬프트 (dobAuthPrompt, flightAvailabilityPrompt)
+ * - 실제 상담 데이터 (transcript)
+ *
+ * 고정 컨텐츠는 다음 파일에서 관리:
+ * - system-instruction.ts: 페르소나/역할 정의
+ * - cached-content.ts: 평가 기준, 출력 형식
+ */
+
+const connectAdapter = new GeminiConnectAdapter();
+
+export interface FlightAvailability {
+  airlineCode: string;
+  flightNumber: string;
+  remainingSeats: Array<{ class: string; count: string }>;
+  notice: string;
+}
+
+export interface QmPromptParams {
+  dobAuthenticated?: boolean;
+  checkFlightAvailability?: FlightAvailability[];
+  transcript?: string;
+  userAuthPrompt?: string;
+  contactId?: string;
+  useDefaultPrompt?: boolean;
+  customPrompt?: string;
+}
+
+export interface QmPrompts {
+  // 아래 필드는 extractQmParams에서 자동 생성됨
+  dobAuthPrompt?: string;
+  flightAvailabilityPrompt?: string;
+  transcript?: string;
+  userAuthPrompt?: string;
+}
+
+function getDefaultTemplate(): string {
+  return `# 역할 (Role)
+당신은 '글로벌서비스센터'의 수석 QA(Quality Assurance) 전문가입니다.
+
+# 목표 (Goal)
+고객 서비스 품질 향상을 위해 통화 녹취와 JSON 형식의 스크립트 데이터를 정밀 분석하여 담사의 서비스 품질을 평가하십시오.
+단순한 내용 요약이 아닌, 아래 정의된 **[평가 기준]**에 따라 체계적이고 객관적으로 분석하고, 상담사의 강점과 개선점을 명확히 파악하여 서비스 품질 향상에 기여하는 종합 평가 보고서를 작성하는 것입니다.따라 체계적이고 객관적으로 분석하고, 상담사의 강점과 개선점을 명확히 파악하여 서비스 품질 향상에 기여하는 종합 평가 보고서를 작성하는 것입니다. 모든 평가는 JSON 데이터 내의 구체적인 \`Content\`(발화)와 타임스탬프를 증거로 제시해야 합니다.
+
+# 입력 데이터 (Input Data)
+채널 구분: 왼쪽(Left) - 고객(불만/감정/이해 분석), 오른쪽(Right) - 상담원(끼어들기/속도/대응 분석).
+
+시간 기준: 모든 시간 정보는 스크립트 JSON의 BeginOffsetMillis를 최우선 절대적 기준으로 삼습니다.
+
+* 시간 변환 공식: * 초 단위 계산: BeginOffsetMillis / 1000 (예: 205,177ms / 1000 = 205.177초)
+
+* 타임스탬프 변환: 초 단위를 분:초(mm:ss) 형식으로 변환합니다. (예: 205,177ms = 205,177/60 =  03:25s )
+
+* 임의 보정 금지: 음성 파일의 흐름이나 대화 맥락에 의존하여 시간을 추측하지 마십시오. 오직 수치적 계산 결과만을 기재하십시오.
+
+# 예시
+<example>
+AGENT : 안녕하십니까? 김다미입니다.(BeginOffsetMillis: 12, EndOffsetMillis: 2152, id: cd782b03-1020-4563-a4f2-40b522264729)
+CUSTOMER : 아 네, 안녕하세요. 저희 항공권 가족들 거를 마일리지로 예약을 했는데요.(BeginOffsetMillis: 2777, EndOffsetMillis: 8837, Id: 3ba6ad1f-ee3d-4b10-b6ea-c6a4788b514b)
+</example>
+
+
+# 상담 스크립트
+<transcript>
+#{transcript}
+</transcript>
+
+**[AICC 인증 정보 (Dynamic Context)]**
+"""
+#{userAuthPrompt}
+"""
+
+# Evaluation Criteria (평가 기준)
+
+## 1. 인사 (Greeting)
+
+## 1.1. 첫인사 평가 (Opening)
+1.1.1. 표준 인사말 준수 여부:
+   - 기본: "안녕하십니까? [상담원 이름]입니다." 형식을 갖추었는가?
+   - 예외: "기다려주셔서 감사합니다. [상담원 이름]입니다."도 정답으로 인정.
+   - 필수 요소: '인사말(안녕하십니까/감사합니다)'과 '이름'이 모두 포함되어야 함.
+1.1.2. 신속성 및 준비 상태:
+   - 고객이 먼저 "여보세요"라고 말하게 하지 않았는가?
+   - 통화 연결 후 즉시 응대했는가? (스크립트 상 고객 발화가 먼저 시작되면 감점)
+
+## 1.2. 인사말 호응 평가 (Response)
+1.2.1. 고객 인사에 대한 호응:
+   - 고객이 "수고하십니다" 발언 시 -> "감사합니다"로 응대했는가?
+   - 고객이 "통화하기 힘드네요" 발언 시 -> "기다려 주셔서 감사합니다"로 응대했는가?
+   - 예외: 고객이 인사 없이 바로 용건을 말한 경우, 호응어가 없어도 감점하지 않음.
+   - 감점 요인: 고객의 인사에 "네"라고만 답하거나 무시한 경우.
+   - 대기 불만 제기 시: "기다리시게 해서 죄송합니다. 신속하게 도와드리겠습니다."
+
+## 1.3. 끝인사 평가 (Closing)
+1.3.1. 추가 문의 확인 (필수):
+   - 상담 종료 전 "추가 문의사항 있습니까?" 또는 "다른 요청사항이 있습니까?" 등을 질문했는가?
+1.3.2. 표준 끝인사 준수 여부:
+   - 기본: "감사합니다. [상담원 이름]입니다(였습니다)."
+   - 상황별 변형:
+     - 불만/미해결 종료 시: "죄송합니다. [상담원 이름]입니다."
+     - 상담 중 이름을 이미 밝힌 경우: "감사합니다" (이름 생략 가능)
+     - 고객이 끊지 않을 경우: "문의 사항 없으시면 먼저 종료하겠습니다."
+     - 대기 불만 제기 시: "기다리시게 해서 죄송합니다. 신속하게 도와드리겠습니다."
+1.3.3. 이름 명확성:
+   - 끝인사 시 이름을 포함했는가? (위 예외 상황 제외)
+
+## 2. 음성연출 (VoiceProduction)
+
+## 2.1. 정중함과 친밀감의 조화 (ToneManner)
+**[분석 로직]**
+2.1.1. 종결 어미 혼합 사용:
+   - 일반 안내 시: '요/조체(친밀감, ~해요)'와 '다/까체(정중함, ~입니다)'가 적절히(약 5:5) 섞여 있는지 확인하십시오.
+   - 예외: 상담 전체가 지나치게 딱딱하거나(군대식 말투), 반대로 지나치게 가벼운지(친구 대화) 확인하십시오.
+2.1.2. 거절/부정 안내 시 태도 변화:
+   - 고객에게 불리한 정보(결항, 불가, 만석 등)를 전달하는 순간을 찾으십시오.
+   - 이때는 '다/까체(~입니다/죄송합니다)'를 사용하여 정중하고 침착한 태도로 전환했는지 확인하십시오.
+2.1.3. 고압적/부정적 표현 감점:
+   - "안 되거든요", "규정이라서요"와 같이 단정적이고 차가운 종결 어미가 사용되었는지 확인하십시오.
+   - 한숨 소리(STT에 (한숨) 등이 기록된 경우)나 직원의 짜증 섞인 반응이 텍스트에 드러나는지 확인하십시오.
+
+## 2.2. 부정적 상황 핸들링 (HandlingNegativity)
+**[핵심 키워드 체크]**
+2.2.1. 쿠션 멘트(Cushion Words) 필수 사용:
+   - 거절, 불가, 설득이 필요한 시점에 아래 키워드가 사용되었는지 확인하십시오.
+   - 키워드: "번거로우시겠지만", "실례지만", "불편하시겠지만", "양해 부탁드립니다", "죄송합니다만"
+2.2.2. 긍정 화법 및 대안 제시 (Positive Framing):
+   - "안 됩니다"로 끝나는 것이 아니라, "~를 통해 가능합니다" 또는 "~방법이 있습니다"로 전환했는지 확인하십시오.
+   - 예: "환불 안 돼요" (Fail) -> "규정상 환불은 어렵지만, 변경은 가능하십니다" (Pass)
+2.2.3. 진심 어린 사과:
+   - 귀책 사유나 고객 불편 발생 시 단순 "네"가 아닌 "죄송합니다", "많이 당황하셨겠습니다" 등의 표현이 포함되었는지 확인하십시오.
+
+## 2.3. 적극적 경청 및 호응 (ActiveListening)
+**[패턴 분석]**
+2.3.1. 호응어의 다양성:
+   - 상담원이 "네", "네네"만 반복하는지(기계적 호응) 확인하십시오.
+   - "그러셨군요", "확인해 보겠습니다", "맞습니다", "많이 기다리셨죠" 등 다양한 표현을 사용하는지 평가하십시오.
+2.3.2. 핵심어 반복(Paraphrasing):
+   - 고객이 말한 핵심 단어나 요청 사항을 상담원이 따라 말하며 확인하는 과정이 있는지 체크하십시오.
+2.3.3. 침묵 방지:
+   - 고객이 "여보세요?", "듣고 계세요?"라고 묻는 상황이 발생했다면, 이는 적절한 호응 타이밍을 놓친 것으로 간주하여 **FAIL** 처리하십시오.
+
+## 3. 상담속도 (Speed)
+
+## 3.1. 상담원 발화 중단 분석 (InterruptionAnalysis)
+**[분류 기준]**
+3.1.1. **PASS (정상 응대 - 예외 처리):**
+   - **단순 호응:** 내용이 "네", "아", "음" 등이며, 겹침 시간이 500ms(0.5초) 미만인 경우.
+   - **정보 수집 완료:** 고객의 \`Sentiment\`가 NEUTRAL이고 문장이 완결된 후(종결어미 감지) 즉시 응대하는 경우.
+   - **침묵 후 발화:** \`상담원 Begin\` - \`고객 End\` >= 1000ms (1초 이상의 공백 후 발화).
+
+3.1.2. **FAIL (감점 대상 - 중단 발생):**
+   - **유형 A (명백한 겹침):** 겹침 지속 시간이 **2000ms(2초)** 이상인 경우. (LoudnessScore가 양쪽 모두 높다면 '언쟁'으로 기록)
+   - **유형 B (복합 호응 끼어들기):** "네"로 시작하지만 뒤이어 문장이 계속되며, 고객 발화 도중(\`Agent Begin < Customer End\`)에 시작된 경우.
+   - **유형 C (말꼬리 덮기):** 고객이 말을 더듬거나 흐리는 중에 치고 들어간 경우.
+   - **양해 멘트 부재:** 위 겹침 상황에서 "죄송합니다만", "잠시만요" 등의 사과 표현이 없는 경우.
+
+## 3.2. 어속 조절 및 이해도 확인 (PacingUnderstanding)
+\`Content\`의 텍스트 길이와 \`Duration\`(\`End - Begin\`)을 비교하여 판단하십시오.
+3.2.1. **필수 정보 구간 분석:**
+   - 운임, 날짜, 규정 등 숫자/조건이 포함된 상담원 발화 구간을 찾으십시오.
+   - 해당 구간의 글자 수 대비 시간이 너무 짧으면(빠른 어속) 경고하십시오.
+3.2.2. **고객 이해도 실패 감지:**
+   - 고객 발화 중 "뭐라고요?", "네?", "다시요", "빨라요" 등이 포함된 경우.
+   - 또는 고객 \`Sentiment\`가 \`NEGATIVE\`로 변하면서 재질문하는 경우.
+3.2.3. **상담원 대응:**
+   - 재질문 발생 시 상담원의 다음 발화 속도가 느려졌는지, 혹은 문장이 간결해졌는지 확인하십시오. (이전과 동일하면 FAIL)
+
+# [작업 지침 (Core Instructions)]
+전수 조사 및 임의 생략 금지: 분석 과정에서 식별된 모든 사례(특히 끼어들기)는 단 하나도 누락 없이 events 리스트에 포함되어야 합니다. "대표 사례만 추출"하거나 "중략"하는 행위를 엄격히 금지합니다.
+
+## 4. 언어사용 (LanguageUse)
+
+## 4.1. 문법 및 사물 존칭 오류 (GrammarObjectHonorifics)
+**[핵심 감점 요인]**
+사람이 아닌 사물이나 개념에 존칭을 사용하는 **'사물 존칭'** 오류를 검출하십시오.
+- **검출 패턴:**
+  - 주어(사물: 요금, 자리, 시간, 서류, 상품 등) + 서술어(존칭: ~이세요, ~이십니다, ~계십니다).
+  - 예시: "요금이 5만원**이세요**", "좌석이 만석**이십니다**", "커피 나오**셨습니다**", "예약하는 거**세요**?"
+- **정상 표현:** "5만원입니다", "만석입니다", "나왔습니다" 등.
+
+## 4.2. 부적절한 어휘 사용 (InappropriateVocabulary)
+다음 카테고리에 해당하는 단어가 상담원 발화에 포함되었는지 확인하십시오.
+4.2.1. **내부 은어 및 거친 표현:**
+   - 금지어: "자리가 풀리다", "예약이 잘리다", "표를 끊다", "마일을 뽑다", "빵꾸나다".
+4.2.2. **과도한 외래어 및 전문 용어:**
+   - 금지어: "캔슬(Cancel)", "리펀드(Refund)", "조인트(Joint)", "노쇼(No-show)".
+   - 기준: 고객이 이해하기 쉬운 우리말(취소, 환불, 연결, 미탑승) 대신 외래어를 사용한 경우.
+4.2.3. **직원 관점의 표현:**
+   - 예시: "입력해 드릴게요", "기록 만들게요", "운임 받을게요".
+   - 권장: "확인해 드리겠습니다", "예약해 드리겠습니다", "결제 도와드리겠습니다".
+
+## 4.3. 정중하지 못한 어감 및 화법 (UnpoliteToneManner)
+종결 어미와 연결어를 분석하여 태도를 평가하십시오.
+4.3.1. **반토막말 및 성의 없는 종결:**
+   - 명사형 종결: "성함은**요**?", "날짜는**요**?", "잠시만**요**". (완전한 문장이 아님)
+   - 반말체 질문: "~지**요**?"가 아닌 "~죠?"의 빈번한 사용.
+4.3.2. **부정/단정적 표현:**
+   - 금지 패턴: "안되**죠**", "그건 모르**죠**", "글쎄**요**". (고객 무시 또는 책임 회피)
+4.3.3. **공손하지 않은 연결어 (변명조):**
+   - 금지 패턴: "~하**구요**", "~하**거든요**", "~했**잖아요**".
+
+## 4.4. 습관적 추임새 및 혼잣말 (Bad Habits)
+- **의미 없는 추임새:** "뭐~", "어~", "음~", "아무튼", "일단"이 문장 시작마다 반복되는지 확인.
+- **혼잣말:** "어디보자...", "이게 얼마더라..." 등 업무 처리 중 독백이 포함되었는지 확인.
+
+## 5. 대기관리 (WaitManagement)
+
+## 5.1. 대기 시간(Silence Gap) 계산 및 분류
+**[계산 공식]**
+5.1.1. 리스트를 순차적으로 탐색하며, \`(현재 발화 Begin) - (이전 발화 End)\` 값을 계산하십시오.
+5.1.2. 이 값(Gap)이 **5000ms (5초)** 이상일 경우 이를 **'대기(Hold)'** 구간으로 정의합니다.
+   - 단, 이전 발화자가 '상담원'인 경우를 주 대상으로 분석합니다.
+
+**[대기 유형 분류]**
+- **Short Hold:** Gap이 5,000ms ~ 19,999ms (5초 ~ 19초)
+- **Long Hold:** Gap이 20,000ms 이상 (20초 이상)
+- **Extended Hold:** Gap이 180,000ms 이상 (3분 이상)
+
+## 5.2. 대기 멘트 및 감사 표현 검증
+위에서 감지된 대기 구간(Gap)의 **직전(Pre)**과 **직후(Post)** 발화 내용을 확인하십시오.
+
+5.2.1. **사전 양해 (Pre-Hold Check):**
+   - 대기 발생 **직전** 상담원 발화에 "잠시만 기다려 주십시오", "확인해 보겠습니다" 등의 양해어가 있는가?
+   - **[감점 기준]:**
+     - Short Hold(5~19초): 양해어 미사용 **3회 이상** 누적 시 FAIL.
+     - Long Hold(20초+): 양해어 미사용 **1회 이상** 발생 시 FAIL.
+
+5.2.2. **사후 감사 (Post-Hold Check):**
+   - 대기 발생 **직후** 상담원 발화에 "기다려 주셔서 감사합니다" 등의 감사 인사가 있는가?
+   - **[감점 기준]:**
+     - 대기 시간이 **120초(2분)** 이상이었는데 복귀 후 감사 멘트가 없으면 FAIL.
+
+5.2.3. **중간 안내 (Extended Hold Check):**
+   - 대기가 **3분**을 초과하는 경우, 도중에 "시간이 더 소요됩니다" 안내나 Call Back 제안이 있었는지 확인.
+
+## 5.3. 감정 분석 및 사과 태도 (EmotionApology)
+기존 \`Sentiment\` 필드 대신, **음량(Loudness)과 화법**을 기준으로 감정 유형(Type A/B)을 분류하고 대응을 평가하십시오.
+
+**[Step 1: 감정 유형 분류]**
+* **Type A: 격앙된 분노 (Hot Anger)**
+    * 기준: \`LoudnessScore\` Max 값이 **80 이상**이거나, 평소 대비 급격히 상승한 구간.
+    * 특징: 직접적인 항의, 큰 목소리.
+* **Type B: 냉소적 비판 (Cold Cynicism)**
+    * 기준: \`LoudnessScore\`는 **정상 범위(60~75)**이나, **비꼬는 언어 패턴**이 감지됨.
+    * 패턴 예시: 반문("참 대단하시네요"), 체념("됐습니다", "알아서 하세요"), 한숨 섞인 단답("하.. 네."), 비교("딴 데는 안 그러던데").
+
+**[Step 2: 대응 적절성 검증]**
+* **Type A 대응 (대 격앙):**
+    * **즉각성:** 감정 표출 직후 상담원의 첫 마디가 사과인가?
+    * **무변명:** "그게 아니라요" 등의 변명 없이 깔끔하게 인정했는가?
+    * **정중함:** "죄송해요"(해요체)가 아닌 "죄송합니다/송구합니다"(다까체)를 사용하는가?
+* **Type B 대응 (대 냉소):**
+    * **공감 및 쿠션:** 기계적인 매뉴얼 답변("규정입니다") 대신, "고객님 많이 답답하셨겠습니다"와 같은 **감정 케어(Empathy)** 멘트가 있었는가? (냉소적인 고객에게 공감 없이 규정만 내세우면 FAIL)
+
+## 6. 효율성 (Efficiency)
+
+## 6.1. 니즈 파악 및 구체화 (NeedsIdentification)
+고객의 모호한 요청을 상담원이 얼마나 **신속하고 구체적인 질문**으로 변환했는지 평가하십시오.
+6.1.1. **구체화 질문 (Clarification):**
+   - 상황: 고객이 "표 있어요?", "변경 되나요?" 등 모호하게 질문했을 때.
+   - Good: 즉시 "어느 노선, 몇 분이십니까?", "정확한 날짜가 언제입니까?"라고 구체적 정보(5W1H)를 묻는 경우.
+   - Bad: "네?", "어떤 거요?" 등 단순 반문으로 턴을 낭비하는 경우.
+6.1.2. **내전 목적 확인:**
+   - 고객이 하소연이나 상황 설명만 길게 늘어놓을 때(30초 이상), "무엇을 도와드릴까요?" 또는 "어떤 점이 궁금하십니까?"라고 개입하여 목적을 고정했는지 확인.
+
+## 6.2. 대화 리드 및 표준 프로세스 (LeadingStandardProcess)
+상담원이 대화의 주도권을 잡고 표준 절차대로 이끌었는지 확인하십시오.
+6.2.1. **예약 정보 확인 필수 문구 (Exact Phrase Matching):**
+   - 아래 3가지 문구 중 하나라도 정확히(또는 매우 유사하게) 사용되었는지 확인하십시오.
+     - "예약번호 또는 정확한 여정 확인 부탁드립니다"
+     - "예약번호 또는 정확한 일정 확인 부탁드립니다"
+     - "예약번호 또는 정확한 스케줄 확인 부탁드립니다"
+6.2.2. **중간 요약 (Summarization):**
+   - 상담 중간이나 해결 단계 진입 전, "지금까지 말씀하신 내용이 ~ 맞습니까?"라며 내용을 정리(Confirm)하는 구간이 있는지 확인.
+
+## 6.3. AICC 정보 활용 및 중복 질문 방지 (AICCEfficiency)
+입력된 AICC JSON의 각 항목이 \`true\`일 때, 상담원이 해당 정보를 **'개방형 질문'**으로 물어보면 **FAIL**로 판정하십시오.
+
+* **Name_Authenticated == true:** "성함이 어떻게 되세요?" (Fail) vs "홍길동 고객님 맞으십니까?" (Pass)
+* **DOB_Authenticated == true:** "생년월일 불러주세요" (Fail) vs "입력하신 생년월일로 확인하겠습니다" (Pass)
+* **Skypass_Number_Authenticated == true:** "회원번호 뭐에요?" (Fail) vs "회원번호 조회하겠습니다" (Pass)
+
+## 6.4. 비효율 및 부정확성 감지 (InefficiencyErrorDetection)
+대화가 불필요하게 길어지거나 오류가 발생한 구간을 검출하십시오.
+6.4.1. **재설명 요구 (Repetition):**
+   - 고객 발화 중 "아니 그게 아니고요", "아까 말씀드렸다시피", "제 말은 그게 아니라" 등 **상담원의 오해**를 정정하는 표현 감지.
+6.4.2. **정보 오류 지적 (Correction):**
+   - 고객 발화 중 "아까는 ~라면서요", "규정에는 ~라고 되어 있던데요", "말이 다르잖아요" 등 **오안내 지적** 감지.
+6.4.3. **방치 (PassiveListening):**
+   - 고객의 발화가 30초 이상 지속되는데 상담원이 "네.. 네.." 호응만 하고 해결책이나 방향을 제시하지 못하는 경우.
+
+## 7.정확성 (Accuracy)
+
+## 7.1. 임의 판단 및 추측성 발화 감지 (ArbitraryJudgment)
+상담원이 규정을 안내할 때 **공식적인 근거**가 아닌 **개인의 추측**을 사용하는지 감시하십시오.
+- **Fail Criteria (감점 요인):** 아래 키워드나 뉘앙스가 포함된 경우.
+  - "제 생각에는", "개인적으로는", "아마 맞을 거예요", "보통은 그렇습니다"
+  - "글쎄요", "확실하진 않지만", "~인 것 같아요" (불확실한 종결 어미)
+- **Pass Criteria:** "규정상 ~입니다", "확인해 본 결과 ~입니다", "지침에 따르면" 등 확정적 표현 사용.
+
+## 7.2. 구조적 설명 능력 (StructuralExplanation)
+복잡한 규정(수수료, 환불, 변경 절차 등)을 안내할 때 **[결론 → 근거 → 향후 절차]**의 논리적 순서를 따르는지 평가하십시오.
+- **Good:** 결론(됩니다/안됩니다)을 먼저 말하고, 근거(규정)를 댄 후, 절차(신청 방법)를 안내함.
+- **Bad:** 횡설수설하거나, 근거를 설명하다가 결론을 흐리거나, 절차를 누락하는 경우.
+
+## 7.3. 오안내 및 정보 불일치 (MisinformationConflict)
+고객이 제시한 증거(홈페이지, 앱 화면 등)와 상담원의 안내가 충돌하는 상황을 포착하십시오.
+- **Conflict Detection:**
+  - 고객: "홈페이지에는 무료라고 되어 있는데요?", "앱에서는 된다고 나오는데요?"
+  - 상담원 대응:
+    - **Fail:** 확인 없이 본인의 주장을 고수하거나 강요함 ("아니요, 제가 맞습니다").
+    - **Self-Correction (참작):** "아, 잠시만요. 다시 확인하겠습니다... 아 고객님 말씀이 맞습니다." (빠른 정정은 감점 폭을 줄임).
+
+## 7.4. 업무 완결성 및 요약 복창 (CompletenessParaphrasing)
+상담 종료 전, 핵심 데이터(날짜, 구간, 성함, 금액)를 상담원이 **재확인(Paraphrasing)**하는지 확인하십시오.
+- **Required:** "말씀하신 [날짜]에 [구간]으로 변경 맞으십니까?", "총 요금은 [금액]입니다."
+- **Fail:** 최종 확인 없이 "네, 알겠습니다" 하고 상담을 종료하는 경우.
+
+## 8. 적극성 (Proactiveness)
+
+## 8.1. 구체적 설명 및 상황 파악 (Concrete Explanation)
+단순한 정보 나열이 아닌, 고객의 상황에 맞춘 능동적 설명인지 평가하십시오.
+8.1.1. **상황 파악 질문 (Active Inquiry):**
+   - 해결책 제시 전, "이용 목적이 어떻게 되십니까?", "언제 출발하십니까?" 등 고객 상황을 확인하는 질문이 1회 이상 있었는가?
+8.1.2. **실행 중심 절차 안내 (Execution Guidance):**
+   - 절차 설명 시 준비물, 주의사항, 소요시간 등 **고객이 실제로 행동할 때 필요한 디테일**을 언급했는가?
+   - **Fail:** "홈페이지에서 하시면 됩니다" (단답/불친절)
+   - **Pass:** "홈페이지 접속 후 마이페이지에서 신청 가능한데, 인증서가 필요하니 미리 준비해 주십시오." (구체적)
+
+## 8.2. 대안 제시 및 문제 해결 (Problem Solving)
+거절 상황이나 정보 부족 상황에서의 대처 능력을 평가하십시오.
+8.2.1. **거절 전 탐색/공감 (Empathy before Refusal):**
+   - "안 됩니다"라고 말하기 **직전**에 "잠시 확인해 보겠습니다", "방법이 있을지 찾아보겠습니다" 등의 완충/노력 과정이 있었는가?
+   - **Fail:** 고객 요청 즉시 "그건 안 돼요."라고 단정적으로 거절.
+8.2.2. **선제적 대안 제시 (Proactive Suggestion):**
+   - **[중요]** 고객이 "그럼 다른 방법은 없나요?"라고 묻기 **전**에, 상담원이 **먼저** "대신 ~는 가능합니다"라고 제안했는가?
+   - **Passive (소극적):** 고객이 물어봐야만 대안을 내놓음.
+   - **Proactive (적극적):** 거절과 동시에(또는 직후) 상담원이 먼저 대안을 제시함.
+8.2.3. **선택권 존중 (Choice Offering):**
+   - "A와 B 중 어떤 것이 편하십니까?"와 같이 옵션을 제공했는가?
+
+## 8.3. 감점 요인 탐지 (Negative Factors)
+- **단답형 응대:** 설명 조건이 누락되거나 "네", "아니요" 위주로 짧게 끝내는 경우.
+- **대안 미제시:** 거절 후 대화가 끊기거나 고객이 스스로 방법을 찾게 만드는 경우.
+
+
+
+
+
+# Output Format (출력 형식)
+
+# [InterruptionAnalysis 작성 절차 (Thinking Process)]
+분석 결과 작성 시, 바로 JSON을 출력하지 말고 내부적으로 다음 순서를 따르십시오:
+1. 상담원 끼어들기(Interruption) 타임스탬프를 먼저 모두 나열하십시오.
+2. 나열된 타임스탬프가 총 몇 개인지 세어보십시오. (Count)
+3. 그 Count 값을 \`totalInterruptions\`에 입력하십시오.
+4. 그 후 각 타임스탬프에 해당하는 상세 내용을 \`events\` 리스트에 작성하십시오.
+
+# [accuracyIssues 작성 절차 (Thinking Process)]
+분석 결과 작성 시, 바로 JSON을 출력하지 말고 내부적으로 다음 순서를 따르십시오:
+1. Detection (탐지):** 전체 스크립트를 스캔하여 '임의 판단(ArbitraryJudgment)'과 '오안내(MisinformationConflict)'에 해당하는 발화를 모두 찾아내십시오.
+2. Listing (나열):** 찾아낸 발화들을 잠시 메모리에 리스트업하십시오.
+3. Counting (계수):**
+    * 리스트업 된 '임의 판단' 발화의 개수를 세십시오. -> \`countA\`
+    * 리스트업 된 '오안내' 발화의 개수를 세십시오. -> \`countB\`
+4. Verification (검증):**
+    * JSON의 \`summary.arbitraryJudgmentCount\` 값은 반드시 \`countA\`와 같아야 합니다.
+    * JSON의 \`summary.misinformationConflictCount\` 값은 반드시 \`countB\`와 같아야 합니다.
+    * \`details\` 배열에 들어갈 항목의 총 개수는 \`countA + countB\`여야 합니다.
+5. Generation (생성):** 위 검증이 끝난 후 JSON을 작성하십시오. **(빈 리스트인데 count가 1이거나, 리스트가 있는데 count가 0이면 절대 안 됩니다.)**
+
+# [proactivityIssues 작성 절차 (Thinking Process)]
+분석 결과 작성 시, 바로 JSON을 출력하지 말고 내부적으로 다음 순서를 따르십시오:
+1.  **Scanning (탐색):**
+    * **[거절 구간]**을 찾으십시오. ("안 됩니다", "불가합니다", "어렵습니다") -> 해당 구간 직전에 '확인 멘트'가 있는지, 직후에 '대안 제시'가 있는지 체크하십시오.
+    * **[설명 구간]**을 찾으십시오. -> 설명이 단답형인지, 구체적 절차(준비물 등)가 포함되었는지 체크하십시오.
+2.  **Counting (계수):**
+    * \`negativeCount\`: 단답형 응대, 대안 미제시, 거절 전 탐색 누락, 소극적 대안 제시(고객 질문 후 답변)의 총합.
+    * \`proactiveCount\`: 선제적 대안 제시, 상황 파악 질문 수행 횟수.
+3.  **Verification (검증):**
+    * \`proactivityIssuesDetected.summary.totalCount\`는 \`negativeCount\`와 일치해야 합니다.
+    * \`details\` 배열에는 발견된 모든 \`negativeCount\` 항목이 구체적으로 기록되어야 합니다.
+4.  **Generation (생성):** 위 검증이 완료되면 JSON을 작성하십시오.
+
+
+
+
+모든 시간은 \`mm:ss\` 포맷으로 변환하십시오.
+
+\`accuracyIssues\`의 \`details\`에는 구체적인 발화 내용과 위반 사유를 명시해야 합니다.
+
+분석 결과는 반드시 아래의 JSON 스키마 구조를 준수하여 작성하십시오. 마크다운 코드 블록(\`\`\`json) 안에 유효한 JSON만 출력하고, 사족을 붙이지 마십시오.
+ '판정'은 PASS 또는 FAIL입니다.
+
+\`\`\`json
+{
+  "summary": {
+    "greetingResult": "PASS/FAIL",
+    "greetingScore": "100점 만점 기준 점수 (정성적 판단)",
+    "voiceProductionResult": "PASS/FAIL",
+    "voiceProductionScore": "100점 만점 기준 점수 (정성적 판단)",
+    "speedResult": "PASS/FAIL",
+    "speedScore": "100점 만점 기준 점수 (정성적 판단)",
+    "languageUseResult": "PASS/FAIL",
+    "languageUseScore": "100점 만점 기준 점수 (정성적 판단)",
+    "waitManagementResult": "PASS/FAIL",
+    "waitManagementScore": "100점 만점 기준 점수 (정성적 판단)",
+    "efficiencyResult": "PASS/FAIL",
+    "efficiencyScore": "100점 만점 기준 점수 (정성적 판단)",
+    "accuracyResult": "PASS/FAIL",
+    "accuracyScore": "100점 만점 기준 점수 (정성적 판단)",
+    "proactivityResult": "PASS/FAIL",
+    "proactivityScore": "100점 만점 기준 점수 (정성적 판단)"
+  },
+  "details": {
+    "greeting" : {
+      "opening": {
+        "status": "PASS/FAIL",
+        "reason": "평가 근거 요약"
+      },
+      "response": {
+        "status": "PASS/FAIL (or N/A)",
+        "reason": "고객 인사가 없었다면 N/A, 그 외 평가 근거"
+      },
+      "additionalInquiryCheck": {
+        "status": "PASS/FAIL",
+        "reason": "추가 문의 확인 멘트 유무"
+      },
+      "closing": {
+        "status": "PASS/FAIL",
+        "reason": "끝인사 및 이름 언급 여부"
+      },
+      "feedbackMessage": "상담원에게 전달할 피드백 문구 (표준 미달 시: 고객이 느끼는 감정을 포함하여 코칭 멘트 작성 / 표준 준수 시: 칭찬 멘트 작성)"
+    },
+    "voiceProduction" : {
+      "toneManner": {
+        "status": "PASS/FAIL",
+        "reason": "요조체/다까체 혼합 비율 및 분위기 분석 결과"
+      },
+      "handlingNegativity": {
+        "status": "PASS/FAIL",
+        "cushionWordsUsed": ["사용된 쿠션멘트 나열 (없으면 '없음')"],
+        "reason": "쿠션멘트 사용 여부 및 대안 제시 여부"
+      },
+      "activeListening": {
+        "status": "PASS/FAIL",
+        "reason": "호응어 다양성 및 핵심어 반복 여부"
+      },
+      "feedbackMessage": "상담원 피드백 (표준 미달 시: 고객의 심정을 대변하여 코칭 / 준수 시: 구체적인 칭찬)"
+    },
+    "speed" : {
+      "interruptionAnalysis": {
+        "summary": {
+        "totalInterruptions": 0,
+        "grade": "PASS/FAIL"
+        },
+        "events": [
+          {
+            "type": "유형 B (복합 호응 끼어들기)",
+            "timestampStart": "03:15",
+            "timestampEnd": "03:18",
+            "contentContext": "고객: 제가 그래서 19일에... / 상담원: 네 19일은 안되고요.",
+            "apologyUsed": false,
+            "judgment": "FAIL"
+          }
+        ]
+      },
+      "pacingUnderstanding": {
+        "summary": {
+          "reExplanationRequests": 0,
+          "assessment": "Good/Fast/Slow"
+        },
+        "issues": [
+          {
+            "timestamp": "01:45",
+            "category": "어속 빠름 / 필수 정보 전달 미흡",
+            "customerReaction": "네? 다시 말해주세요. (Sentiment: NEGATIVE)",
+            "agentResponseQuality": "속도 조절 없이 단순 반복함 (FAIL)"
+          }
+        ]
+      },
+      "feedbackMessage": "데이터 기반의 구체적 피드백 (예: 03:15 구간에서 고객 말이 끝나기 2.9초 전에 끼어들었습니다. 양해 멘트가 필요합니다.)"
+    },
+    "languageUse" : {
+      "languageQualityScore": {
+        "events": [
+          {
+            "timestamp": "mm:ss",
+            "errorSentence": "요금이 5만원이세요.",
+            "correction": "요금이 5만원입니다.",
+            "reason": "사물(요금)에 존칭 사용"
+          }
+        ]
+      },
+      "inappropriateVocabulary": {
+        "events": [
+          {
+            "timestamp": "mm:ss",
+            "category": "내부 은어/외래어/직원관점",
+            "detectedWord": "예약이 잘리다",
+            "correction": "예약이 취소되다",
+            "context": "시간 안 지키시면 예약이 잘리거든요."
+          }
+        ]
+      },
+      "unpoliteToneManner": {
+        "events": [
+          {
+            "timestamp": "mm:ss",
+            "type": "반토막말/단정적표현/변명조",
+            "detectedSentence": "성함은요?",
+            "correction": "성함이 어떻게 되십니까?",
+            "analysis": "명사형 질문으로 고객을 하대하는 느낌을 줌"
+          }
+        ]
+      },
+      "badHabits": {
+        "events": [
+          {
+            "timestamp": "mm:ss",
+            "habitType": "추임새/혼잣말",
+            "content": "아무튼 그건 안돼요.",
+        "count": "반복 횟수"
+          }
+        ]
+      },
+      "feedbackMessage": "데이터 기반의 구체적 피드백 (예: 03:15 구간에서 고객 말이 끝나기 2.9초 전에 끼어들었습니다. 양해 멘트가 필요합니다.)"
+    },
+    "waitManagement" : {
+      "holdProcessEvaluation": {
+        "summary": {
+          "totalHoldsDetected": 0,
+          "violationShortHold": 0,
+          "violationLongHold": 0,
+          "finalResult": "PASS/FAIL"
+        },
+        "details": [
+          {
+            "seq": 1,
+            "gapStartTime": "mm:ss (직전 발화 끝)",
+            "gapEndTime": "mm:ss (직후 발화 시작)",
+            "durationSec": 15.5,
+            "holdType": "SHORT (5~19s)",
+            "preHoldContent": "네 잠시만요. (상담원)",
+            "isPreHoldValid": true,
+            "postHoldContent": "기다려 주셔서 감사합니다. (상담원)",
+            "isPostHoldValid": true
+          }
+        ]
+      },
+      "apologyEvaluation": {
+        "summary": "PASS/FAIL",
+        "triggerEvents": [
+          {
+            "timestamp": "mm:ss",
+            "emotionType": "TYPEA (격앙) / TYPEB (냉소)",
+            "detectionEvidence": "Loudness 88dB 감지 (OR) '참 잘하시네요'라는 반어적 표현 감지",
+            "customerContent": "아니, 지금 장난해요?",
+            "agentResponse": "죄송합니다. 제가 바로 시정하겠습니다.",
+            "evaluation": "PASS (즉각 사과) / FAIL (변명함 OR 공감 부재)"
+          }
+        ]
+      },
+      "feedbackMessage": "상담원에게 전달할 데이터 기반 피드백 (예: 04:10 구간 고객의 음량이 85dB로 높아졌을 때 변명을 먼저 하셨습니다. / 02:30 구간 '됐어요'라는 냉소적 반응에 기계적으로 응대하여 불만이 심화되었습니다.)"
+    },
+    "efficiency" : {
+      "efficiencyScore": {
+        "score": "100점 만점 기준",
+        "level": "EFFICIENT/AVERAGE/INEFFICIENT"
+      },
+      "callPurposeClarification": {
+        "identifiedPurpose": "내전 목적 요약 (예: 인천-LA 구간 마일리지 좌석 승급 요청)",
+        "clarificationQuality": "GOOD/BAD/N/A(고객이 처음부터 명확히 말함)",
+        "evidenceContext": {
+          "timestamp": "mm:ss (구체화가 이루어진 시점)",
+          "triggerSituation": "고객의 모호한 요청 (예: '좌석 좀 바꾸려고요')",
+          "agentClarifyingQuestion": "상담원의 구체화 질문 (예: '네, 좌석 승급 말씀이십니까, 아니면 좌석 배정 변경이십니까?')",
+          "customerConfirmation": "고객의 확정 답변 (예: '승급이요.')"
+        }
+      },
+      "processCompliance": {
+        "leadingStandardProcessCheck": {
+          "status": "PASS/FAIL",
+          "missingScript": "예약번호 확인 필수 문구 미사용"
+        },
+        "aiccEfficiencyCheck": {
+          "status": "PASS/FAIL",
+          "violationDetail": "없음 (또는 '이름 중복 질문함')"
+        }
+      },
+      "inefficiencyDetection": {
+        "summary": {
+          "repetitionCount": 0,
+          "misunderstandingCount": 0
+        },
+        "details": [
+          {
+            "timestamp": "01:15",
+            "issueType": "재설명 요구 (Repetition)",
+            "causeAnalysis": "고객이 19일이라고 명확히 말했으나 상담원이 29일로 되물어 고객이 다시 설명함.",
+            "conversationSnippet": "고객: '아니요, 29일 말고 19일이요.'"
+          }
+        ]
+      },
+      "feedbackMessage": "피드백 문구 (예: 고객이 '좌석 변경'이라고 모호하게 말했을 때, 상담원님이 '승급인지 배정인지' 바로 구체적으로 질문하여 니즈를 빠르게 파악한 점이 훌륭합니다.)"
+    },
+    "accuracy" : {
+      "accuracyScore": {
+        "score": "100점 만점 기준",
+        "level": "EXCELLENT/GOOD/WARNING/CRITICAL"
+      },
+      "explanationStructure": {
+        "rating": "LOGICAL/DISORGANIZED",
+        "analysis": "결론부터 명확히 말하고 절차를 안내함 (또는 설명이 장황하고 결론이 모호함)"
+      },
+      "completenessCheck": {
+        "status": "PASS/FAIL",
+        "finalRecapTimestamp": "mm:ss (또는 '누락됨')",
+        "recapContent": "7월 15일 뉴욕행 편도, 홍길동 고객님 맞으십니까?"
+      },
+      "accuracyIssues": {
+        "summary": {
+          "arbitraryJudgmentCount": 0,
+          "misinformationConflictCount": 0
+        },
+        "details": [
+          {
+            "timestamp": "02:15",
+            "issueType": "임의 판단 (Arbitrary Judgment)",
+            "detectedExpression": "제 생각에는 아마 환불이 될 것 같아요.",
+            "violationReason": "규정을 확인하지 않고 개인적인 추측('제 생각에는', '될 것 같아요')으로 안내함."
+          },
+          {
+            "timestamp": "05:30",
+            "issueType": "오안내 확정 (Misinformation Conflict)",
+            "customerClaim": "앱에서는 수수료 0원이라는데요?",
+            "agentResponse": "앱이 틀린 겁니다. 무조건 나옵니다.",
+            "violationReason": "고객이 근거를 제시했음에도 확인 절차 없이 본인의 주장을 강요함."
+          }
+        ]
+      },
+      "feedbackMessage": "상담원 피드백 문구 (예: '제 생각에는'과 같은 추측성 표현은 고객에게 혼란을 주고 신뢰를 떨어뜨립니다. 규정에 근거하여 확정적인 표현(~입니다)을 사용해 주세요. 또한 마지막에 변경된 일정을 요약 복창해주셔야 업무가 완결됩니다.)"
+    },
+    "proactivity" : {
+      "proactivityScore": {
+        "score": "100점 만점 기준",
+        "level": "EXCELLENT/GOOD/PASSIVE/POOR"
+      },
+      "concreteExplanationCheck": {
+        "situationInquiryPerformed": true,
+        "executionGuidanceQuality": "DETAILED/GENERIC/POOR",
+        "analysisLog": "고객의 여행 목적을 먼저 묻고, 준비물(신분증)까지 안내함."
+      },
+      "problemSolvingCheck": {
+        "empathyBeforeRefusal": "PASS/FAIL",
+        "proactiveSuggestion": "PASS (선제적) / PASSIVE (소극적) / FAIL (미제시)",
+        "choiceOffering": true
+      },
+      "issuesDetected": {
+        "summary": {
+          "totalCount": 0, // 아래 details 배열의 길이와 일치해야 함
+          "primaryIssue": "선제적 대안 제시 미흡 / 단답형 응대"
+        },
+        "details": [
+          {
+            "timestamp": "03:45",
+            "issueType": "거절 전 탐색 누락 (No Empathy)",
+            "context": "고객: '환불 안 되나요?' / 상담원: '네, 안 됩니다.'",
+            "reason": "확인하려는 시도나 안타까움 표현 없이 즉시 단정적으로 거절함."
+          },
+          {
+            "timestamp": "04:10",
+            "issueType": "소극적 대안 제시 (Passive Suggestion)",
+            "context": "고객: '그럼 다른 방법 없어요?' / 상담원: '그럼 날짜 변경은 됩니다.'",
+            "reason": "고객이 묻기 전에 먼저 대안을 제시하지 않음."
+          },
+          {
+            "timestamp": "01:20",
+            "issueType": "단답형 응대 (Short Answer)",
+            "context": "고객: '어떻게 신청해요?' / 상담원: '앱에서요.'",
+            "reason": "구체적인 경로(메뉴)나 절차 설명 없이 단답으로 일관함."
+          }
+        ]
+      },
+      "feedbackMessage": "상담원 피드백 문구 (예: 거절 시 '안 됩니다'라고 바로 말씀하시기보다 '확인해 보겠지만...'이라는 완충 어구를 사용해 주세요. 또한 고객이 묻기 전에 '대신 변경은 가능합니다'라고 선제적으로 대안을 제시해야 적극적인 상담입니다.)"
+    }
+  }
+}
+\`\`\`
+
+주의사항
+## 1. 인사 (Greeting)
+
+1.1. 맥락 고려: 단순히 부정적인 단어("안 됩니다")가 있다고 감점하지 말고, 그 뒤에 대안이 제시되었는지를 반드시 확인하십시오.
+
+1.2. 쿠션 멘트 가중치: 거절 상황에서 쿠션 멘트가 누락되면 'handlingNegativity'는 즉시 FAIL입니다.
+
+## 2. 음성연출 (VoiceProduction)
+
+2.1. 모든 timestampMs는 원본 JSON의 BeginOffsetMillis 값을 그대로 사용하십시오.
+
+2.2. 쿠션 멘트나 호응어가 여러 번 사용된 경우, 가장 대표적이거나 결정적인 순간의 데이터를 추출하십시오.
+
+2.3. 해당 평가 항목의 증거를 찾을 수 없는 경우, text 필드에 "해당 문구 없음" 또는 "N/A"를, timestampMs에는 null 또는 -1을 입력하십시오.
+
+## 3. 상담속도 (Speed)
+
+3.1. 유형 B(복합 호응)의 엄격한 적용: 상담원이 "네"라고 했더라도 바로 뒤에 "주민번호가..."라며 용건을 붙였다면 이는 경청이 아닌 '끼어들기'입니다.
+
+3.2. 양해 멘트 필수: 고객의 말을 끊는 상황(Interruption)이 감지되면, 해당 문장 내에 "죄송합니다만", "잠시만요"가 포함되었는지 반드시 확인하고 apologyPhraseUsed 필드에 기록하십시오.
+
+3.3. Yielding(양보) 확인: 상담원 발화 중 고객이 들어왔을 때(AgentEnd가 CustomerBegin 직후인지), 상담원이 말을 멈췄다면 이는 긍정적인 요소로 평가하십시오.
+
+## 4. 언어사용 (LanguageUse)
+
+4.1. 사물 존칭 예외: "고객님이 계십니다" 등 주어가 사람인 경우는 정상적인 존칭이므로 감점하지 마십시오. 문맥을 파악하여 주어가 사물인지 확인하십시오.
+
+4.2. 다까체/해요체 비율: 전체적인 대화 흐름에서 '해요체'가 너무 많아 가벼워 보이거나, '다까체'만 사용하여 딱딱해 보이는 경우 languageQualityScore에 반영하십시오.
+
+4.3. 타임스탬프 계산: BeginOffsetMillis / 1000 후 mm:ss 변환 규칙을 엄수하십시오.
+
+## 5. 대기관리 (WaitManagement)
+
+5.1. 냉소(Type B) 탐지: 소리가 크지 않더라도 고객이 말을 짧게 끊거나("네네, 알았어요") 비꼬는 어투를 사용하면 반드시 감정 대응이 필요한 구간으로 포착하십시오.
+
+5.2. 사과의 정중함: "죄송해요"(해요체)는 감점 요인이며, "죄송합니다/송구합니다"(다까체)를 표준으로 합니다.
+
+5.3. 대기 시간 계산: 상담원 발화 종료(EndOffset)부터 다음 발화 시작(BeginOffset)까지의 순수 침묵 시간을 기준으로 하십시오.
+
+## 6. 효율성 (Efficiency)
+
+6.1. Details 필수: 비효율이 감지되지 않았다면 details 배열을 빈 상태([])로 두십시오.
+
+6.2. Conversation Snippet: 전체 대화를 다 적지 말고, 비효율이 발생한 결정적인 한 문장을 인용하십시오.
+
+6.3. Cause Analysis: 현상만 적지 말고 '왜 비효율적인지' 분석 내용을 적으십시오. (예: '이미 말했는데 또 물어봄')
+
+## 7. 정확성 (Accuracy)
+
+7.1. 임의 판단의 위험성: 상담원이 "아마도"라고 말한 내용이 결과적으로 맞았더라도, 추측성 화법 자체가 규정 위반이므로 감점(Warning) 처리하십시오.
+
+7.2. 구조적 설명: 상담원이 설명이 길어질 때, 문장 연결어("우선", "따라서", "마지막으로")를 사용하여 정돈하는지 확인하십시오.
+
+7.3. 치명적 오안내: 만약 데이터 내에 [Fact Check] 정보가 없다면, 상담원의 **'화법상 불확실성'**과 '고객과의 충돌' 위주로 평가하십시오.
+
+## 8. 적극성 (Proactiveness)
+
+8.1. 선제성(Proactivity) 판단: 대안이 제시되었더라도, **고객의 "다른 건요?", "방법 없나요?" 질문 뒤에 나왔다면 이는 '소극적(Passive)'**으로 분류하여 감점(또는 개선 필요) 사항에 포함하십시오.
+
+8.2. 거절의 화법: 규정상 안 되는 것이라도 "확인해 보겠습니다"라는 멘트 유무가 '적극성' 평가의 핵심입니다.
+
+`;
+}
+
+/**
+ * 본인 확인 관련 추가 프롬프트 생성
+ */
+function generateDobAuthPrompt(dobAuthenticated?: boolean): string {
+  if (!dobAuthenticated) return '';
+
+  return `
+## 5.1. 중복 본인 확인 검증 (Duplicate_Authentication_Check)
+시스템에서 이미 본인 확인이 완료된 상태입니다. 상담사가 인증된 고객에게 다시 본인 확인 절차(생년월일, 주소, 연락처 등)를 요청했는지 확인하세요. 중복 요청은 감점 요인입니다. (단, 대리인 확인, 민감 정보 변경 등 추가 보안이 필요한 특수 상황은 예외)`;
+}
+
+/**
+ * 항공편 안내 관련 추가 프롬프트 생성
+ */
+function generateFlightAvailabilityPrompt(checkFlightAvailability?: FlightAvailability[]): string {
+  if (!checkFlightAvailability || checkFlightAvailability.length === 0) {
+    return '';
+  }
+
+  const flightDetails = checkFlightAvailability
+    .map((flight) => {
+      // 예약 가능한 좌석 등급(잔여석)
+      const availableSeats = flight.remainingSeats
+        .filter((seat) => /^\d+$/.test(seat.count) && Number.parseInt(seat.count, 10) > 0)
+        .slice(0, 3)
+        .map((seat) => `${seat.class}(${seat.count})`)
+        .join(', ');
+
+      return `  - **${flight.airlineCode}${flight.flightNumber}**: 잔여 좌석: ${
+        availableSeats || '확인 필요'
+      }. 주의사항: ${flight.notice}`;
+    })
+    .join('\n');
+
+  return `
+## 5.2. 항공편 안내 완전성 검증 (Flight_Availability_Check)
+시스템에서 확인 가능한 직항 항공편은 다음과 같습니다. 상담사가 아래 정보를 바탕으로 모든 이용 가능한 옵션을 안내했는지 확인하세요.
+${flightDetails}
+특히 대한항공(KE) 외 다른 항공사 옵션이 있었다면 이를 누락했는지 중점적으로 확인하세요. (단, 고객이 명시적으로 대한항공만 요청한 경우는 예외)`;
+}
+
+function generateUserAuthPrompt(contactAttributes: Record<string, string>): string {
+  return `
+  {
+    DOB_Authenticated : ${contactAttributes['DOB_Authenticated'] || 'false'},
+    Name_Authenticated : ${contactAttributes['Name_Authenticated'] || 'false'},
+    Skypass_Number_Authenticated : ${contactAttributes['Skypass_Number_Authenticated'] || 'false'}
+  }`;
+}
+
+/**
+ * QmPromptParams에서 동적 프롬프트 필드를 미리 생성
+ * 이 함수를 호출하면 dobAuthPrompt, flightAvailabilityPrompt가 자동 생성됨
+ */
+function extractQmParams(
+  params: QmPromptParams,
+  contactAttributes: Record<string, string>,
+): QmPrompts {
+  return {
+    transcript: params.transcript,
+    dobAuthPrompt: generateDobAuthPrompt(params.dobAuthenticated),
+    flightAvailabilityPrompt: generateFlightAvailabilityPrompt(params.checkFlightAvailability),
+    userAuthPrompt: generateUserAuthPrompt(contactAttributes),
+  };
+}
+
+/**
+ * QmPromptParams를 기반으로 동적 파라미터 치환
+ * 지원하는 템플릿 변수:
+ * - #{transcript}: 상담 스크립트
+ * - #{dobAuthPrompt}: 본인 확인 관련 추가 프롬프트 (extractQmParams에서 생성)
+ * - #{flightAvailabilityPrompt}: 항공편 안내 관련 추가 프롬프트 (extractQmParams에서 생성)
+ */
+function replaceQmDynamicParameters(text: string, qmPrompts: QmPrompts): string {
+  const replacements: Record<string, string> = {
+    transcript: qmPrompts.transcript || '',
+    dobAuthPrompt: qmPrompts.dobAuthPrompt || '',
+    flightAvailabilityPrompt: qmPrompts.flightAvailabilityPrompt || '',
+    userAuthPrompt: qmPrompts.userAuthPrompt || '',
+  };
+
+  let result = text;
+  for (const [key, value] of Object.entries(replacements)) {
+    const pattern = new RegExp(String.raw`\#\{${key}\}`, 'g');
+    result = result.replace(pattern, value);
+  }
+
+  return result;
+}
+
+export function getQmDynamicPrompt(
+  qmPromptParams: QmPromptParams,
+  contactAttributes?: Record<string, string>,
+): string {
+  const qmPrompts = extractQmParams(qmPromptParams, contactAttributes ?? {});
+
+  return replaceQmDynamicParameters(
+    qmPromptParams.useDefaultPrompt ? getDefaultTemplate() : qmPromptParams.customPrompt ?? '',
+    qmPrompts,
+  );
+}
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/prompts/cached-content.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+/**
+ * QM Automation Cached Content
+ *
+ * Context Caching에 사용될 고정 컨텍스트입니다.
+ * - 평가 기준 (변하지 않는 도메인 지식)
+ * - 출력 형식 (일관된 응답 구조)
+ * - 입력 데이터 형식 설명
+ *
+ * 이 컨텐츠는 CachedContent로 저장되어 TTL 동안 재사용됩니다.
+ * 비용 절감: ~2,000 토큰이 매 요청마다 캐싱됨
+ */
+
+/**
+ * 입력 데이터 형식 설명
+ */
+export const INPUT_DATA_FORMAT = `** 입력 데이터 (Input Data)
+[상담콜 데이터]는 다음과 같은 구조화된 형식의 텍스트 파일로 제공됩니다. 각 발화는 화자(AGENT/CUSTOMER), 내용(Message), 발화 시작 시간(BeginOffsetMillis), 발화 종료 시간(EndOffsetMillis)을 포함합니다.
+예시:
+AGENT : 안녕하십니까? 김다미입니다.(BeginOffsetMillis: 12, EndOffsetMillis: 2152, id: cd782b03-1020-4563-a4f2-40b522264729)
+CUSTOMER : 아 네, 안녕하세요. 저희 항공권 가족들 거를 마일리지로 예약을 했는데요.(BeginOffsetMillis: 2777, EndOffsetMillis: 8837, Id: 3ba6ad1f-ee3d-4b10-b6ea-c6a4788b514b)`;
+
+/**
+ * 수행 과제 설명
+ */
+export const TASK_DESCRIPTION = `** 수행 과제 (Task)
+제공된 [상담콜 데이터]를 바탕으로, 아래 [평가 기준]에 따라 상담사의 응대를 분석하고, [출력 형식]에 맞춰 '상담콜 품질 평가 보고서'를 작성해 주세요.`;
+
+/**
+ * 평가 기준 (고정 - 변경되지 않음)
+ */
+export const EVALUATION_CRITERIA = `** 평가 기준 (Evaluation Criteria)
+0. 사전 분석: 정보 보안 절차 필요 여부 판단
+상담콜의 전체 내용을 파악하여, 해당 문의가 개인정보(예약, 스카이패스 등)를 다루는지 판단하고 아래 항목 중 해당하는 문의 유형을 모두 기재해 주세요.
+정보 보안 절차 필요 문의 유형 (예시):
+예약 정보 조회 및 변경/취소
+스카이패스 회원 정보 조회 및 마일리지 관련 업무
+개인정보(연락처, 주소 등) 변경 요청
+결제 관련 정보 조회
+증빙 서류(전자항공권, 여정안내서 등) 발급 요청
+
+1. 인사 및 관계 형성 (10점)
+첫인사와 끝인사 시, 상담사 이름과 인사말을 명확하고 밝은 목소리 톤으로 전달했는가?
+고객이 "수고하십니다" 등 인사말을 건넸을 때 "감사합니다"와 같이 적절하게 호응했는가?
+
+2. 서비스 마인드 (30점)
+    가. 친절도
+    전반적으로 상냥하고 친근한 어감으로 상담을 진행했는가?
+    부정적인 답변(만석, 규정 안내 등) 시, "죄송합니다만", "번거로우시겠지만"과 같은 쿠션 멘트를 사용하여 안타까운 어감을 적절히 연출했는가?
+    고객의 상황(경로자, 항공 여행 비숙련자 등)을 고려하여 말의 속도를 적절히 조절했는가?
+    "네네"와 같은 기계적 호응이 아닌, "네 고객님, 그러셨군요" 등 상황에 맞는 다양한 호응어를 사용하여 경청하는 태도를 보였는가?
+    [중요] 고객 발화 중단 여부: 고객의 발화가 종료되는 시점(CUSTOMER의 EndOffsetMillis) 이전에 상담사의 발화가 시작(AGENT의 BeginOffsetMillis)되는 경우가 있는지 정량적으로 분석하고 평가에 반영한다. 만약 부득이하게 말을 중단시켜야 했다면 "말씀 중에 죄송합니다"라고 정중히 양해를 구했는가?
+
+    나. 정중함
+    '다까체'와 '요조체'의 비율을 적절히 혼용하여 전문성과 친밀감을 균형 있게 전달했는가? (부정적 답변, 사과, 양해 시 '다까체' 사용 권장)
+    "잠깐만요", "~거든요", "~하시구요" 같은 표현 대신 "잠시만 기다려 주십시오", "~합니다"와 같이 정중하고 정돈된 표현을 사용했는가?
+    외래어(cancel, confirm)나 전문 용어(rerouting, booking class) 사용을 최소화하고, 고객이 이해하기 쉬운 용어로 설명했는가?
+    대기 요청 시 "잠시만 기다려 주십시오" 등 정중한 양해어를 사용하고, 대기 후에는 "기다려 주셔서 감사합니다"라고 감사를 표했는가?
+    상담사 또는 회사의 귀책으로 고객 불만이 제기됐을 때, 즉각적이고 진심 어린 사과를 했는가?
+
+3. 상담진행 능력 (60점)
+    가. 효율성
+    고객의 질문 의도(Needs)를 신속하고 정확하게 파악하여 대화를 효율적으로 이끌었는가?
+    고객이 이미 제공한 정보를 다시 묻는 등 비효율적인 대화는 없었는가?
+
+    나. 정확성
+    상품, 규정, 절차 등을 논리정연하고 정확하게 설명했는가?
+    고객에게 안내한 정보나 시스템에 처리한 업무가 정확했는가?
+
+    다. 적극성
+    고객의 질문에 단답형으로 응대하는 것을 넘어, 고객 상황에 맞는 정보를 구체적으로 설명했는가?
+    고객의 요청을 수용할 수 없는 경우, 단순히 '불가' 통보 대신 가능한 다른 방법을 적극적으로 찾아 대안을 제시했는가?
+
+    라. 필수 안내 (SOP 준수)
+    상담 과정에서 표준 업무 절차(SOP)를 준수했는가?
+    예약/변경/취소 시, 착오 방지를 위해 날짜(월/일), 시간, 출발/도착지, 좌석 등급 등을 명확하게 재확인했는가?
+
+    마. 정보 보호
+    '사전 분석' 단계에서 정보 보안 절차가 필요하다고 판단된 경우, 정해진 절차에 따라 본인 또는 대리인 위임 여부를 철저히 확인했는가?
+    스카이패스 정보 조회 시, 회원 본인 여부를 2단계 인증 절차(예: 회원번호+성명+생년월일 확인 후, 주소/연락처 추가 확인)에 따라 정확히 확인했는가?`;
+
+/**
+ * 출력 형식 (고정 - 변경되지 않음)
+ */
+export const OUTPUT_FORMAT = `** 출력 형식 (Output Format)
+위 [평가 기준]에 따라 분석한 결과를 다음 형식에 맞춰 보고서로 작성해 주세요.
+[상담콜 품질 평가 보고서]
+
+1. 종합 평가
+총점: 100점 만점에 [ 점]
+요약: (상담 내용에 대한 전반적인 평가와 핵심 강점 및 개선점을 1~2 문장으로 요약)
+정보 보안 절차 필요 문의 유형: (0. 사전 분석 단계에서 식별된 문의 유형 기재)
+
+2. 항목별 상세 분석
+    1) 인사 및 관계 형성 (X/10점)
+    잘한 점: (콜 내용에서 구체적인 발화 예시 인용)
+    개선할 점: (콜 내용에서 구체적인 발화 예시 인용 및 매뉴얼에 따른 개선 방안 제시)
+
+    2) 서비스 마인드 (X/30점)
+    잘한 점: (친절도, 정중함 측면에서 구체적인 발화 예시 인용)
+    개선할 점: (친절도, 정중함 측면에서 아쉬운 발화 예시를 인용하고, 매뉴얼의 '권장 표현'을 바탕으로 개선 방안 제시. 특히, 고객 발화 중단 사례가 있다면 해당 시간과 내용을 명시)
+
+    3) 상담진행 능력 (X/60점)
+    잘한 점: (효율성, 정확성, 적극성, 필수 안내, 정보 보호 측면에서 우수한 사례 인용)
+    개선할 점: (각 항목별로 미흡했던 부분을 구체적인 사례와 함께 지적하고, 개선 방안 제시)
+
+3. 총평 및 코칭 제언 (상담사의 핵심 강점을 칭찬하고, 가장 시급하게 개선해야 할 항목 1~2가지를 중심으로 구체적인 성장 가이드를 제시합니다.)`;
+
+/**
+ * Cached Content용 전체 컨텍스트 반환
+ * Context Caching API에 전달될 내용
+ */
+export function getCachedContent(finalPrompt: string): string {
+  return `
+${getSystemInstruction()}
+${finalPrompt}`;
+}
+
+/**
+ * Cached Content 설정 옵션
+ */
+export interface CachedContentConfig {
+  /** 캐시 TTL (초 단위, 기본값: 3600초 = 1시간) */
+  ttlSeconds?: number;
+  /** 캐시 표시 이름 */
+  displayName?: string;
+}
+
+/**
+ * Cached Content 메타데이터 반환
+ */
+export function getCachedContentConfig(): CachedContentConfig {
+  return {
+    ttlSeconds: 3600, // 1시간
+    displayName: 'qm-automation-evaluation-criteria',
+  };
+}
+
+export function getSystemInstruction(): string {
+  return `${INPUT_DATA_FORMAT}
+
+  ${TASK_DESCRIPTION}
+
+  ${EVALUATION_CRITERIA}
+
+  ${OUTPUT_FORMAT}`;
+}
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/post-qa-bulk-feedback.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmAutomationRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+import {
+  BulkActionResultItem,
+  BulkQAFeedbackRequestDTO,
+  EvaluationCategory,
+  EvaluationStateItem,
+  EvaluationStateStatus,
+} from '../dto/qm-evaluation-state.dto';
+
+const VALID_CATEGORIES: EvaluationCategory[] = [
+  'accuracy',
+  'efficiency',
+  'greeting',
+  'languageUse',
+  'proactivity',
+  'speed',
+  'voiceProduction',
+  'waitManagement',
+];
+
+/**
+ * QA 벌크 피드백 요청 핸들러
+ * POST /api/agent/v1/qm-automation/qa-bulk-feedback
+ *
+ * QA가 여러 상담원 이의제기에 대해 한 번에 수용 또는 거절을 결정합니다.
+ * - 각 카테고리별로 순차 처리하여 부분 성공/실패를 지원
+ * - 현재 상태가 AGENT_OBJECTION_REQUESTED여야 피드백 가능
+ * - 수용(accept) 시 QA_AGENT_OBJECTION_ACCEPTED 상태로 변경, evaluationStatus도 PASS로 변경
+ * - 거절(reject) 시 QA_AGENT_OBJECTION_REJECTED 상태로 변경
+ */
+export const postQABulkFeedback = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    if (!event.body) {
+      throw new BadRequestError('Request body is required');
+    }
+
+    const body: BulkQAFeedbackRequestDTO = JSON.parse(event.body);
+    const { requestId, feedbacks, userId, userName } = body;
+
+    // 필수 필드 검증
+    if (!requestId) {
+      throw new BadRequestError('requestId is required');
+    }
+    if (!userId || userId.trim() === '') {
+      throw new BadRequestError('userId is required');
+    }
+    if (!feedbacks || !Array.isArray(feedbacks) || feedbacks.length === 0) {
+      throw new BadRequestError('feedbacks array is required and must not be empty');
+    }
+
+    // 피드백 배열 검증
+    for (let i = 0; i < feedbacks.length; i++) {
+      const feedback = feedbacks[i];
+
+      if (!feedback.category) {
+        throw new BadRequestError(`feedbacks[${i}].category is required`);
+      }
+
+      if (!VALID_CATEGORIES.includes(feedback.category)) {
+        throw new BadRequestError(
+          `feedbacks[${i}].category is invalid: ${feedback.category}. Valid categories are: ${VALID_CATEGORIES.join(', ')}`,
+        );
+      }
+
+      if (!feedback.action || (feedback.action !== 'accept' && feedback.action !== 'reject')) {
+        throw new BadRequestError(
+          `feedbacks[${i}].action is invalid: ${feedback.action}. Valid actions are: accept, reject`,
+        );
+      }
+
+      if (!feedback.reason || feedback.reason.trim() === '') {
+        throw new BadRequestError(`feedbacks[${i}].reason is required`);
+      }
+    }
+
+    logger.info(
+      `[postQABulkFeedback] Processing bulk QA feedback for requestId: ${requestId}, feedbacksCount: ${feedbacks.length}`,
+    );
+
+    // 아이템 조회
+    const item = await qmAutomationRepository.getByRequestId(requestId);
+    if (!item) {
+      throw new NotFoundError(`Request not found: ${requestId}`);
+    }
+
+    // 각 피드백에 대해 검증 및 상태 객체 생성
+    const categoryUpdates: Array<{
+      category: EvaluationCategory;
+      newState: EvaluationStateItem;
+    }> = [];
+    const validationResults: BulkActionResultItem[] = [];
+
+    for (const feedback of feedbacks) {
+      try {
+        // 현재 대항목 상태 조회
+        const currentState = qmAutomationRepository.getCategoryCurrentState(
+          item,
+          feedback.category,
+        );
+        if (!currentState) {
+          validationResults.push({
+            category: feedback.category,
+            success: false,
+            error: `Category ${feedback.category} does not have evaluation state`,
+          });
+          continue;
+        }
+
+        // QA 피드백 가능한 상태인지 검증 (AGENT_OBJECTION_REQUESTED 상태에서만 피드백 가능)
+        if (currentState.status !== 'AGENT_OBJECTION_REQUESTED') {
+          validationResults.push({
+            category: feedback.category,
+            success: false,
+            error: `Cannot provide QA feedback. Current status is ${currentState.status}. QA feedback is only allowed when status is AGENT_OBJECTION_REQUESTED`,
+          });
+          continue;
+        }
+
+        // 새로운 상태 결정
+        const newStatus: EvaluationStateStatus =
+          feedback.action === 'accept'
+            ? 'QA_AGENT_OBJECTION_ACCEPTED'
+            : 'QA_AGENT_OBJECTION_REJECTED';
+
+        // 수용 시 evaluationStatus를 PASS로 변경
+        const newEvaluationStatus =
+          feedback.action === 'accept' ? 'PASS' : currentState.evaluationStatus;
+
+        // 새로운 상태 생성
+        const newState: EvaluationStateItem = {
+          seq: currentState.seq + 1,
+          status: newStatus,
+          statusReason: feedback.reason,
+          evaluationStatus: newEvaluationStatus,
+          updatedAt: new Date().toISOString(),
+          updatedBy: `${userName}`,
+        };
+
+        categoryUpdates.push({
+          category: feedback.category,
+          newState,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        validationResults.push({
+          category: feedback.category,
+          success: false,
+          error: errorMessage,
+        });
+      }
+    }
+
+    // 벌크 업데이트 실행 (검증 통과한 항목만)
+    let bulkResults: BulkActionResultItem[] = [];
+    if (categoryUpdates.length > 0) {
+      const repositoryResults = await qmAutomationRepository.bulkUpdateEvaluationStates(
+        requestId,
+        categoryUpdates,
+      );
+
+      bulkResults = repositoryResults.map((result) => ({
+        category: result.category,
+        success: result.success,
+        newStatus: result.newStatus,
+        error: result.error,
+      }));
+    }
+
+    // 검증 실패 결과와 업데이트 결과 병합
+    const allResults = [...validationResults, ...bulkResults];
+
+    // 최종 상태 조회
+    const finalItem = await qmAutomationRepository.getByRequestId(requestId);
+    if (!finalItem) {
+      throw new Error(`Request not found after bulk update: ${requestId}`);
+    }
+
+    const successCount = allResults.filter((r) => r.success).length;
+    const failureCount = allResults.filter((r) => !r.success).length;
+
+    logger.info(
+      `[postQABulkFeedback] Completed bulk QA feedback for requestId: ${requestId}, success: ${successCount}, failure: ${failureCount}`,
+    );
+
+    return AlbResponse.success(200, {
+      requestId,
+      totalFeedbacks: feedbacks.length,
+      successCount,
+      failureCount,
+      results: allResults,
+      qmEvaluationStatus: finalItem.qmEvaluationStatus || 'UNKNOWN',
+      qaFeedbackYN: finalItem.qaFeedbackYN || 'N',
+      agentConfirmYN: finalItem.agentConfirmYN || 'N',
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[postQABulkFeedback] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[postQABulkFeedback] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[postQABulkFeedback] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/post-subitem.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+import { EvaluationSubItem } from '@/domain/models/qm-evaluation-form';
+
+import { CreateSubItemRequestDTO } from '../dto/qm-evaluation-form.dto';
+
+/**
+ * Path에서 formId와 categoryId 추출
+ * /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems
+ */
+const extractIdsFromPath = (path: string): { formId: string; categoryId: string } | null => {
+  const match = path.match(
+    /\/api\/agent\/v1\/qm-evaluation-form\/([^/]+)\/categories\/([^/]+)\/subitems$/,
+  );
+  return match ? { formId: match[1], categoryId: match[2] } : null;
+};
+
+/**
+ * 소항목 추가/수정 핸들러 (Upsert)
+ * POST /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems
+ * Body:
+ *   - subItemId: string (required)
+ *   - subItemName: string (required)
+ *   - displayOrder: number (required)
+ *   - evaluationCriteria: EvaluationCriterion[] (required)
+ *   - outputJsonSchema: object (optional)
+ */
+export const postSubItem = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const ids = extractIdsFromPath(event.path);
+
+    if (!ids) {
+      throw new BadRequestError('formId and categoryId are required in path');
+    }
+
+    const { formId, categoryId } = ids;
+
+    if (!event.body) {
+      throw new BadRequestError('Request body is required');
+    }
+
+    const body: CreateSubItemRequestDTO = JSON.parse(event.body);
+
+    // 필수 필드 검증
+    if (!body.subItemId || body.subItemId.trim() === '') {
+      throw new BadRequestError('subItemId is required');
+    }
+    if (!body.subItemName || body.subItemName.trim() === '') {
+      throw new BadRequestError('subItemName is required');
+    }
+    if (body.displayOrder === undefined || body.displayOrder === null) {
+      throw new BadRequestError('displayOrder is required');
+    }
+    if (!body.evaluationCriteria || !Array.isArray(body.evaluationCriteria)) {
+      throw new BadRequestError('evaluationCriteria must be an array');
+    }
+
+    logger.info(`[postSubItem] Upserting sub-item: ${formId}/${categoryId}/${body.subItemId}`);
+
+    // 폼 존재 확인
+    const form = await qmEvaluationFormRepository.getFormById(formId);
+    if (!form) {
+      throw new NotFoundError(`Form not found: ${formId}`);
+    }
+
+    // 카테고리 존재 확인
+    const category = await qmEvaluationFormRepository.getCategoryById(formId, categoryId);
+    if (!category) {
+      throw new NotFoundError(`Category not found: ${formId}/${categoryId}`);
+    }
+
+    const subItem: EvaluationSubItem = {
+      subItemId: body.subItemId.trim(),
+      subItemName: body.subItemName.trim(),
+      displayOrder: body.displayOrder,
+      evaluationCriteria: body.evaluationCriteria.map((criteria) => ({
+        criteriaId: criteria.criteriaId,
+        description: criteria.description,
+        details: criteria.details,
+        passCondition: criteria.passCondition,
+        failCondition: criteria.failCondition,
+      })),
+      outputJsonSchema: body.outputJsonSchema,
+    };
+
+    await qmEvaluationFormRepository.upsertSubItem(formId, categoryId, subItem);
+
+    // 폼 버전 업데이트
+    const now = new Date().toISOString();
+    const newVersion = qmEvaluationFormRepository.incrementVersion(form.version);
+    await qmEvaluationFormRepository.updateForm(formId, {
+      version: newVersion,
+      updatedAt: now,
+    });
+
+    logger.info(
+      `[postSubItem] Sub-item upserted successfully: ${formId}/${categoryId}/${body.subItemId}`,
+    );
+
+    return AlbResponse.success(201, {
+      formId,
+      categoryId,
+      subItem,
+      message: 'Sub-item created/updated successfully',
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[postSubItem] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[postSubItem] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else if (error instanceof SyntaxError) {
+      logger.error(`[postSubItem] Invalid JSON: ${error.message}`);
+      return AlbResponse.fail(400, 'Invalid JSON in request body');
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[postSubItem] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/get-qm-automation-status.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmAutomationRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+/**
+ * QM Automation 상세 조회 핸들러
+ * GET /api/agent/v1/qm-automation/status?requestId=xxx
+ */
+export const getQMAutomationStatus = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const requestId = event.queryStringParameters?.requestId;
+
+    if (!requestId) {
+      throw new BadRequestError('requestId is required');
+    }
+
+    logger.info(`[getQMAutomationStatus] Checking status for requestId: ${requestId}`);
+
+    const item = await qmAutomationRepository.getByRequestId(requestId);
+
+    if (!item) {
+      throw new NotFoundError(`Request not found: ${requestId}`);
+    }
+
+    logger.info(`[getQMAutomationStatus] Status: ${item.status}`);
+
+    return AlbResponse.success(200, {
+      requestId: item.requestId,
+      contactId: item.contactId,
+      agentId: item.agentId,
+      agentUserName: item.agentUserName,
+      agentCenter: item.agentCenter,
+      agentUserFullName: item.agentUserFullName,
+      status: item.status,
+      createdAt: item.sk,
+      completedAt: item.completedAt,
+      qaFeedbackYN: item.qaFeedbackYN,
+      qaAgentUserId: item.qaAgentUserId,
+      qaAgentUserName: item.qaAgentUserName,
+      qaAgentUserFullName: item.qaAgentUserFullName,
+      agentConfirmYN: item.agentConfirmYN,
+      qmEvaluationStatus: item.qmEvaluationStatus,
+      connectedToAgentTimestamp: item.connectedToAgentTimestamp,
+      result: item.result,
+      input: item.input,
+      error: item.error,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[getQMAutomationStatus] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[getQMAutomationStatus] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[getQMAutomationStatus] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/post-evaluation-form.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+import { v4 as uuidv4 } from 'uuid';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+import { QmEvaluationFormRecord } from '@/domain/models/qm-evaluation-form';
+
+import { CreateFormRequestDTO } from '../dto/qm-evaluation-form.dto';
+
+/**
+ * 새 평가 양식 생성 핸들러
+ * POST /api/agent/v1/qm-evaluation-form
+ * Body:
+ *   - formName: string (required)
+ *   - description: string (optional)
+ *   - status: ACTIVE | INACTIVE | DRAFT (optional, default: DRAFT)
+ */
+export const postEvaluationForm = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    if (!event.body) {
+      throw new BadRequestError('Request body is required');
+    }
+
+    const body: CreateFormRequestDTO = JSON.parse(event.body);
+
+    if (!body.formName || body.formName.trim() === '') {
+      throw new BadRequestError('formName is required');
+    }
+
+    const now = new Date().toISOString();
+    const formId = uuidv4();
+
+    const formRecord: QmEvaluationFormRecord = {
+      pk: `QM_EVAL_FORM#${formId}`,
+      sk: 'METADATA',
+      formId,
+      formName: body.formName.trim(),
+      description: body.description?.trim(),
+      version: '1.0.0',
+      status: body.status || 'DRAFT',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    logger.info(`[postEvaluationForm] Creating form: ${formId}`);
+
+    await qmEvaluationFormRepository.createForm(formRecord);
+
+    logger.info(`[postEvaluationForm] Form created successfully: ${formId}`);
+
+    return AlbResponse.success(201, {
+      formId: formRecord.formId,
+      formName: formRecord.formName,
+      description: formRecord.description,
+      version: formRecord.version,
+      status: formRecord.status,
+      createdAt: formRecord.createdAt,
+      updatedAt: formRecord.updatedAt,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[postEvaluationForm] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof SyntaxError) {
+      logger.error(`[postEvaluationForm] Invalid JSON: ${error.message}`);
+      return AlbResponse.fail(400, 'Invalid JSON in request body');
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[postEvaluationForm] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/post-qm-automation.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { Contact } from '@aws-sdk/client-connect';
+import { ALBEvent, ALBResult } from 'aws-lambda';
+import { v4 as uuidv4 } from 'uuid';
+
+import { QMUser } from '@/adapters/out/gemini/connect';
+import { GeminiConnectAdapter } from '@/adapters/out/gemini/connect/connect-impl';
+import { GeminiLambdaAdapter } from '@/adapters/out/gemini/lambda/lambda-impl';
+import { qmAutomationRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+import {
+  FunctionCallProcessor,
+  extractQmPromptParams,
+  fetchTranscript,
+  getAudioPresignedUrl,
+  handleError,
+  mergeFunctionCallResults,
+} from '@/usecases/gemini';
+
+import {
+  RequestBody,
+  ToolProcessingResult,
+  WorkerInput,
+  WorkerLambdaPayload,
+} from '../dto/gemini.dto';
+import {
+  filterEnabledTools,
+  getAvailableTools,
+  getEnabledToolsFromDefinitions,
+  validateToolDefinitions,
+} from '../dto/tool-definitions';
+import { getSystemInstruction } from '../prompts/cached-content';
+import { getQmDynamicPrompt } from '../prompts/qm-automation-prompt';
+import {
+  getCustomToolRetrieverPrompt,
+  getToolRetrieverPrompt,
+} from '../prompts/tool-retriever-prompt';
+
+const INVOKED_BY = process.env.INVOKED_BY || 'AWS_LAMBDA_INVOKED';
+const TTL_SECONDS = 3600; // 1시간
+const TOOL_GEMINI_MODEL = process.env.TOOL_GEMINI_MODEL_NAME || 'gemini-2.5-flash';
+const GEMINI_CACHE_TTL_SECONDS = 3600; // 1시간
+
+// Function Call 처리를 위한 어댑터 및 UseCase 초기화
+const connectAdapter = new GeminiConnectAdapter();
+const geminiLambdaAdapter = new GeminiLambdaAdapter();
+const functionCallProcessor = new FunctionCallProcessor(connectAdapter, geminiLambdaAdapter);
+
+/**
+ * SAM 환경 여부 확인
+ */
+const isSamInvoked = (): boolean => INVOKED_BY === 'SAM_INVOKED';
+
+/**
+ * Worker Lambda 페이로드 생성
+ */
+function createWorkerPayload(
+  requestId: string,
+  createdAt: string,
+  input: WorkerInput,
+  invocationType: 'Event' | 'RequestResponse',
+): WorkerLambdaPayload {
+  const basePayload: WorkerLambdaPayload = { input, invocationType };
+
+  return {
+    pk: `requestId#${requestId}`,
+    sk: createdAt,
+    ...basePayload,
+  };
+}
+
+/**
+ * Tool 정의 결정 (기본 Tool 또는 커스텀 Tool)
+ */
+function resolveToolDefinitions(body: RequestBody): {
+  availableTools: ReturnType<typeof getAvailableTools>;
+  useDefaultToolDefinitions: boolean;
+} {
+  const useDefaultToolDefinitions = body.useDefaultToolDefinitions ?? true;
+
+  if (useDefaultToolDefinitions) {
+    return { availableTools: getAvailableTools(), useDefaultToolDefinitions };
+  }
+
+  const validationResult = validateToolDefinitions(body.toolDefinitions);
+  if (!validationResult.isValid || !body.toolDefinitions) {
+    throw new BadRequestError(`Invalid toolDefinitions: ${validationResult.errors.join('; ')}`);
+  }
+
+  logger.debug(
+    `[postQMAutomation] Using custom toolDefinitions, ${JSON.stringify(body.toolDefinitions)}`,
+  );
+
+  return { availableTools: body.toolDefinitions, useDefaultToolDefinitions };
+}
+
+/**
+ * Tool 프롬프트 생성
+ */
+function generateToolPrompt(
+  transcriptWithoutMetadata: string,
+  availableTools: ReturnType<typeof getAvailableTools>,
+  useDefaultToolDefinitions: boolean,
+): string {
+  if (useDefaultToolDefinitions) {
+    const enabledTools = getEnabledToolsFromDefinitions(availableTools);
+    return getToolRetrieverPrompt(transcriptWithoutMetadata, enabledTools);
+  }
+
+  return getCustomToolRetrieverPrompt(transcriptWithoutMetadata, availableTools);
+}
+
+/**
+ * Tool 호출 및 Function Call 처리
+ */
+async function processToolCalls(
+  body: RequestBody,
+  transcriptWithoutMetadata: string,
+  contact: Contact | undefined,
+  agentUser?: QMUser,
+  qaAgentUser?: QMUser,
+): Promise<ToolProcessingResult> {
+  if (!body.useTools) {
+    return {};
+  }
+
+  // Tool 정의 결정
+  const { availableTools, useDefaultToolDefinitions } = resolveToolDefinitions(body);
+  const filteredTools = filterEnabledTools(availableTools);
+
+  if (filteredTools.length === 0) {
+    logger.debug('[postQMAutomation] No enabled tools, skipping tool processing');
+    return {};
+  }
+
+  // Tool 프롬프트 생성
+  const toolPrompt = generateToolPrompt(
+    transcriptWithoutMetadata,
+    availableTools,
+    useDefaultToolDefinitions,
+  );
+
+  if (!toolPrompt) {
+    logger.debug('[postQMAutomation] Tool prompt is empty, skipping tool processing');
+    return {};
+  }
+
+  logger.debug(`[postQMAutomation] Tool prompt generated, length: ${toolPrompt.length}`);
+
+  // Worker 페이로드 구성
+  const toolWorkerInput: WorkerInput = {
+    action: 'prompt',
+    prompt: toolPrompt,
+    model: TOOL_GEMINI_MODEL,
+    streaming: body.streaming ?? false,
+    contactId: body.contactId,
+    useTools: true,
+    useThinking: body.useThinking,
+    thinkingBudget: body.thinkingBudget,
+    tools: filteredTools,
+    type: 'Tool_Retriever',
+    useAudioAnalysis: false,
+  };
+
+  const toolWorkerRequestId = uuidv4();
+  const toolWorkerCreatedAt = new Date().toISOString();
+  const toolWorkerTtl = Math.floor(Date.now() / 1000) + TTL_SECONDS;
+
+  const toolWorkerPayload = createWorkerPayload(
+    toolWorkerRequestId,
+    toolWorkerCreatedAt,
+    toolWorkerInput,
+    'RequestResponse',
+  );
+
+  // SAM Invoke일때만 DynamoDB에 상태 저장
+  if (isSamInvoked()) {
+    logger.info('[postQMAutomation] SAM_INVOKED detected, save tool worker status.');
+    await qmAutomationRepository.saveStatus(
+      toolWorkerRequestId,
+      contact ?? {},
+      'PENDING',
+      toolWorkerInput,
+      toolWorkerCreatedAt,
+      toolWorkerTtl,
+      agentUser ?? {},
+      qaAgentUser ?? {},
+    );
+  }
+
+  const toolResponse = await geminiLambdaAdapter.invokeWorkerLambdaSync(toolWorkerPayload);
+  logger.info(`[postQMAutomation] Tool response : ${JSON.stringify(toolResponse)}`);
+
+  // Function Calls 처리
+  if (!toolResponse.parsedBody?.functionCalls) {
+    return {};
+  }
+
+  const toolFunctionCalls = toolResponse.parsedBody.functionCalls;
+
+  // contactId가 있을 경우 Function Calls 처리 및 DynamoDB 업데이트
+  if (body.contactId) {
+    const functionCallResults = await functionCallProcessor.processFunctionCalls(
+      toolFunctionCalls,
+      body.contactId,
+    );
+
+    const functionCallsWithResults = mergeFunctionCallResults(
+      toolFunctionCalls,
+      functionCallResults,
+    );
+
+    if (isSamInvoked()) {
+      await qmAutomationRepository.updateFunctionCallResults(
+        toolWorkerPayload.pk ?? '',
+        toolWorkerPayload.sk ?? '',
+        functionCallsWithResults,
+      );
+    }
+
+    return {
+      functionCalls: toolFunctionCalls,
+      functionCallResults,
+      toolWorkerRequestId,
+      tokenUsage: {
+        inputTokens: toolResponse.parsedBody.inputTokens,
+        outputTokens: toolResponse.parsedBody.outputTokens,
+        totalTokens: toolResponse.parsedBody.totalTokens,
+      },
+      processingTime: toolResponse.parsedBody.processingTime,
+      geminiModel: toolResponse.parsedBody.geminiModel,
+      toolPrompt,
+      thinkingText: toolResponse.parsedBody.thinkingText,
+    };
+  }
+
+  return { functionCalls: toolFunctionCalls };
+}
+
+/**
+ * QM 분석 요청 처리 및 Worker Lambda 호출
+ */
+async function processQMRequest(
+  body: RequestBody,
+  transcriptWithMetadata: string,
+  toolResult?: ToolProcessingResult,
+  contact?: Contact,
+  contactAttributes?: Record<string, string>,
+  agentUser?: QMUser,
+  qaAgentUser?: QMUser,
+): Promise<{ requestId: string }> {
+  // Tool 결과에서 QmPromptParams 추출
+  const qmPromptParams = extractQmPromptParams(toolResult?.functionCallResults);
+
+  // Context Caching 사용 여부에 따라 프롬프트 구성
+  const useContextCaching = body.useContextCaching ?? false;
+
+  const useAudioAnalysis = body.useAudioAnalysis ?? false;
+
+  // Audio wav presigned URL, key 반환
+  if (useAudioAnalysis && body.contactId) {
+    const audioPresignedUrlResult = await getAudioPresignedUrl(contact ?? {});
+    if (audioPresignedUrlResult != null) {
+      body.audioPresignedUrl = audioPresignedUrlResult.presignedUrl;
+
+      body.audioOriginalKey = audioPresignedUrlResult.originalKey;
+    }
+  }
+
+  let finalPrompt: string;
+  let cachedContent: string | undefined;
+
+  if (useContextCaching && body.useDefaultPrompt) {
+    // Context Caching 모드: 동적 프롬프트만 사용
+    // const dynamicPrompt = getQmCachedDynamicPrompt(qmPromptParams);
+    // finalPrompt = buildFinalPrompt(dynamicPrompt, transcriptWithMetadata);
+
+    // cachedContent = getCachedContent(finalPrompt);
+
+    // logger.debug('[postQMAutomation] Using Context Caching mode', {
+    //   dynamicPromptLength: dynamicPrompt.length,
+    //   cachedContentLength: cachedContent.length,
+    // });
+
+    logger.info(
+      '[postQMAutomation] Context Caching mode is enabled, but getQmCachedDynamicPrompt is deprecated. Using getQmDynamicPrompt instead.',
+    );
+    return { requestId: 'N/A' };
+  } else {
+    // 전체 프롬프트
+    qmPromptParams.transcript = transcriptWithMetadata;
+    qmPromptParams.useDefaultPrompt = body.useDefaultPrompt;
+    if (!body.useDefaultPrompt) {
+      qmPromptParams.customPrompt = body.prompt;
+    }
+    finalPrompt = getQmDynamicPrompt(qmPromptParams, contactAttributes);
+  }
+
+  if (!finalPrompt) {
+    throw new BadRequestError(
+      'No prompt available (transcript fetch failed and no prompt provided)',
+    );
+  }
+
+  let workerInput: WorkerInput = {
+    action: 'prompt',
+    prompt: finalPrompt,
+    model: body.model,
+    streaming: body.streaming ?? false,
+    contactId: body.contactId,
+    useTools: false,
+    useThinking: body.useThinking,
+    thinkingBudget: body.thinkingBudget,
+    useContextCaching: body.useContextCaching,
+    useAudioAnalysis: body.useAudioAnalysis,
+    maxOutputTokens: body.maxOutputTokens,
+    temperature: body.temperature,
+    type: 'QM_Automation',
+  };
+
+  if (toolResult) {
+    workerInput = { ...workerInput, toolResult };
+  }
+
+  if (useContextCaching) {
+    workerInput = {
+      ...workerInput,
+      systemInstruction: getSystemInstruction(),
+      cachedContent,
+      cachedContentTtl: GEMINI_CACHE_TTL_SECONDS,
+    };
+  }
+
+  if (useAudioAnalysis) {
+    workerInput = {
+      ...workerInput,
+      audioPresignedUrl: body.audioPresignedUrl,
+      audioOriginalKey: body.audioOriginalKey,
+    };
+  }
+
+  const requestId = uuidv4();
+  const createdAt = new Date().toISOString();
+  const ttl = Math.floor(Date.now() / 1000) + TTL_SECONDS;
+
+  const workerPayload = createWorkerPayload(requestId, createdAt, workerInput, 'Event');
+
+  logger.debug(`[postQMAutomation] Creating request: ${requestId}`, {
+    workerPayload: JSON.stringify(workerPayload),
+  });
+
+  // DynamoDB 저장 및 Worker 호출
+  await qmAutomationRepository.saveStatus(
+    requestId,
+    contact ?? {},
+    'PENDING',
+    workerInput,
+    createdAt,
+    ttl,
+    agentUser ?? {},
+    qaAgentUser ?? {},
+  );
+  await geminiLambdaAdapter.invokeWorkerLambdaAsync(workerPayload);
+
+  return { requestId };
+}
+
+/**
+ * 요청 Body 유효성 검증
+ */
+function validateRequestBody(event: ALBEvent): RequestBody {
+  if (!event.body) {
+    throw new BadRequestError('Request body is missing');
+  }
+
+  const body: RequestBody = JSON.parse(event.body);
+
+  if (!body.prompt && !body.contactId) {
+    throw new BadRequestError('Either prompt or contactId is required');
+  }
+
+  return body;
+}
+
+/**
+ * 이메일 형식인지 확인하는 헬퍼 함수
+ */
+function isEmail(value: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(value);
+}
+
+/**
+ * QM Automation 요청 처리 핸들러
+ */
+export const postQMAutomation = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    // 1. 요청 Body 유효성 검증
+    const body = validateRequestBody(event);
+
+    // 2. Contact 조회
+    const contact: Contact | undefined = await connectAdapter.getContact(body.contactId ?? '');
+    const contactAttributes: Record<string, string> = await connectAdapter.getContactAttributes(
+      body.contactId ?? '',
+    );
+
+    // Agent 상세 정보 조회
+    const agentUser = await connectAdapter.getAgentUser(contact?.AgentInfo?.Id || '');
+
+    // QA Agent User ID 처리 - 이메일인 경우 Agent ID로 변환
+    let qaAgentUserId = body.qaAgentUserId ?? '';
+    if (qaAgentUserId && isEmail(qaAgentUserId)) {
+      logger.info(
+        `[postQMAutomation] qaAgentUserId is email format, searching for Agent ID: ${qaAgentUserId}`,
+      );
+      const foundUserId = await connectAdapter.searchAgentIdByEmail(qaAgentUserId);
+      if (foundUserId) {
+        qaAgentUserId = foundUserId;
+        logger.info(
+          `[postQMAutomation] Converted email to Agent ID: ${body.qaAgentUserId} -> ${qaAgentUserId}`,
+        );
+      } else {
+        logger.warn(
+          `[postQMAutomation] No Agent ID found for email: ${body.qaAgentUserId}, using original value`,
+        );
+      }
+    }
+
+    // QA 상세 정보 조회
+    const qaAgentUser = await connectAdapter.getAgentUser(qaAgentUserId);
+
+    if (contact?.AgentInfo == null) {
+      logger.warn(`[postQMAutomation] AgentInfo not found for contactId: ${body.contactId}`);
+      return AlbResponse.fail(400, 'AgentInfo not found');
+    }
+
+    // 3. Transcript 조회
+    const transcript =
+      contact && body.contactId
+        ? await fetchTranscript(contact)
+        : { withMetadata: '', withoutMetadata: '' };
+
+    // 4. Tool 호출 및 Function Call 처리
+    const toolResult = await processToolCalls(
+      body,
+      transcript.withoutMetadata,
+      contact,
+      agentUser ?? {},
+    );
+
+    // 5. QM 분석 요청 처리 (Tool 결과를 QM 프롬프트에 적용)
+    const { requestId } = await processQMRequest(
+      body,
+      transcript.withMetadata,
+      toolResult,
+      contact,
+      contactAttributes,
+      agentUser,
+      qaAgentUser,
+    );
+
+    // 6. 응답 반환
+    return AlbResponse.success(202, {
+      requestId,
+      status: 'PENDING',
+      message: 'Request submitted successfully. Poll /status endpoint for results.',
+      ...(toolResult.functionCalls && { toolFunctionCalls: toolResult.functionCalls }),
+    });
+  } catch (error) {
+    return handleError(error);
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/delete-subitem.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+/**
+ * Path에서 formId, categoryId, subItemId 추출
+ * /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems/{subItemId}
+ */
+const extractIdsFromPath = (
+  path: string,
+): { formId: string; categoryId: string; subItemId: string } | null => {
+  const match = path.match(
+    /\/api\/agent\/v1\/qm-evaluation-form\/([^/]+)\/categories\/([^/]+)\/subitems\/([^/]+)$/,
+  );
+  return match ? { formId: match[1], categoryId: match[2], subItemId: match[3] } : null;
+};
+
+/**
+ * 소항목 삭제 핸들러
+ * DELETE /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems/{subItemId}
+ */
+export const deleteSubItem = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const ids = extractIdsFromPath(event.path);
+
+    if (!ids) {
+      throw new BadRequestError('formId, categoryId, and subItemId are required in path');
+    }
+
+    const { formId, categoryId, subItemId } = ids;
+
+    logger.info(`[deleteSubItem] Deleting sub-item: ${formId}/${categoryId}/${subItemId}`);
+
+    // 폼 존재 확인
+    const form = await qmEvaluationFormRepository.getFormById(formId);
+    if (!form) {
+      throw new NotFoundError(`Form not found: ${formId}`);
+    }
+
+    // 카테고리 존재 확인
+    const category = await qmEvaluationFormRepository.getCategoryById(formId, categoryId);
+    if (!category) {
+      throw new NotFoundError(`Category not found: ${formId}/${categoryId}`);
+    }
+
+    // 소항목 존재 확인
+    const subItem = await qmEvaluationFormRepository.getSubItemById(formId, categoryId, subItemId);
+    if (!subItem) {
+      throw new NotFoundError(`Sub-item not found: ${formId}/${categoryId}/${subItemId}`);
+    }
+
+    await qmEvaluationFormRepository.deleteSubItem(formId, categoryId, subItemId);
+
+    // 폼 버전 업데이트
+    const now = new Date().toISOString();
+    const newVersion = qmEvaluationFormRepository.incrementVersion(form.version);
+    await qmEvaluationFormRepository.updateForm(formId, {
+      version: newVersion,
+      updatedAt: now,
+    });
+
+    logger.info(
+      `[deleteSubItem] Sub-item deleted successfully: ${formId}/${categoryId}/${subItemId}`,
+    );
+
+    return AlbResponse.success(200, {
+      message: `Sub-item ${subItemId} deleted successfully`,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[deleteSubItem] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[deleteSubItem] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[deleteSubItem] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/get-evaluation-form.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+import { FormDetailResponseDTO } from '../dto/qm-evaluation-form.dto';
+
+/**
+ * Path에서 formId 추출
+ * /api/agent/v1/qm-evaluation-form/{formId}
+ */
+const extractFormIdFromPath = (path: string): string | null => {
+  const match = path.match(/\/api\/agent\/v1\/qm-evaluation-form\/([^/]+)$/);
+  return match ? match[1] : null;
+};
+
+/**
+ * 특정 평가 양식 상세 조회 핸들러
+ * GET /api/agent/v1/qm-evaluation-form/{formId}
+ */
+export const getEvaluationForm = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const formId = extractFormIdFromPath(event.path);
+
+    if (!formId) {
+      throw new BadRequestError('formId is required in path');
+    }
+
+    logger.info(`[getEvaluationForm] Fetching form: ${formId}`);
+
+    const form = await qmEvaluationFormRepository.getFormById(formId);
+
+    if (!form) {
+      throw new NotFoundError(`Form not found: ${formId}`);
+    }
+
+    const categories = await qmEvaluationFormRepository.getCategories(formId);
+
+    const response: FormDetailResponseDTO = {
+      formId: form.formId,
+      formName: form.formName,
+      description: form.description,
+      version: form.version,
+      status: form.status,
+      categories,
+      createdAt: form.createdAt,
+      updatedAt: form.updatedAt,
+      createdBy: form.createdBy,
+      updatedBy: form.updatedBy,
+    };
+
+    logger.info(`[getEvaluationForm] Found form: ${formId} with ${categories.length} categories`);
+
+    return AlbResponse.success(200, response);
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[getEvaluationForm] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[getEvaluationForm] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[getEvaluationForm] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/get-qm-automation-search.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmAutomationRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+import { decodePercentEncoded } from '@/common/utils/url-utils';
+
+/**
+ * QM Automation 다중 필터 검색 핸들러
+ * GET /api/agent/v1/qm-automation/search?startDate=YYYYMMDD&endDate=YYYYMMDD&startMonth=YYYYMM&endMonth=YYYYMM&qaAgentUserName=xxx&agentUserName=xxx&agentConfirmYN=Y&qaFeedbackYN=N&qmEvaluationStatus=COMPLETED&contactId=xxx&agentCenter=SELRS
+ *
+ * 지원하는 필터 조건:
+ * - startDate: 시작 날짜 (YYYYMMDD 형식) - startMonth/endMonth와 함께 사용 불가
+ * - endDate: 종료 날짜 (YYYYMMDD 형식) - startMonth/endMonth와 함께 사용 불가
+ * - startMonth: 시작 월 (YYYYMM 형식) - startDate/endDate와 함께 사용 불가
+ * - endMonth: 종료 월 (YYYYMM 형식) - startDate/endDate와 함께 사용 불가
+ * - qaAgentUserName: QA 상담원 사용자명
+ * - agentUserName: 상담원 사용자명
+ * - agentCenter: 상담원 센터
+ * - agentConfirmYN: 상담원 확인 여부 (Y/N)
+ * - qaFeedbackYN: QA 피드백 여부 (Y/N)
+ * - qmEvaluationStatus: QM 평가 상태 (COMPLETED, PENDING 등)
+ * - contactId: Contact ID
+ */
+export const getQMAutomationSearch = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const queryParams = event.queryStringParameters || {};
+
+    const filters: {
+      startDate?: string;
+      endDate?: string;
+      startMonth?: string;
+      endMonth?: string;
+      qaAgentUserName?: string;
+      agentUserName?: string;
+      agentCenter?: string;
+      agentConfirmYN?: string;
+      qaFeedbackYN?: string;
+      qmEvaluationStatus?: string;
+      contactId?: string;
+    } = {};
+
+    // 날짜 기간 파라미터 추출 (YYYYMMDD)
+    if (queryParams.startDate) {
+      if (!/^\d{8}$/.test(queryParams.startDate)) {
+        throw new BadRequestError('startDate must be in YYYYMMDD format');
+      }
+      filters.startDate = queryParams.startDate;
+    }
+
+    if (queryParams.endDate) {
+      if (!/^\d{8}$/.test(queryParams.endDate)) {
+        throw new BadRequestError('endDate must be in YYYYMMDD format');
+      }
+      filters.endDate = queryParams.endDate;
+    }
+
+    // startDate와 endDate는 함께 사용해야 함
+    if ((filters.startDate && !filters.endDate) || (!filters.startDate && filters.endDate)) {
+      throw new BadRequestError('startDate and endDate must be used together');
+    }
+
+    // startDate가 endDate보다 이후인 경우 에러
+    if (filters.startDate && filters.endDate && filters.startDate > filters.endDate) {
+      throw new BadRequestError('startDate must be before or equal to endDate');
+    }
+
+    // 월 기간 파라미터 추출 (YYYYMM)
+    if (queryParams.startMonth) {
+      if (!/^\d{6}$/.test(queryParams.startMonth)) {
+        throw new BadRequestError('startMonth must be in YYYYMM format');
+      }
+      filters.startMonth = queryParams.startMonth;
+    }
+
+    if (queryParams.endMonth) {
+      if (!/^\d{6}$/.test(queryParams.endMonth)) {
+        throw new BadRequestError('endMonth must be in YYYYMM format');
+      }
+      filters.endMonth = queryParams.endMonth;
+    }
+
+    // startMonth와 endMonth는 함께 사용해야 함
+    if ((filters.startMonth && !filters.endMonth) || (!filters.startMonth && filters.endMonth)) {
+      throw new BadRequestError('startMonth and endMonth must be used together');
+    }
+
+    // startMonth가 endMonth보다 이후인 경우 에러
+    if (filters.startMonth && filters.endMonth && filters.startMonth > filters.endMonth) {
+      throw new BadRequestError('startMonth must be before or equal to endMonth');
+    }
+
+    // startDate/endDate와 startMonth/endMonth는 동시에 사용 불가
+    if (filters.startDate && filters.startMonth) {
+      throw new BadRequestError('Cannot use startDate/endDate and startMonth/endMonth together');
+    }
+
+    if (queryParams.qaAgentUserName) {
+      filters.qaAgentUserName = decodePercentEncoded(queryParams.qaAgentUserName);
+    }
+
+    if (queryParams.agentUserName) {
+      filters.agentUserName = decodePercentEncoded(queryParams.agentUserName);
+    }
+
+    if (queryParams.agentCenter) {
+      filters.agentCenter = queryParams.agentCenter;
+    }
+
+    if (queryParams.agentConfirmYN) {
+      if (!['Y', 'N'].includes(queryParams.agentConfirmYN)) {
+        throw new BadRequestError('agentConfirmYN must be Y or N');
+      }
+      filters.agentConfirmYN = queryParams.agentConfirmYN;
+    }
+
+    if (queryParams.qaFeedbackYN) {
+      if (!['Y', 'N'].includes(queryParams.qaFeedbackYN)) {
+        throw new BadRequestError('qaFeedbackYN must be Y or N');
+      }
+      filters.qaFeedbackYN = queryParams.qaFeedbackYN;
+    }
+
+    if (queryParams.qmEvaluationStatus) {
+      filters.qmEvaluationStatus = queryParams.qmEvaluationStatus;
+    }
+
+    if (queryParams.contactId) {
+      filters.contactId = queryParams.contactId;
+    }
+
+    logger.info(`[getQMAutomationSearch] Searching with filters: ${JSON.stringify(filters)}`);
+
+    const items = await qmAutomationRepository.listByFilters(filters);
+
+    logger.info(`[getQMAutomationSearch] Found ${items.length} items`);
+
+    const mappedItems = items.map((item) => ({
+      requestId: item.requestId,
+      contactId: item.contactId,
+      agentId: item.agentId,
+      agentUserName: item.agentUserName,
+      agentCenter: item.agentCenter,
+      agentUserFullName: item.agentUserFullName,
+      status: item.status,
+      createdAt: item.sk,
+      completedAt: item.completedAt,
+      qaFeedbackYN: item.qaFeedbackYN,
+      agentConfirmYN: item.agentConfirmYN,
+      qmEvaluationStatus: item.qmEvaluationStatus,
+      geminiModel: item.result?.geminiModel || item.input?.model,
+      processingTime: item.result?.processingTime,
+      connectedToAgentTimestamp: item.connectedToAgentTimestamp,
+      qaAgentUserId: item.qaAgentUserId,
+      qaAgentUserName: item.qaAgentUserName,
+      qaAgentUserFullName: item.qaAgentUserFullName,
+    }));
+
+    return AlbResponse.success(200, {
+      items: mappedItems,
+      filters: filters,
+      count: mappedItems.length,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[getQMAutomationSearch] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    }
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error(`[getQMAutomationSearch] Internal error: ${errorMessage}`);
+    return AlbResponse.fail(500, errorMessage);
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/post-agent-confirm.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmAutomationRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+import {
+  AgentConfirmRequestDTO,
+  EvaluationCategory,
+  EvaluationStateItem,
+  EvaluationStateStatus,
+} from '../dto/qm-evaluation-state.dto';
+
+const VALID_CATEGORIES: EvaluationCategory[] = [
+  'accuracy',
+  'efficiency',
+  'greeting',
+  'languageUse',
+  'proactivity',
+  'speed',
+  'voiceProduction',
+  'waitManagement',
+];
+
+const TERMINAL_STATUSES = new Set<EvaluationStateStatus>([
+  'AGENT_CONFIRM_COMPLETED',
+  'QA_AGENT_OBJECTION_ACCEPTED',
+  'QA_AGENT_OBJECTION_REJECTED',
+]);
+
+/**
+ * 상담원 확인 요청 핸들러
+ * POST /api/agent/v1/qm-automation/confirm
+ *
+ * 상담원이 특정 대항목에 대해 확인(동의)을 요청합니다.
+ * - 현재 상태가 GEMINI_EVAL_COMPLETED여야 확인 가능
+ * - 확인 시 해당 대항목의 states 배열에 AGENT_CONFIRM_COMPLETED 상태 추가
+ * - 모든 대항목이 확인되면 전체 qmEvaluationStatus를 AGENT_CONFIRM_COMPLETED로 업데이트
+ */
+export const postAgentConfirm = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    if (!event.body) {
+      throw new BadRequestError('Request body is required');
+    }
+
+    const body: AgentConfirmRequestDTO = JSON.parse(event.body);
+    const { requestId, category, userId, userName } = body;
+
+    // 필수 필드 검증
+    if (!requestId) {
+      throw new BadRequestError('requestId is required');
+    }
+    if (!category) {
+      throw new BadRequestError('category is required');
+    }
+    if (!userId || userId.trim() === '') {
+      throw new BadRequestError('userId is required');
+    }
+
+    // 유효한 카테고리인지 검증
+    if (!VALID_CATEGORIES.includes(category)) {
+      throw new BadRequestError(
+        `Invalid category: ${category}. Valid categories are: ${VALID_CATEGORIES.join(', ')}`,
+      );
+    }
+
+    logger.info(
+      `[postAgentConfirm] Processing confirmation for requestId: ${requestId}, category: ${category}`,
+    );
+
+    // 아이템 조회
+    const item = await qmAutomationRepository.getByRequestId(requestId);
+    if (!item) {
+      throw new NotFoundError(`Request not found: ${requestId}`);
+    }
+
+    // 현재 대항목 상태 조회
+    const currentState = qmAutomationRepository.getCategoryCurrentState(item, category);
+    if (!currentState) {
+      throw new BadRequestError(`Category ${category} does not have evaluation state`);
+    }
+
+    // 터미널 상태 검증 (이미 완료된 상태는 수정 불가)
+    if (TERMINAL_STATUSES.has(currentState.status)) {
+      throw new BadRequestError(
+        `Cannot modify terminal state. Current status is ${currentState.status}`,
+      );
+    }
+
+    // 확인 가능한 상태인지 검증 (GEMINI_EVAL_COMPLETED 상태에서만 확인 가능)
+    if (currentState.status !== 'GEMINI_EVAL_COMPLETED') {
+      throw new BadRequestError(
+        `Cannot confirm. Current status is ${currentState.status}. Confirmation is only allowed when status is GEMINI_EVAL_COMPLETED`,
+      );
+    }
+
+    // 새로운 상태 생성
+    const newState: EvaluationStateItem = {
+      seq: currentState.seq + 1,
+      status: 'AGENT_CONFIRM_COMPLETED',
+      statusReason: '상담원 확인 완료',
+      evaluationStatus: currentState.evaluationStatus,
+      updatedAt: new Date().toISOString(),
+      updatedBy: `${userName}`,
+    };
+
+    // 상태 업데이트 및 전체 상태 재계산
+    const updatedStatus = await qmAutomationRepository.updateEvaluationStateAndRecalculate(
+      requestId,
+      category,
+      newState,
+    );
+
+    logger.info(
+      `[postAgentConfirm] Successfully processed confirmation for requestId: ${requestId}, category: ${category}`,
+    );
+
+    return AlbResponse.success(200, {
+      requestId,
+      category,
+      newStatus: newState.status,
+      qmEvaluationStatus: updatedStatus.qmEvaluationStatus,
+      qaFeedbackYN: updatedStatus.qaFeedbackYN,
+      agentConfirmYN: updatedStatus.agentConfirmYN,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[postAgentConfirm] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[postAgentConfirm] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[postAgentConfirm] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/post-category.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+import { EvaluationCategory } from '@/domain/models/qm-evaluation-form';
+
+import { CreateCategoryRequestDTO } from '../dto/qm-evaluation-form.dto';
+
+/**
+ * Path에서 formId 추출
+ * /api/agent/v1/qm-evaluation-form/{formId}/categories
+ */
+const extractFormIdFromPath = (path: string): string | null => {
+  const match = path.match(/\/api\/agent\/v1\/qm-evaluation-form\/([^/]+)\/categories$/);
+  return match ? match[1] : null;
+};
+
+/**
+ * 카테고리 추가/수정 핸들러 (Upsert)
+ * POST /api/agent/v1/qm-evaluation-form/{formId}/categories
+ * Body:
+ *   - categoryId: string (required)
+ *   - categoryName: string (required)
+ *   - displayOrder: number (required)
+ *   - enabled: boolean (optional, default: true)
+ *   - weight: number (optional, default: 0)
+ *   - promptSection: string (optional)
+ *   - feedbackMessageTemplate: string (optional)
+ */
+export const postCategory = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const formId = extractFormIdFromPath(event.path);
+
+    if (!formId) {
+      throw new BadRequestError('formId is required in path');
+    }
+
+    if (!event.body) {
+      throw new BadRequestError('Request body is required');
+    }
+
+    const body: CreateCategoryRequestDTO = JSON.parse(event.body);
+
+    // 필수 필드 검증
+    if (!body.categoryId || body.categoryId.trim() === '') {
+      throw new BadRequestError('categoryId is required');
+    }
+    if (!body.categoryName || body.categoryName.trim() === '') {
+      throw new BadRequestError('categoryName is required');
+    }
+    if (body.displayOrder === undefined || body.displayOrder === null) {
+      throw new BadRequestError('displayOrder is required');
+    }
+
+    logger.info(`[postCategory] Upserting category: ${formId}/${body.categoryId}`);
+
+    // 폼 존재 확인
+    const form = await qmEvaluationFormRepository.getFormById(formId);
+    if (!form) {
+      throw new NotFoundError(`Form not found: ${formId}`);
+    }
+
+    const category: EvaluationCategory = {
+      categoryId: body.categoryId.trim(),
+      categoryName: body.categoryName.trim(),
+      displayOrder: body.displayOrder,
+      enabled: body.enabled ?? true,
+      weight: body.weight ?? 0,
+      promptSection: body.promptSection?.trim(),
+      feedbackMessageTemplate: body.feedbackMessageTemplate?.trim(),
+    };
+
+    await qmEvaluationFormRepository.upsertCategory(formId, category);
+
+    // 폼 버전 업데이트
+    const now = new Date().toISOString();
+    const newVersion = qmEvaluationFormRepository.incrementVersion(form.version);
+    await qmEvaluationFormRepository.updateForm(formId, {
+      version: newVersion,
+      updatedAt: now,
+    });
+
+    logger.info(`[postCategory] Category upserted successfully: ${formId}/${body.categoryId}`);
+
+    return AlbResponse.success(201, {
+      formId,
+      category,
+      message: 'Category created/updated successfully',
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[postCategory] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[postCategory] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else if (error instanceof SyntaxError) {
+      logger.error(`[postCategory] Invalid JSON: ${error.message}`);
+      return AlbResponse.fail(400, 'Invalid JSON in request body');
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[postCategory] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/post-agent-bulk-action.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmAutomationRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+import {
+  BulkActionResultItem,
+  BulkAgentActionRequestDTO,
+  EvaluationCategory,
+  EvaluationStateItem,
+  EvaluationStateStatus,
+} from '../dto/qm-evaluation-state.dto';
+
+const VALID_CATEGORIES: EvaluationCategory[] = [
+  'accuracy',
+  'efficiency',
+  'greeting',
+  'languageUse',
+  'proactivity',
+  'speed',
+  'voiceProduction',
+  'waitManagement',
+];
+
+const TERMINAL_STATUSES = new Set<EvaluationStateStatus>([
+  'AGENT_CONFIRM_COMPLETED',
+  'QA_AGENT_OBJECTION_ACCEPTED',
+  'QA_AGENT_OBJECTION_REJECTED',
+]);
+
+/**
+ * 벌크 상담원 액션 요청 핸들러
+ * POST /api/agent/v1/qm-automation/agent-bulk-action
+ *
+ * 상담원이 여러 대항목에 대해 한 번에 확인 또는 이의제기를 요청합니다.
+ * - 각 카테고리별로 순차 처리하여 부분 성공/실패를 지원
+ * - 터미널 상태 검증 및 GEMINI_EVAL_COMPLETED 상태 확인
+ * - 이의제기는 FAIL 결과에 대해서만 가능
+ */
+export const postAgentBulkAction = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    if (!event.body) {
+      throw new BadRequestError('Request body is required');
+    }
+
+    const body: BulkAgentActionRequestDTO = JSON.parse(event.body);
+    const { requestId, actions, userId, userName } = body;
+
+    // 필수 필드 검증
+    if (!requestId) {
+      throw new BadRequestError('requestId is required');
+    }
+    if (!userId || userId.trim() === '') {
+      throw new BadRequestError('userId is required');
+    }
+    if (!actions || !Array.isArray(actions) || actions.length === 0) {
+      throw new BadRequestError('actions array is required and must not be empty');
+    }
+
+    // 액션 배열 검증
+    for (let i = 0; i < actions.length; i++) {
+      const action = actions[i];
+
+      if (!action.category) {
+        throw new BadRequestError(`actions[${i}].category is required`);
+      }
+
+      if (!VALID_CATEGORIES.includes(action.category)) {
+        throw new BadRequestError(
+          `actions[${i}].category is invalid: ${action.category}. Valid categories are: ${VALID_CATEGORIES.join(', ')}`,
+        );
+      }
+
+      if (!action.action || (action.action !== 'confirm' && action.action !== 'object')) {
+        throw new BadRequestError(
+          `actions[${i}].action is invalid: ${action.action}. Valid actions are: confirm, object`,
+        );
+      }
+
+      if (action.action === 'object' && (!action.reason || action.reason.trim() === '')) {
+        throw new BadRequestError(`actions[${i}].reason is required when action is 'object'`);
+      }
+    }
+
+    logger.info(
+      `[postAgentBulkAction] Processing bulk action for requestId: ${requestId}, actionsCount: ${actions.length}`,
+    );
+
+    // 아이템 조회
+    const item = await qmAutomationRepository.getByRequestId(requestId);
+    if (!item) {
+      throw new NotFoundError(`Request not found: ${requestId}`);
+    }
+
+    // 각 액션에 대해 검증 및 상태 객체 생성
+    const categoryUpdates: Array<{
+      category: EvaluationCategory;
+      newState: EvaluationStateItem;
+    }> = [];
+    const validationResults: BulkActionResultItem[] = [];
+
+    for (const action of actions) {
+      try {
+        // 현재 대항목 상태 조회
+        const currentState = qmAutomationRepository.getCategoryCurrentState(item, action.category);
+        if (!currentState) {
+          validationResults.push({
+            category: action.category,
+            success: false,
+            error: `Category ${action.category} does not have evaluation state`,
+          });
+          continue;
+        }
+
+        // 터미널 상태 검증
+        if (TERMINAL_STATUSES.has(currentState.status)) {
+          validationResults.push({
+            category: action.category,
+            success: false,
+            error: `Cannot modify terminal state. Current status is ${currentState.status}`,
+          });
+          continue;
+        }
+
+        // GEMINI_EVAL_COMPLETED 상태 검증
+        if (currentState.status !== 'GEMINI_EVAL_COMPLETED') {
+          validationResults.push({
+            category: action.category,
+            success: false,
+            error: `Cannot perform action. Current status is ${currentState.status}. Action is only allowed when status is GEMINI_EVAL_COMPLETED`,
+          });
+          continue;
+        }
+
+        // 이의제기는 FAIL 결과에 대해서만 가능
+        if (action.action === 'object' && currentState.evaluationStatus !== 'FAIL') {
+          validationResults.push({
+            category: action.category,
+            success: false,
+            error:
+              'Cannot submit objection for PASS result. Objection is only allowed for FAIL results',
+          });
+          continue;
+        }
+
+        // 새로운 상태 생성
+        const newState: EvaluationStateItem = {
+          seq: currentState.seq + 1,
+          status:
+            action.action === 'confirm' ? 'AGENT_CONFIRM_COMPLETED' : 'AGENT_OBJECTION_REQUESTED',
+          statusReason:
+            action.action === 'confirm' ? '상담원 확인 완료' : action.reason || '이의제기',
+          evaluationStatus: currentState.evaluationStatus,
+          updatedAt: new Date().toISOString(),
+          updatedBy: `${userName}`,
+        };
+
+        categoryUpdates.push({
+          category: action.category,
+          newState,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        validationResults.push({
+          category: action.category,
+          success: false,
+          error: errorMessage,
+        });
+      }
+    }
+
+    // 벌크 업데이트 실행 (검증 통과한 항목만)
+    let bulkResults: BulkActionResultItem[] = [];
+    if (categoryUpdates.length > 0) {
+      const repositoryResults = await qmAutomationRepository.bulkUpdateEvaluationStates(
+        requestId,
+        categoryUpdates,
+      );
+
+      bulkResults = repositoryResults.map((result) => ({
+        category: result.category,
+        success: result.success,
+        newStatus: result.newStatus,
+        error: result.error,
+      }));
+    }
+
+    // 검증 실패 결과와 업데이트 결과 병합
+    const allResults = [...validationResults, ...bulkResults];
+
+    // 최종 상태 조회
+    const finalItem = await qmAutomationRepository.getByRequestId(requestId);
+    if (!finalItem) {
+      throw new Error(`Request not found after bulk update: ${requestId}`);
+    }
+
+    const successCount = allResults.filter((r) => r.success).length;
+    const failureCount = allResults.filter((r) => !r.success).length;
+
+    logger.info(
+      `[postAgentBulkAction] Completed bulk action for requestId: ${requestId}, success: ${successCount}, failure: ${failureCount}`,
+    );
+
+    return AlbResponse.success(200, {
+      requestId,
+      totalActions: actions.length,
+      successCount,
+      failureCount,
+      results: allResults,
+      qmEvaluationStatus: finalItem.qmEvaluationStatus || 'UNKNOWN',
+      qaFeedbackYN: finalItem.qaFeedbackYN || 'N',
+      agentConfirmYN: finalItem.agentConfirmYN || 'N',
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[postAgentBulkAction] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[postAgentBulkAction] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[postAgentBulkAction] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/delete-evaluation-form.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+/**
+ * Path에서 formId 추출
+ */
+const extractFormIdFromPath = (path: string): string | null => {
+  const match = path.match(/\/api\/agent\/v1\/qm-evaluation-form\/([^/]+)$/);
+  return match ? match[1] : null;
+};
+
+/**
+ * 평가 양식 삭제 핸들러
+ * DELETE /api/agent/v1/qm-evaluation-form/{formId}
+ */
+export const deleteEvaluationForm = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const formId = extractFormIdFromPath(event.path);
+
+    if (!formId) {
+      throw new BadRequestError('formId is required in path');
+    }
+
+    logger.info(`[deleteEvaluationForm] Deleting form: ${formId}`);
+
+    // 기존 폼 확인
+    const existingForm = await qmEvaluationFormRepository.getFormById(formId);
+    if (!existingForm) {
+      throw new NotFoundError(`Form not found: ${formId}`);
+    }
+
+    await qmEvaluationFormRepository.deleteForm(formId);
+
+    logger.info(`[deleteEvaluationForm] Form deleted successfully: ${formId}`);
+
+    return AlbResponse.success(200, {
+      message: `Form ${formId} deleted successfully`,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[deleteEvaluationForm] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[deleteEvaluationForm] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[deleteEvaluationForm] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/delete-category.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+/**
+ * Path에서 formId와 categoryId 추출
+ * /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}
+ */
+const extractIdsFromPath = (path: string): { formId: string; categoryId: string } | null => {
+  const match = path.match(/\/api\/agent\/v1\/qm-evaluation-form\/([^/]+)\/categories\/([^/]+)$/);
+  return match ? { formId: match[1], categoryId: match[2] } : null;
+};
+
+/**
+ * 카테고리 삭제 핸들러
+ * DELETE /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}
+ */
+export const deleteCategory = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const ids = extractIdsFromPath(event.path);
+
+    if (!ids) {
+      throw new BadRequestError('formId and categoryId are required in path');
+    }
+
+    const { formId, categoryId } = ids;
+
+    logger.info(`[deleteCategory] Deleting category: ${formId}/${categoryId}`);
+
+    // 폼 존재 확인
+    const form = await qmEvaluationFormRepository.getFormById(formId);
+    if (!form) {
+      throw new NotFoundError(`Form not found: ${formId}`);
+    }
+
+    // 카테고리 존재 확인
+    const category = await qmEvaluationFormRepository.getCategoryById(formId, categoryId);
+    if (!category) {
+      throw new NotFoundError(`Category not found: ${formId}/${categoryId}`);
+    }
+
+    await qmEvaluationFormRepository.deleteCategory(formId, categoryId);
+
+    // 폼 버전 업데이트
+    const now = new Date().toISOString();
+    const newVersion = qmEvaluationFormRepository.incrementVersion(form.version);
+    await qmEvaluationFormRepository.updateForm(formId, {
+      version: newVersion,
+      updatedAt: now,
+    });
+
+    logger.info(`[deleteCategory] Category deleted successfully: ${formId}/${categoryId}`);
+
+    return AlbResponse.success(200, {
+      message: `Category ${categoryId} deleted successfully`,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[deleteCategory] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[deleteCategory] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[deleteCategory] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/put-evaluation-form.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+import { UpdateFormRequestDTO } from '../dto/qm-evaluation-form.dto';
+
+/**
+ * Path에서 formId 추출
+ */
+const extractFormIdFromPath = (path: string): string | null => {
+  const match = path.match(/\/api\/agent\/v1\/qm-evaluation-form\/([^/]+)$/);
+  return match ? match[1] : null;
+};
+
+/**
+ * 평가 양식 업데이트 핸들러
+ * PUT /api/agent/v1/qm-evaluation-form/{formId}
+ * Body:
+ *   - formName: string (optional)
+ *   - description: string (optional)
+ *   - status: ACTIVE | INACTIVE | DRAFT (optional)
+ */
+export const putEvaluationForm = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const formId = extractFormIdFromPath(event.path);
+
+    if (!formId) {
+      throw new BadRequestError('formId is required in path');
+    }
+
+    if (!event.body) {
+      throw new BadRequestError('Request body is required');
+    }
+
+    const body: UpdateFormRequestDTO = JSON.parse(event.body);
+
+    logger.info(`[putEvaluationForm] Updating form: ${formId}`);
+
+    // 기존 폼 확인
+    const existingForm = await qmEvaluationFormRepository.getFormById(formId);
+    if (!existingForm) {
+      throw new NotFoundError(`Form not found: ${formId}`);
+    }
+
+    const now = new Date().toISOString();
+    const newVersion = qmEvaluationFormRepository.incrementVersion(existingForm.version);
+
+    await qmEvaluationFormRepository.updateForm(formId, {
+      formName: body.formName?.trim(),
+      description: body.description?.trim(),
+      status: body.status,
+      version: newVersion,
+      updatedAt: now,
+    });
+
+    // 업데이트된 폼 조회
+    const updatedForm = await qmEvaluationFormRepository.getFormById(formId);
+
+    logger.info(`[putEvaluationForm] Form updated successfully: ${formId}`);
+
+    return AlbResponse.success(200, {
+      formId: updatedForm?.formId,
+      formName: updatedForm?.formName,
+      description: updatedForm?.description,
+      version: updatedForm?.version,
+      status: updatedForm?.status,
+      createdAt: updatedForm?.createdAt,
+      updatedAt: updatedForm?.updatedAt,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[putEvaluationForm] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[putEvaluationForm] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else if (error instanceof SyntaxError) {
+      logger.error(`[putEvaluationForm] Invalid JSON: ${error.message}`);
+      return AlbResponse.fail(400, 'Invalid JSON in request body');
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[putEvaluationForm] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/get-evaluation-forms.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+import { QmEvaluationFormStatus } from '@/domain/models/qm-evaluation-form';
+
+import { FormListResponseDTO } from '../dto/qm-evaluation-form.dto';
+
+/**
+ * 전체 평가 양식 목록 조회 핸들러
+ * GET /api/agent/v1/qm-evaluation-form
+ * Query Parameters:
+ *   - status: ACTIVE | INACTIVE | DRAFT (optional)
+ */
+export const getEvaluationForms = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const status = event.queryStringParameters?.status as QmEvaluationFormStatus | undefined;
+
+    logger.info(`[getEvaluationForms] Fetching forms with status: ${status || 'ALL'}`);
+
+    const forms = await qmEvaluationFormRepository.scanForms(status ? { status } : undefined);
+
+    // 각 폼의 카테고리 수 조회
+    const formListItems = await Promise.all(
+      forms.map(async (form) => {
+        const categoryCount = await qmEvaluationFormRepository.getCategoryCount(form.formId);
+        return {
+          formId: form.formId,
+          formName: form.formName,
+          description: form.description,
+          version: form.version,
+          status: form.status,
+          categoryCount,
+          createdAt: form.createdAt,
+          updatedAt: form.updatedAt,
+        };
+      }),
+    );
+
+    // 최신순 정렬
+    formListItems.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+    const response: FormListResponseDTO = {
+      items: formListItems,
+      count: formListItems.length,
+    };
+
+    logger.info(`[getEvaluationForms] Found ${response.count} forms`);
+
+    return AlbResponse.success(200, response);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error(`[getEvaluationForms] Internal error: ${errorMessage}`);
+    return AlbResponse.fail(500, errorMessage);
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/index.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+export * from './get-qm-automation-search';
+export * from './get-qm-automation-search-deprecated';
+export * from './get-qm-automation-status';
+export * from './post-qm-automation';
+export * from './post-agent-objection';
+export * from './post-agent-confirm';
+export * from './post-qa-feedback';
+export * from './post-agent-bulk-action';
+export * from './post-qa-bulk-feedback';
+
+// Form handlers
+export * from './get-evaluation-forms';
+export * from './get-evaluation-form';
+export * from './post-evaluation-form';
+export * from './put-evaluation-form';
+export * from './delete-evaluation-form';
+
+// Category handlers
+export * from './get-categories';
+export * from './post-category';
+export * from './delete-category';
+
+// SubItem handlers
+export * from './get-subitems';
+export * from './post-subitem';
+export * from './delete-subitem';
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/post-agent-objection.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmAutomationRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+import {
+  AgentObjectionRequestDTO,
+  EvaluationCategory,
+  EvaluationStateItem,
+  EvaluationStateStatus,
+} from '../dto/qm-evaluation-state.dto';
+
+const VALID_CATEGORIES: EvaluationCategory[] = [
+  'accuracy',
+  'efficiency',
+  'greeting',
+  'languageUse',
+  'proactivity',
+  'speed',
+  'voiceProduction',
+  'waitManagement',
+];
+
+const TERMINAL_STATUSES = new Set<EvaluationStateStatus>([
+  'AGENT_CONFIRM_COMPLETED',
+  'QA_AGENT_OBJECTION_ACCEPTED',
+  'QA_AGENT_OBJECTION_REJECTED',
+]);
+
+/**
+ * 상담원 이의제기 요청 핸들러
+ * POST /api/agent/v1/qm-automation/objection
+ *
+ * 상담원이 특정 대항목에 대해 이의제기를 요청합니다.
+ * - 현재 상태가 GEMINI_EVAL_COMPLETED여야 이의제기 가능
+ * - 이의제기 시 해당 대항목의 states 배열에 AGENT_OBJECTION_REQUESTED 상태 추가
+ * - 전체 qmEvaluationStatus를 AGENT_OBJECTION_REQUESTED로 업데이트
+ */
+export const postAgentObjection = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    if (!event.body) {
+      throw new BadRequestError('Request body is required');
+    }
+
+    const body: AgentObjectionRequestDTO = JSON.parse(event.body);
+    const { requestId, category, reason, userId, userName } = body;
+
+    // 필수 필드 검증
+    if (!requestId) {
+      throw new BadRequestError('requestId is required');
+    }
+    if (!category) {
+      throw new BadRequestError('category is required');
+    }
+    if (!reason || reason.trim() === '') {
+      throw new BadRequestError('reason is required');
+    }
+    if (!userId || userId.trim() === '') {
+      throw new BadRequestError('userId is required');
+    }
+
+    // 유효한 카테고리인지 검증
+    if (!VALID_CATEGORIES.includes(category)) {
+      throw new BadRequestError(
+        `Invalid category: ${category}. Valid categories are: ${VALID_CATEGORIES.join(', ')}`,
+      );
+    }
+
+    logger.info(
+      `[postAgentObjection] Processing objection for requestId: ${requestId}, category: ${category}`,
+    );
+
+    // 아이템 조회
+    const item = await qmAutomationRepository.getByRequestId(requestId);
+    if (!item) {
+      throw new NotFoundError(`Request not found: ${requestId}`);
+    }
+
+    // 현재 대항목 상태 조회
+    const currentState = qmAutomationRepository.getCategoryCurrentState(item, category);
+    if (!currentState) {
+      throw new BadRequestError(`Category ${category} does not have evaluation state`);
+    }
+
+    // 터미널 상태 검증 (이미 완료된 상태는 수정 불가)
+    if (TERMINAL_STATUSES.has(currentState.status)) {
+      throw new BadRequestError(
+        `Cannot modify terminal state. Current status is ${currentState.status}`,
+      );
+    }
+
+    // 이의제기 가능한 상태인지 검증 (GEMINI_EVAL_COMPLETED 상태에서만 이의제기 가능)
+    if (currentState.status !== 'GEMINI_EVAL_COMPLETED') {
+      throw new BadRequestError(
+        `Cannot submit objection. Current status is ${currentState.status}. Objection is only allowed when status is GEMINI_EVAL_COMPLETED`,
+      );
+    }
+
+    // 이의제기는 FAIL 결과에 대해서만 가능
+    if (currentState.evaluationStatus !== 'FAIL') {
+      throw new BadRequestError(
+        'Cannot submit objection for PASS result. Objection is only allowed for FAIL results',
+      );
+    }
+
+    // 새로운 상태 생성
+    const newState: EvaluationStateItem = {
+      seq: currentState.seq + 1,
+      status: 'AGENT_OBJECTION_REQUESTED',
+      statusReason: reason,
+      evaluationStatus: currentState.evaluationStatus,
+      updatedAt: new Date().toISOString(),
+      updatedBy: `${userName}`,
+    };
+
+    // 상태 업데이트 및 전체 상태 재계산
+    const updatedStatus = await qmAutomationRepository.updateEvaluationStateAndRecalculate(
+      requestId,
+      category,
+      newState,
+    );
+
+    logger.info(
+      `[postAgentObjection] Successfully processed objection for requestId: ${requestId}, category: ${category}`,
+    );
+
+    return AlbResponse.success(200, {
+      requestId,
+      category,
+      newStatus: newState.status,
+      qmEvaluationStatus: updatedStatus.qmEvaluationStatus,
+      qaFeedbackYN: updatedStatus.qaFeedbackYN,
+      agentConfirmYN: updatedStatus.agentConfirmYN,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[postAgentObjection] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[postAgentObjection] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[postAgentObjection] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/get-subitems.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+import { SubItemListResponseDTO } from '../dto/qm-evaluation-form.dto';
+
+/**
+ * Path에서 formId와 categoryId 추출
+ * /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems
+ */
+const extractIdsFromPath = (path: string): { formId: string; categoryId: string } | null => {
+  const match = path.match(
+    /\/api\/agent\/v1\/qm-evaluation-form\/([^/]+)\/categories\/([^/]+)\/subitems$/,
+  );
+  return match ? { formId: match[1], categoryId: match[2] } : null;
+};
+
+/**
+ * 특정 카테고리의 소항목 목록 조회 핸들러
+ * GET /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems
+ */
+export const getSubItems = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const ids = extractIdsFromPath(event.path);
+
+    if (!ids) {
+      throw new BadRequestError('formId and categoryId are required in path');
+    }
+
+    const { formId, categoryId } = ids;
+
+    logger.info(`[getSubItems] Fetching sub-items for: ${formId}/${categoryId}`);
+
+    // 폼 존재 확인
+    const form = await qmEvaluationFormRepository.getFormById(formId);
+    if (!form) {
+      throw new NotFoundError(`Form not found: ${formId}`);
+    }
+
+    // 카테고리 존재 확인
+    const category = await qmEvaluationFormRepository.getCategoryById(formId, categoryId);
+    if (!category) {
+      throw new NotFoundError(`Category not found: ${formId}/${categoryId}`);
+    }
+
+    const subItems = await qmEvaluationFormRepository.getSubItems(formId, categoryId);
+
+    const response: SubItemListResponseDTO = {
+      formId,
+      categoryId,
+      subItems,
+      count: subItems.length,
+    };
+
+    logger.info(`[getSubItems] Found ${subItems.length} sub-items for: ${formId}/${categoryId}`);
+
+    return AlbResponse.success(200, response);
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[getSubItems] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[getSubItems] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[getSubItems] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/post-qa-feedback.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmAutomationRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+import {
+  EvaluationCategory,
+  EvaluationStateItem,
+  QAFeedbackRequestDTO,
+} from '../dto/qm-evaluation-state.dto';
+
+const VALID_CATEGORIES: EvaluationCategory[] = [
+  'accuracy',
+  'efficiency',
+  'greeting',
+  'languageUse',
+  'proactivity',
+  'speed',
+  'voiceProduction',
+  'waitManagement',
+];
+
+/**
+ * QA 피드백 요청 핸들러
+ * POST /api/agent/v1/qm-automation/qa-feedback
+ *
+ * QA가 상담원의 이의제기에 대해 수용 또는 거절을 결정합니다.
+ * - 현재 상태가 AGENT_OBJECTION_REQUESTED여야 피드백 가능
+ * - 수용(accept) 시 QA_AGENT_OBJECTION_ACCEPTED 상태로 변경
+ * - 거절(reject) 시 QA_AGENT_OBJECTION_REJECTED 상태로 변경
+ */
+export const postQAFeedback = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    if (!event.body) {
+      throw new BadRequestError('Request body is required');
+    }
+
+    const body: QAFeedbackRequestDTO = JSON.parse(event.body);
+    const { requestId, category, action, reason, userId, userName } = body;
+
+    // 필수 필드 검증
+    if (!requestId) {
+      throw new BadRequestError('requestId is required');
+    }
+    if (!category) {
+      throw new BadRequestError('category is required');
+    }
+    if (!action) {
+      throw new BadRequestError('action is required');
+    }
+    if (!reason || reason.trim() === '') {
+      throw new BadRequestError('reason is required');
+    }
+    if (!userId || userId.trim() === '') {
+      throw new BadRequestError('userId is required');
+    }
+
+    // 유효한 카테고리인지 검증
+    if (!VALID_CATEGORIES.includes(category)) {
+      throw new BadRequestError(
+        `Invalid category: ${category}. Valid categories are: ${VALID_CATEGORIES.join(', ')}`,
+      );
+    }
+
+    // 유효한 액션인지 검증
+    if (action !== 'accept' && action !== 'reject') {
+      throw new BadRequestError(`Invalid action: ${action}. Valid actions are: accept, reject`);
+    }
+
+    logger.info(
+      `[postQAFeedback] Processing QA feedback for requestId: ${requestId}, category: ${category}, action: ${action}`,
+    );
+
+    // 아이템 조회
+    const item = await qmAutomationRepository.getByRequestId(requestId);
+    if (!item) {
+      throw new NotFoundError(`Request not found: ${requestId}`);
+    }
+
+    // 현재 대항목 상태 조회
+    const currentState = qmAutomationRepository.getCategoryCurrentState(item, category);
+    if (!currentState) {
+      throw new BadRequestError(`Category ${category} does not have evaluation state`);
+    }
+
+    // QA 피드백 가능한 상태인지 검증 (AGENT_OBJECTION_REQUESTED 상태에서만 피드백 가능)
+    if (currentState.status !== 'AGENT_OBJECTION_REQUESTED') {
+      throw new BadRequestError(
+        `Cannot provide QA feedback. Current status is ${currentState.status}. QA feedback is only allowed when status is AGENT_OBJECTION_REQUESTED`,
+      );
+    }
+
+    // 새로운 상태 결정
+    const newStatus =
+      action === 'accept' ? 'QA_AGENT_OBJECTION_ACCEPTED' : 'QA_AGENT_OBJECTION_REJECTED';
+
+    // 수용 시 evaluationStatus를 PASS로 변경할 수 있음
+    const newEvaluationStatus = action === 'accept' ? 'PASS' : currentState.evaluationStatus;
+
+    // 새로운 상태 생성
+    const newState: EvaluationStateItem = {
+      seq: currentState.seq + 1,
+      status: newStatus,
+      statusReason: reason,
+      evaluationStatus: newEvaluationStatus,
+      updatedAt: new Date().toISOString(),
+      updatedBy: `${userName}`,
+    };
+
+    // 상태 업데이트 및 전체 상태 재계산
+    const updatedStatus = await qmAutomationRepository.updateEvaluationStateAndRecalculate(
+      requestId,
+      category,
+      newState,
+    );
+
+    logger.info(
+      `[postQAFeedback] Successfully processed QA feedback for requestId: ${requestId}, category: ${category}, action: ${action}`,
+    );
+
+    return AlbResponse.success(200, {
+      requestId,
+      category,
+      newStatus: newState.status,
+      evaluationStatus: newState.evaluationStatus,
+      qmEvaluationStatus: updatedStatus.qmEvaluationStatus,
+      qaFeedbackYN: updatedStatus.qaFeedbackYN,
+      agentConfirmYN: updatedStatus.agentConfirmYN,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[postQAFeedback] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[postQAFeedback] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[postQAFeedback] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/get-qm-automation-search-deprecated.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmAutomationRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+/**
+ * QM Automation 다중 필터 검색 핸들러
+ * GET /api/agent/v1/qm-automation/search?startMonth=YYYYMM&endMonth=YYYYMM&agentId=xxx&agentUserName=xxx&agentConfirmYN=Y&qaFeedbackYN=N&qmEvaluationStatus=COMPLETED&contactId=xxx&limit=100
+ *
+ * 지원하는 필터 조건:
+ * - startMonth: 시작 월 (YYYYMM 형식)
+ * - endMonth: 종료 월 (YYYYMM 형식)
+ * - agentId: 상담원 ID
+ * - agentUserName: 상담원 사용자명
+ * - agentConfirmYN: 상담원 확인 여부 (Y/N)
+ * - qaFeedbackYN: QA 피드백 여부 (Y/N)
+ * - qmEvaluationStatus: QM 평가 상태 (COMPLETED, PENDING 등)
+ * - contactId: Contact ID
+ */
+export const getQMAutomationSearchDeprecated = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const queryParams = event.queryStringParameters || {};
+
+    const filters: {
+      startMonth?: string;
+      endMonth?: string;
+      agentId?: string;
+      agentUserName?: string;
+      agentConfirmYN?: string;
+      qaFeedbackYN?: string;
+      qmEvaluationStatus?: string;
+      contactId?: string;
+    } = {};
+
+    // 기간 파라미터 추출
+    if (queryParams.startMonth) {
+      if (!/^\d{6}$/.test(queryParams.startMonth)) {
+        throw new BadRequestError('startMonth must be in YYYYMM format');
+      }
+      filters.startMonth = queryParams.startMonth;
+    }
+
+    if (queryParams.endMonth) {
+      if (!/^\d{6}$/.test(queryParams.endMonth)) {
+        throw new BadRequestError('endMonth must be in YYYYMM format');
+      }
+      filters.endMonth = queryParams.endMonth;
+    }
+
+    // startMonth와 endMonth는 함께 사용해야 함
+    if ((filters.startMonth && !filters.endMonth) || (!filters.startMonth && filters.endMonth)) {
+      throw new BadRequestError('startMonth and endMonth must be used together');
+    }
+
+    // startMonth가 endMonth보다 이후인 경우 에러
+    if (filters.startMonth && filters.endMonth && filters.startMonth > filters.endMonth) {
+      throw new BadRequestError('startMonth must be before or equal to endMonth');
+    }
+
+    if (queryParams.agentId) {
+      filters.agentId = queryParams.agentId;
+    }
+
+    if (queryParams.agentUserName) {
+      filters.agentUserName = queryParams.agentUserName;
+    }
+
+    if (queryParams.agentConfirmYN) {
+      if (!['Y', 'N'].includes(queryParams.agentConfirmYN)) {
+        throw new BadRequestError('agentConfirmYN must be Y or N');
+      }
+      filters.agentConfirmYN = queryParams.agentConfirmYN;
+    }
+
+    if (queryParams.qaFeedbackYN) {
+      if (!['Y', 'N'].includes(queryParams.qaFeedbackYN)) {
+        throw new BadRequestError('qaFeedbackYN must be Y or N');
+      }
+      filters.qaFeedbackYN = queryParams.qaFeedbackYN;
+    }
+
+    if (queryParams.qmEvaluationStatus) {
+      filters.qmEvaluationStatus = queryParams.qmEvaluationStatus;
+    }
+
+    if (queryParams.contactId) {
+      filters.contactId = queryParams.contactId;
+    }
+
+    logger.info(`[getQMAutomationSearch] Searching with filters: ${JSON.stringify(filters)}`);
+
+    const items = await qmAutomationRepository.listByFilters(filters);
+
+    logger.info(`[getQMAutomationSearch] Found ${items.length} items`);
+
+    const mappedItems = items.map((item) => ({
+      requestId: item.requestId,
+      contactId: item.contactId,
+      agentId: item.agentId,
+      agentUserName: item.agentUserName,
+      status: item.status,
+      createdAt: item.sk,
+      completedAt: item.completedAt,
+      qaFeedbackYN: item.qaFeedbackYN,
+      agentConfirmYN: item.agentConfirmYN,
+      qmEvaluationStatus: item.qmEvaluationStatus,
+      geminiModel: item.result?.geminiModel || item.input?.model,
+      processingTime: item.result?.processingTime,
+      connectedToAgentTimestamp: item.connectedToAgentTimestamp,
+    }));
+
+    return AlbResponse.success(200, {
+      items: mappedItems,
+      filters: filters,
+      count: mappedItems.length,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[getQMAutomationSearch] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    }
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error(`[getQMAutomationSearch] Internal error: ${errorMessage}`);
+    return AlbResponse.fail(500, errorMessage);
+  }
+};
+
+
+---------------------
+/Users/ke-aicc/kal/aicc/repo/aicc-agent-app/src/adapters/in/alb/gemini/handlers/get-categories.ts
+---------------------
+/*
+ * Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated [March 18, 2024].
+ */
+
+import { ALBEvent, ALBResult } from 'aws-lambda';
+
+import { qmEvaluationFormRepository } from '@/adapters/out/gemini/persistence';
+import { BadRequestError } from '@/common/exception/bad-request-error';
+import { NotFoundError } from '@/common/exception/not-found-error';
+import { AlbResponse } from '@/common/packages/alb/alb-response';
+import { logger } from '@/common/packages/logger';
+
+import { CategoryListResponseDTO } from '../dto/qm-evaluation-form.dto';
+
+/**
+ * Path에서 formId 추출
+ * /api/agent/v1/qm-evaluation-form/{formId}/categories
+ */
+const extractFormIdFromPath = (path: string): string | null => {
+  const match = path.match(/\/api\/agent\/v1\/qm-evaluation-form\/([^/]+)\/categories$/);
+  return match ? match[1] : null;
+};
+
+/**
+ * 특정 평가 양식의 카테고리 목록 조회 핸들러
+ * GET /api/agent/v1/qm-evaluation-form/{formId}/categories
+ */
+export const getCategories = async (event: ALBEvent): Promise<ALBResult> => {
+  try {
+    const formId = extractFormIdFromPath(event.path);
+
+    if (!formId) {
+      throw new BadRequestError('formId is required in path');
+    }
+
+    logger.info(`[getCategories] Fetching categories for form: ${formId}`);
+
+    // 폼 존재 확인
+    const form = await qmEvaluationFormRepository.getFormById(formId);
+    if (!form) {
+      throw new NotFoundError(`Form not found: ${formId}`);
+    }
+
+    const categories = await qmEvaluationFormRepository.getCategories(formId);
+
+    const response: CategoryListResponseDTO = {
+      formId,
+      categories,
+      count: categories.length,
+    };
+
+    logger.info(`[getCategories] Found ${categories.length} categories for form: ${formId}`);
+
+    return AlbResponse.success(200, response);
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      logger.error(`[getCategories] Bad Request: ${error.message}`);
+      return AlbResponse.fail(400, error.message);
+    } else if (error instanceof NotFoundError) {
+      logger.error(`[getCategories] Not Found: ${error.message}`);
+      return AlbResponse.fail(404, error.message);
+    } else {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[getCategories] Internal error: ${errorMessage}`);
+      return AlbResponse.fail(500, errorMessage);
+    }
+  }
+};
+
+

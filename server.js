@@ -275,7 +275,19 @@ app.post('/api/aws/region', async (req, res) => {
  */
 app.post('/api/search/customer', async (req, res) => {
   try {
-    const { searchValue, searchType, credentials, region, environment } = req.body;
+    const { searchValue, searchType, credentials: rawCredentials, region, environment } = req.body;
+
+    // Parse credentials to ensure expiration is a Date object
+    const credentials = {
+      accessKeyId: rawCredentials.accessKeyId,
+      secretAccessKey: rawCredentials.secretAccessKey,
+      sessionToken: rawCredentials.sessionToken,
+      expiration: rawCredentials.expiration
+        ? (rawCredentials.expiration instanceof Date
+          ? rawCredentials.expiration
+          : new Date(rawCredentials.expiration))
+        : undefined
+    };
 
     const dynamoClient = new DynamoDBClient({
       region,
@@ -347,7 +359,19 @@ app.post('/api/search/customer', async (req, res) => {
  */
 app.post('/api/search/agent', async (req, res) => {
   try {
-    const { searchValue, searchType, credentials, region, instanceId, environment } = req.body;
+    const { searchValue, searchType, credentials: rawCredentials, region, instanceId, environment } = req.body;
+
+    // Parse credentials to ensure expiration is a Date object
+    const credentials = {
+      accessKeyId: rawCredentials.accessKeyId,
+      secretAccessKey: rawCredentials.secretAccessKey,
+      sessionToken: rawCredentials.sessionToken,
+      expiration: rawCredentials.expiration
+        ? (rawCredentials.expiration instanceof Date
+          ? rawCredentials.expiration
+          : new Date(rawCredentials.expiration))
+        : undefined
+    };
 
     const connectClient = new ConnectClient({
       region,
@@ -386,7 +410,7 @@ app.post('/api/search/agent', async (req, res) => {
       return res.status(404).json({ error: 'Agent not found' });
     }
 
-    // DynamoDB에서 agent의 contact 조회
+    // DynamoDB에서 agent의 contact 조회 (credentials already parsed above)
     const dynamoClient = new DynamoDBClient({
       region,
       credentials,
@@ -538,7 +562,19 @@ app.get('/api/agent/v1/connect/search-user', async (req, res) => {
  */
 app.post('/api/search/contact-flow', async (req, res) => {
   try {
-    const { flowName, credentials, region, instanceAlias } = req.body;
+    const { flowName, credentials: rawCredentials, region, instanceAlias } = req.body;
+
+    // Parse credentials to ensure expiration is a Date object
+    const credentials = {
+      accessKeyId: rawCredentials.accessKeyId,
+      secretAccessKey: rawCredentials.secretAccessKey,
+      sessionToken: rawCredentials.sessionToken,
+      expiration: rawCredentials.expiration
+        ? (rawCredentials.expiration instanceof Date
+          ? rawCredentials.expiration
+          : new Date(rawCredentials.expiration))
+        : undefined
+    };
 
     const logsClient = new CloudWatchLogsClient({
       region,
@@ -626,7 +662,19 @@ app.post('/api/search/contact-flow', async (req, res) => {
  */
 app.post('/api/search/dnis', async (req, res) => {
   try {
-    const { dnis, credentials, region, instanceAlias } = req.body;
+    const { dnis, credentials: rawCredentials, region, instanceAlias } = req.body;
+
+    // Parse credentials to ensure expiration is a Date object
+    const credentials = {
+      accessKeyId: rawCredentials.accessKeyId,
+      secretAccessKey: rawCredentials.secretAccessKey,
+      sessionToken: rawCredentials.sessionToken,
+      expiration: rawCredentials.expiration
+        ? (rawCredentials.expiration instanceof Date
+          ? rawCredentials.expiration
+          : new Date(rawCredentials.expiration))
+        : undefined
+    };
 
     const logsClient = new CloudWatchLogsClient({
       region,
@@ -712,7 +760,19 @@ app.post('/api/search/dnis', async (req, res) => {
  */
 app.post('/api/search/lambda-error', async (req, res) => {
   try {
-    const { credentials, region } = req.body;
+    const { credentials: rawCredentials, region } = req.body;
+
+    // Parse credentials to ensure expiration is a Date object
+    const credentials = {
+      accessKeyId: rawCredentials.accessKeyId,
+      secretAccessKey: rawCredentials.secretAccessKey,
+      sessionToken: rawCredentials.sessionToken,
+      expiration: rawCredentials.expiration
+        ? (rawCredentials.expiration instanceof Date
+          ? rawCredentials.expiration
+          : new Date(rawCredentials.expiration))
+        : undefined
+    };
 
     const logsClient = new CloudWatchLogsClient({
       region,
@@ -831,7 +891,15 @@ async function getCredentialsFromRequest(req) {
     return parseCredentials(credentialsHeader);
   } else {
     const credentialProvider = defaultProvider();
-    return await credentialProvider();
+    const creds = await credentialProvider();
+    // Ensure expiration is a Date object
+    if (creds.expiration && typeof creds.expiration === 'string') {
+      creds.expiration = new Date(creds.expiration);
+    } else if (creds.Expiration && typeof creds.Expiration === 'string') {
+      creds.expiration = new Date(creds.Expiration);
+      delete creds.Expiration;
+    }
+    return creds;
   }
 }
 

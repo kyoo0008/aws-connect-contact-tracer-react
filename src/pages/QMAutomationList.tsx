@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -52,11 +52,17 @@ import {
   requestQMAutomation,
   getStatusLabel,
   getStatusColor,
+  getQMEvaluationStatusLabel,
+  getQMEvaluationStatusColor,
 } from '@/services/qmAutomationService';
 import {
   QMAutomationListItem,
   QMAutomationRequestBody,
 } from '@/types/qmAutomation.types';
+
+interface LocationState {
+  contactId?: string;
+}
 import dayjs, { Dayjs } from 'dayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
@@ -117,6 +123,8 @@ const DEFAULT_TOOL_DEFINITIONS_JSON = JSON.stringify([
 
 const QMAutomationList: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = location.state as LocationState | null;
   const { config, isConfigured } = useConfig();
   const queryClient = useQueryClient();
 
@@ -167,13 +175,32 @@ const QMAutomationList: React.FC = () => {
   const [appliedEndDate, setAppliedEndDate] = useState<Dayjs | null>(dayjs());
   const [showFilters, setShowFilters] = useState(true);
 
+  // Auto-search when navigated from ContactFlowViewer with contactId
+  useEffect(() => {
+    if (locationState?.contactId) {
+      const newFilters = {
+        ...searchFilters,
+        contactId: locationState.contactId,
+      };
+      setSearchFilters(newFilters);
+      setAppliedFilters(newFilters);
+      setAppliedStartDate(startDate);
+      setAppliedEndDate(endDate);
+      setPage(0);
+
+      // Clear state to prevent re-search on back navigation
+      window.history.replaceState({}, document.title);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationState?.contactId]);
+
   // Pagination state
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   // Sorting state
   type Order = 'asc' | 'desc';
-  type OrderBy = 'connectedToAgentTimestamp' | 'totalProcessingTime' | 'updatedAt' | null;
+  type OrderBy = 'connectedToAgentTimestamp' | 'updatedAt' | null;
   const [order, setOrder] = useState<Order>('desc');
   const [orderBy, setOrderBy] = useState<OrderBy>('updatedAt');
 
@@ -183,16 +210,20 @@ const QMAutomationList: React.FC = () => {
     setOrderBy(property);
   };
 
-  const getProcessingTime = (item: QMAutomationListItem) => {
-    const qmTime = Number(item.result?.processingTime ?? item.processingTime ?? 0);
-    const toolTime = Number(item.input?.toolResult?.processingTime ?? 0);
-
-    return qmTime + toolTime;
-  };
-
   // Handle search action
   const handleSearch = () => {
     setAppliedFilters({ ...searchFilters });
+    setAppliedStartDate(startDate);
+    setAppliedEndDate(endDate);
+    setPage(0);
+    refetch();
+  };
+
+  // Handle select box change with immediate search
+  const handleSelectChange = (field: keyof QMAutomationSearchFilters, value: string | undefined) => {
+    const newFilters = { ...searchFilters, [field]: value };
+    setSearchFilters(newFilters);
+    setAppliedFilters({ ...newFilters });
     setAppliedStartDate(startDate);
     setAppliedEndDate(endDate);
     setPage(0);
@@ -458,10 +489,7 @@ const QMAutomationList: React.FC = () => {
                     value={searchFilters.agentConfirmYN || ''}
                     label="상담원 확인"
                     onChange={(e) =>
-                      setSearchFilters({
-                        ...searchFilters,
-                        agentConfirmYN: e.target.value as 'Y' | 'N' | undefined || undefined,
-                      })
+                      handleSelectChange('agentConfirmYN', e.target.value as 'Y' | 'N' | undefined || undefined)
                     }
                   >
                     <MenuItem value="">전체</MenuItem>
@@ -477,10 +505,7 @@ const QMAutomationList: React.FC = () => {
                     value={searchFilters.qaFeedbackYN || ''}
                     label="QA 피드백"
                     onChange={(e) =>
-                      setSearchFilters({
-                        ...searchFilters,
-                        qaFeedbackYN: e.target.value as 'Y' | 'N' | undefined || undefined,
-                      })
+                      handleSelectChange('qaFeedbackYN', e.target.value as 'Y' | 'N' | undefined || undefined)
                     }
                   >
                     <MenuItem value="">전체</MenuItem>
@@ -496,16 +521,15 @@ const QMAutomationList: React.FC = () => {
                     value={searchFilters.qmEvaluationStatus || ''}
                     label="평가 상태"
                     onChange={(e) =>
-                      setSearchFilters({
-                        ...searchFilters,
-                        qmEvaluationStatus: e.target.value || undefined,
-                      })
+                      handleSelectChange('qmEvaluationStatus', e.target.value || undefined)
                     }
                   >
                     <MenuItem value="">전체</MenuItem>
-                    <MenuItem value="COMPLETED">완료</MenuItem>
-                    <MenuItem value="PENDING">대기</MenuItem>
-                    <MenuItem value="PROCESSING">처리중</MenuItem>
+                    <MenuItem value="GEMINI_EVAL_COMPLETED">AI 평가 완료</MenuItem>
+                    <MenuItem value="AGENT_CONFIRM_COMPLETED">상담사 확인 완료</MenuItem>
+                    <MenuItem value="AGENT_OBJECTION_REQUESTED">상담원 이의 제기</MenuItem>
+                    <MenuItem value="QA_AGENT_OBJECTION_ACCEPTED">QA 이의제기 수용</MenuItem>
+                    <MenuItem value="QA_AGENT_OBJECTION_REJECTED">QA 이의제기 거절</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -581,9 +605,9 @@ const QMAutomationList: React.FC = () => {
                   <TableCell>상담사</TableCell>
                   <TableCell>QA</TableCell>
                   <TableCell>상태</TableCell>
+                  <TableCell>평가 상태</TableCell>
                   <TableCell>상담원 확인</TableCell>
                   <TableCell>QA 피드백</TableCell>
-                  <TableCell>모델</TableCell>
                   <TableCell>
                     <TableSortLabel
                       active={orderBy === 'connectedToAgentTimestamp'}
@@ -591,15 +615,6 @@ const QMAutomationList: React.FC = () => {
                       onClick={() => handleRequestSort('connectedToAgentTimestamp')}
                     >
                       상담 연결 일시
-                    </TableSortLabel>
-                  </TableCell>
-                  <TableCell>
-                    <TableSortLabel
-                      active={orderBy === 'totalProcessingTime'}
-                      direction={orderBy === 'totalProcessingTime' ? order : 'asc'}
-                      onClick={() => handleRequestSort('totalProcessingTime')}
-                    >
-                      총 처리 시간
                     </TableSortLabel>
                   </TableCell>
                   <TableCell>
@@ -628,8 +643,6 @@ const QMAutomationList: React.FC = () => {
                       const dateA = new Date(a.completedAt || a.createdAt || 0).getTime();
                       const dateB = new Date(b.completedAt || b.createdAt || 0).getTime();
                       comparison = dateA - dateB;
-                    } else if (orderBy === 'totalProcessingTime') {
-                      comparison = getProcessingTime(a) - getProcessingTime(b);
                     }
                     return order === 'desc' ? -comparison : comparison;
                   })
@@ -675,6 +688,13 @@ const QMAutomationList: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <Chip
+                          label={getQMEvaluationStatusLabel(item.qmEvaluationStatus)}
+                          color={getQMEvaluationStatusColor(item.qmEvaluationStatus)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
                           label={item.agentConfirmYN === 'Y' ? '확인됨' : '미확인'}
                           color={item.agentConfirmYN === 'Y' ? 'success' : 'default'}
                           size="small"
@@ -691,24 +711,9 @@ const QMAutomationList: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {item.geminiModel || '-'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
                           {item.connectedToAgentTimestamp
                             ? dayjs(item.connectedToAgentTimestamp).format('YYYY-MM-DD HH:mm:ss')
                             : '-'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {(() => {
-                            const qmTime = Number(item.result?.processingTime ?? item.processingTime ?? 0);
-                            const toolTime = Number(item.input?.toolResult?.processingTime ?? 0);
-                            const totalTime = qmTime + toolTime;
-                            return totalTime > 0 ? `${totalTime.toFixed(2)}초` : '-';
-                          })()}
                         </Typography>
                       </TableCell>
                       <TableCell>

@@ -26,6 +26,8 @@ import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary';
 import { AuthProvider } from './contexts/AuthContext';
 import { ConfigProvider } from './contexts/ConfigContext';
 
+const role = process.env.REACT_APP_ROLE || 'ADMIN';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -195,7 +197,7 @@ function App() {
                 <Router>
                   <Layout>
                     <Routes>
-                      <Route path="/" element={<QMAutomationList />} />
+                      <Route path="/" element={role === 'QA_DEV' ? <QMAutomationList /> : <Dashboard />} />
                       <Route path="/contact-flow/:contactId?" element={<ContactFlowViewer />} />
                       <Route path="/contact-flow/:contactId/flow/:flowName" element={<FlowDetailViewer />} />
                       <Route path="/contact-flow/:contactId/flow/:flowName/module/:moduleName" element={<ModuleDetailViewer />} />

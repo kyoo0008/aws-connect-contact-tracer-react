@@ -116,8 +116,8 @@ const Dashboard: React.FC = () => {
       setSearchResults([]);
 
       let result;
-      // Determine instance alias from config
-      const instanceAlias = config.instanceId ? 'kal-servicecenter' : 'kal-servicecenter'; // TODO: get from actual instance
+      // Extract instance alias from logGroupName (e.g., '/aws/connect/kal-servicecenter-dev' -> 'kal-servicecenter-dev')
+      const instanceAlias = config.logGroupName?.replace('/aws/connect/', '') || 'kal-servicecenter';
 
       switch (searchType) {
         case 'Customer': {

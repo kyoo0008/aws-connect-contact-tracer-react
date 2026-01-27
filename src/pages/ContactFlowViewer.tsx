@@ -465,7 +465,7 @@ const ContactFlowViewerContent: React.FC = () => {
               </IconButton>
             </Tooltip>
             <Tooltip title="QM Automation">
-              <IconButton onClick={() => navigate(`/qm-automation/${contactId}`)}>
+              <IconButton onClick={() => navigate('/qm-automation', { state: { contactId } })}>
                 <QMIcon />
               </IconButton>
             </Tooltip>

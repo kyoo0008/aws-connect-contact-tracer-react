@@ -497,6 +497,56 @@ export function getStatusColor(status: QMStatus): 'default' | 'primary' | 'secon
 }
 
 /**
+ * QM 평가 상태(qmEvaluationStatus) 타입
+ */
+export type QMEvaluationStatus =
+  | 'GEMINI_EVAL_COMPLETED'
+  | 'AGENT_CONFIRM_COMPLETED'
+  | 'AGENT_OBJECTION_REQUESTED'
+  | 'QA_AGENT_OBJECTION_ACCEPTED'
+  | 'QA_AGENT_OBJECTION_REJECTED';
+
+/**
+ * QM 평가 상태를 한글로 변환
+ */
+export function getQMEvaluationStatusLabel(status?: string): string {
+  switch (status) {
+    case 'GEMINI_EVAL_COMPLETED':
+      return 'AI 평가 완료';
+    case 'AGENT_CONFIRM_COMPLETED':
+      return '상담사 확인 완료';
+    case 'AGENT_OBJECTION_REQUESTED':
+      return '상담원 이의 제기';
+    case 'QA_AGENT_OBJECTION_ACCEPTED':
+      return 'QA 이의제기 수용';
+    case 'QA_AGENT_OBJECTION_REJECTED':
+      return 'QA 이의제기 거절';
+    default:
+      return status || '-';
+  }
+}
+
+/**
+ * QM 평가 상태 색상 반환
+ */
+export function getQMEvaluationStatusColor(status?: string): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' {
+  switch (status) {
+    case 'GEMINI_EVAL_COMPLETED':
+      return 'info';
+    case 'AGENT_CONFIRM_COMPLETED':
+      return 'success';
+    case 'AGENT_OBJECTION_REQUESTED':
+      return 'warning';
+    case 'QA_AGENT_OBJECTION_ACCEPTED':
+      return 'success';
+    case 'QA_AGENT_OBJECTION_REJECTED':
+      return 'error';
+    default:
+      return 'default';
+  }
+}
+
+/**
  * QM 평가 점수 추출 (geminiResponse에서 파싱)
  */
 export function extractScoreFromResponse(geminiResponse: string): number | null {

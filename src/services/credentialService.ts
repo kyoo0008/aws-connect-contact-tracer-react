@@ -17,7 +17,7 @@ export interface AWSSSOProfile {
   sso_account_id?: string;
   isLoggedIn: boolean;
 }
-
+const API_BASE_URL = 'http://localhost:8081';
 /**
  * 백엔드 API를 통해 SSO 자격 증명을 가져옵니다.
  *
@@ -31,7 +31,7 @@ export interface AWSSSOProfile {
  */
 export async function fetchSSOCredentials(profile?: string): Promise<AWSCredentials> {
   try {
-    const response = await fetch('/api/aws/credentials', {
+    const response = await fetch(`${API_BASE_URL}/api/aws/credentials`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -59,7 +59,7 @@ export async function fetchSSOCredentials(profile?: string): Promise<AWSCredenti
  */
 export async function fetchSSOProfiles(): Promise<AWSSSOProfile[]> {
   try {
-    const response = await fetch('/api/aws/profiles', {
+    const response = await fetch(`${API_BASE_URL}/api/aws/profiles`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -111,7 +111,7 @@ export async function autoFetchSSOCredentials(): Promise<{
   region: string;
 } | null> {
   try {
-    const response = await fetch('/api/aws/auto-credentials', {
+    const response = await fetch(`${API_BASE_URL}/api/aws/auto-credentials`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -135,7 +135,7 @@ export async function autoFetchSSOCredentials(): Promise<{
  */
 export async function getRegionFromProfile(profile?: string): Promise<string | null> {
   try {
-    const response = await fetch('/api/aws/region', {
+    const response = await fetch(`${API_BASE_URL}/api/aws/region`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

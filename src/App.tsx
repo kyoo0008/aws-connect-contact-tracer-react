@@ -16,6 +16,8 @@ import Settings from './pages/Settings';
 import XRayTraceViewer from './pages/XRayTraceViewer';
 import QMAutomationList from './pages/QMAutomationList';
 import QMAutomationDetail from './pages/QMAutomationDetail';
+import QMEvaluationFormList from './pages/QMEvaluationFormList';
+import QMEvaluationFormDetail from './pages/QMEvaluationFormDetail';
 import Help from './pages/Help';
 
 // Components
@@ -203,6 +205,8 @@ function App() {
                       <Route path="/contact-flow/:contactId/flow/:flowName/module/:moduleName" element={<ModuleDetailViewer />} />
                       <Route path="/qm-automation" element={<QMAutomationList />} />
                       <Route path="/qm-automation/detail/:requestId" element={<QMAutomationDetail />} />
+                      <Route path="/qm-evaluation-form" element={<QMEvaluationFormList />} />
+                      <Route path="/qm-evaluation-form/:formId" element={<QMEvaluationFormDetail />} />
                       <Route path="/logs/:contactId?" element={<LogAnalysis />} />
                       <Route path="/xray-trace" element={<XRayTraceViewer />} />
                       <Route path="/settings" element={<Settings />} />

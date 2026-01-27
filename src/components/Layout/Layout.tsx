@@ -34,6 +34,7 @@ import {
   Help as HelpIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
+  Assignment as FormIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -86,10 +87,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
     { text: 'Contact Flow', icon: <FlowIcon />, path: '/contact-flow' },
     { text: 'QM Evaluation', icon: <LogsIcon />, path: '/qm-automation' },
+    { text: 'QM Forms', icon: <FormIcon />, path: '/qm-evaluation-form' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
   ].filter(item => {
     if (role === 'QA_DEV') {
       return ['QM Evaluation', 'Settings'].includes(item.text);
+      // return ['QM Evaluation', 'QM Forms', 'Settings'].includes(item.text);
     }
     return true;
   });

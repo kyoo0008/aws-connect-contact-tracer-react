@@ -31,7 +31,7 @@ app.use(express.json());
 // CORS 설정
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, x-aws-credentials, x-aws-region, x-environment, x-instance-id');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
@@ -1552,6 +1552,107 @@ app.post('/api/agent/v1/qm-automation/qa-bulk-feedback', async (req, res) => {
   } catch (error) {
     console.error('Error invoking Bulk QA Feedback Lambda:', error);
     res.status(500).json({ error: 'Failed to process bulk QA feedback', message: error.message });
+  }
+});
+
+// ========================================
+// QM Evaluation Form APIs
+// ========================================
+
+/**
+ * QM Evaluation Form API Proxy (All methods)
+ * Routes: /api/agent/v1/qm-evaluation-form*
+ * Proxies all requests to QM Automation Lambda
+ */
+app.all('/api/agent/v1/qm-evaluation-form*', async (req, res) => {
+  try {
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req); // Reuse existing helper
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    // "evalForm도 이쪽으로 이관됐음" -> Use the same Lambda as QM Automation
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    // Construct ALB-like event payload
+    const payload = {
+      httpMethod: req.method,
+      path: req.path,
+      headers: {
+        'content-type': 'application/json',
+        'accept': '*/*'
+      },
+      queryStringParameters: Object.keys(req.query).length > 0 ? req.query : null,
+      body: (req.method === 'GET' || req.method === 'DELETE') ? null : (typeof req.body === 'string' ? req.body : JSON.stringify(req.body)),
+      isBase64Encoded: false,
+      requestContext: {
+        elb: {
+          targetGroupArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/local/1234567890123456'
+        }
+      }
+    };
+
+    // console.log(`[QM Eval Proxy] Invoking ${functionName} for ${req.method} ${req.path}`);
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+
+    if (result.errorMessage) {
+      console.error('Lambda Execution Error:', result);
+      return res.status(502).json({ error: 'Lambda Execution Failed', message: result.errorMessage });
+    }
+
+    const statusCode = result.statusCode || 200;
+    let responseData = result.body;
+
+    // Parse body if it is a string (ALB proxy response)
+    if (responseData && typeof responseData === 'string') {
+      try {
+        responseData = JSON.parse(responseData);
+      } catch (e) {
+        console.warn('Failed to parse response body as JSON:', e);
+      }
+    }
+
+    if (statusCode >= 400) {
+      if (typeof responseData === 'object') {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode,
+          details: responseData
+        });
+      } else {
+        return res.status(statusCode).json({
+          error: 'Request failed',
+          message: responseData || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+    }
+
+    // Success Handling
+    // If responseData has a 'data' property, return that (common pattern in this project)
+    if (responseData && typeof responseData === 'object' && responseData.data) {
+      res.status(statusCode).json(responseData.data);
+    } else {
+      res.status(statusCode).json(responseData || {});
+    }
+
+  } catch (error) {
+    console.error(`Error invoking QM Evaluation Form Lambda (${req.path}):`, error);
+    res.status(500).json({ error: 'Failed to invoke QM Evaluation Form API', message: error.message });
   }
 });
 

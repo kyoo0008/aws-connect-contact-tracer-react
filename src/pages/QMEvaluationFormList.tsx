@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -61,6 +62,7 @@ const QMEvaluationFormList: React.FC = () => {
     const [newForm, setNewForm] = useState<CreateQmEvaluationFormRequest>({
         formName: '',
         description: '',
+        systemPrompt: '',
         version: '1.0.0',
         status: 'DRAFT',
     });
@@ -104,6 +106,7 @@ const QMEvaluationFormList: React.FC = () => {
             setNewForm({
                 formName: '',
                 description: '',
+                systemPrompt: '',
                 version: '1.0.0',
                 status: 'DRAFT',
             });
@@ -364,6 +367,15 @@ const QMEvaluationFormList: React.FC = () => {
                             rows={3}
                             value={newForm.description}
                             onChange={(e) => setNewForm({ ...newForm, description: e.target.value })}
+                        />
+                        <TextField
+                            label="시스템 프롬프트"
+                            fullWidth
+                            multiline
+                            rows={5}
+                            value={newForm.systemPrompt || ''}
+                            onChange={(e) => setNewForm({ ...newForm, systemPrompt: e.target.value })}
+                            helperText="AI 평가 모델에 전달될 기본 시스템 프롬프트입니다."
                         />
                         <TextField
                             label="버전"

@@ -226,6 +226,7 @@ export async function getCategories(
 
         const data = await response.json();
         if (Array.isArray(data)) return data;
+        if (data.categories && Array.isArray(data.categories)) return data.categories;
         if (data.items && Array.isArray(data.items)) return data.items;
         if (data.data && Array.isArray(data.data)) return data.data;
         return [];
@@ -289,9 +290,9 @@ export async function updateCategory(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}`,
+            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories`,
             {
-                method: 'PUT',
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'x-aws-region': config.region,
@@ -300,10 +301,9 @@ export async function updateCategory(
                         'x-aws-credentials': JSON.stringify(config.credentials),
                     }),
                 },
-                body: JSON.stringify(data),
+                body: JSON.stringify({ ...data, categoryId }),
             }
         );
-
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.message || `Failed to update category: ${response.status}`);
@@ -384,6 +384,7 @@ export async function getSubItems(
 
         const data = await response.json();
         if (Array.isArray(data)) return data;
+        if (data.subItems && Array.isArray(data.subItems)) return data.subItems;
         if (data.items && Array.isArray(data.items)) return data.items;
         if (data.data && Array.isArray(data.data)) return data.data;
         return [];
@@ -447,9 +448,9 @@ export async function updateSubItem(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}/subitems/${encodeURIComponent(subItemId)}`,
+            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}/subitems`,
             {
-                method: 'PUT',
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'x-aws-region': config.region,
@@ -458,7 +459,7 @@ export async function updateSubItem(
                         'x-aws-credentials': JSON.stringify(config.credentials),
                     }),
                 },
-                body: JSON.stringify(data),
+                body: JSON.stringify({ ...data, subItemId }),
             }
         );
 

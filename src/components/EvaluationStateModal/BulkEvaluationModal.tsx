@@ -96,7 +96,7 @@ const getActionConfig = (action: BulkModalAction) => {
         color: 'warning' as const,
         buttonText: '일괄 이의제기',
         requireReason: true,
-        actionType: 'object' as const,
+        actionType: 'objection' as const,
       };
     case 'bulk-qa-accept':
       return {
@@ -259,7 +259,7 @@ const BulkEvaluationModal: React.FC<BulkEvaluationModalProps> = ({
       if (action === 'bulk-confirm' || action === 'bulk-objection') {
         actions = Array.from(selectedCategories).map((cat) => ({
           category: cat,
-          action: config.actionType as 'confirm' | 'object',
+          action: config.actionType as 'confirm' | 'objection',
           reason: config.requireReason
             ? (useCommonReason ? commonReason.trim() : reasons[cat]?.trim())
             : undefined,

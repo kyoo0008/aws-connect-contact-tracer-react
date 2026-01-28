@@ -61,6 +61,8 @@ import {
   submitBulkAgentAction,
   submitBulkQAFeedback,
   EvaluationCategory,
+  getQMEvaluationStatusLabel,
+  getQMEvaluationStatusColor,
 } from '@/services/qmAutomationService';
 import EvaluationStateModal, {
   ModalAction,
@@ -214,9 +216,9 @@ const QMAutomationDetail: React.FC = () => {
                       <Tooltip title="QM 평가 상태">
                         <Chip
                           size="small"
-                          label={`QM 평가 상태: ${qmDetail.qmEvaluationStatus}`}
+                          label={`QM 평가 상태: ${getQMEvaluationStatusLabel(qmDetail.qmEvaluationStatus)}`}
                           variant="outlined"
-                          color={qmDetail.qmEvaluationStatus === 'COMPLETED' ? 'success' : 'default'}
+                          color={getQMEvaluationStatusColor(qmDetail.qmEvaluationStatus)}
                         />
                       </Tooltip>
                     )}

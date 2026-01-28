@@ -271,7 +271,7 @@ export interface EvaluationResult {
  */
 export interface BulkActionItem {
   category: string;
-  action: 'confirm' | 'object';
+  action: 'confirm' | 'objection';
   reason?: string; // 이의제기 시 필수
 }
 

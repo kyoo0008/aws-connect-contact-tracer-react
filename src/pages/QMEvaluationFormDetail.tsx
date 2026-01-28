@@ -3,12 +3,10 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     Box,
-    Container,
     Paper,
     Typography,
     Button,
     CircularProgress,
-    Alert,
     IconButton,
     TextField,
     FormControl,
@@ -27,7 +25,6 @@ import {
     List,
     ListItem,
     ListItemText,
-    ListItemSecondaryAction,
     Divider,
     Switch,
     FormControlLabel,
@@ -45,6 +42,23 @@ import {
     ExpandLess as ExpandLessIcon,
     DragIndicator as DragIcon,
 } from '@mui/icons-material';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+    useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useConfig } from '@/contexts/ConfigContext';
 import {
@@ -60,7 +74,6 @@ import {
     deleteSubItem,
 } from '@/services/qmEvaluationFormService';
 import {
-    QmEvaluationForm,
     EvaluationCategory,
     EvaluationSubItem,
     EvaluationCriterion,
@@ -76,6 +89,7 @@ interface SubItemDialogProps {
     onSubmit: (data: CreateSubItemRequest) => void;
     initialData?: EvaluationSubItem;
     isLoading: boolean;
+    defaultDisplayOrder?: number;
 }
 
 const SubItemDialog: React.FC<SubItemDialogProps> = ({
@@ -84,13 +98,17 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
     onSubmit,
     initialData,
     isLoading,
+    defaultDisplayOrder = 1,
 }) => {
     const [formData, setFormData] = useState<CreateSubItemRequest>({
+        subItemId: '',
         subItemName: '',
-        displayOrder: 1,
+        displayOrder: initialData?.displayOrder || defaultDisplayOrder,
         evaluationCriteria: [],
+        resultJsonFormat: initialData?.resultJsonFormat || '',
         ...initialData,
     });
+    const [jsonError, setJsonError] = useState<string | null>(null);
 
     // Criteria state management
     const handleAddCriteria = () => {
@@ -98,7 +116,8 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
             ...prev,
             evaluationCriteria: [
                 ...prev.evaluationCriteria,
-                { criteriaId: '', description: '', details: '' },
+                // Sequential Criteria ID: length + 1
+                { criteriaId: `${prev.evaluationCriteria.length + 1}`, description: '', details: '' },
             ],
         }));
     };
@@ -120,11 +139,23 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
             <DialogContent>
                 <Stack spacing={3} sx={{ mt: 1 }}>
                     <TextField
+                        label="소항목 ID (Key)"
+                        fullWidth
+                        required
+                        disabled={!!initialData}
+                        value={formData.subItemId}
+                        onChange={(e) => setFormData({ ...formData, subItemId: e.target.value })}
+                        error={!formData.subItemId?.trim()}
+                        helperText={!formData.subItemId?.trim() ? "소항목 ID는 필수 항목입니다." : (initialData ? "ID는 변경할 수 없습니다." : "고유 식별자 (예: greeting_check)")}
+                    />
+                    <TextField
                         label="소항목 명"
                         fullWidth
                         required
                         value={formData.subItemName}
                         onChange={(e) => setFormData({ ...formData, subItemName: e.target.value })}
+                        error={!formData.subItemName?.trim()}
+                        helperText={!formData.subItemName?.trim() ? "소항목 명은 필수 항목입니다." : ""}
                     />
                     <TextField
                         label="표시 순서"
@@ -132,6 +163,20 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                         fullWidth
                         value={formData.displayOrder}
                         onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) })}
+                    />
+                    <TextField
+                        label="Result JSON Format"
+                        fullWidth
+                        multiline
+                        required
+                        rows={3}
+                        value={formData.resultJsonFormat}
+                        onChange={(e) => {
+                            setFormData({ ...formData, resultJsonFormat: e.target.value });
+                            setJsonError(null);
+                        }}
+                        error={!!jsonError}
+                        helperText={jsonError || "AI 응답에서 추출할 JSON 포맷 샘플입니다."}
                     />
 
                     <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2 }}>
@@ -189,8 +234,22 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                 <Button onClick={onClose}>취소</Button>
                 <Button
                     variant="contained"
-                    onClick={() => onSubmit(formData)}
-                    disabled={!formData.subItemName || isLoading}
+                    onClick={() => {
+                        let finalData = { ...formData };
+                        if (!formData.resultJsonFormat?.trim()) {
+                            setJsonError('AI 추출 포맷(JSON)은 필수 입력 항목입니다.');
+                            return;
+                        }
+                        try {
+                            const parsed = JSON.parse(formData.resultJsonFormat);
+                            finalData.resultJsonFormat = JSON.stringify(parsed, null, 2);
+                        } catch (e) {
+                            setJsonError('유효하지 않은 JSON 형식입니다.');
+                            return;
+                        }
+                        onSubmit(finalData);
+                    }}
+                    disabled={!formData.subItemName || !formData.subItemId || !formData.resultJsonFormat?.trim() || isLoading}
                 >
                     {isLoading ? '저장 중...' : '저장'}
                 </Button>
@@ -210,7 +269,19 @@ interface CategoryItemProps {
     config: any;
 }
 
-const CategoryItem: React.FC<CategoryItemProps> = ({ formId, category, onEdit, onDelete, config }) => {
+const SortableCategoryItem: React.FC<CategoryItemProps> = ({ formId, category, onEdit, onDelete, config }) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+    } = useSortable({ id: category.categoryId });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+    };
     const [expanded, setExpanded] = useState(false);
     const [openSubItemDialog, setOpenSubItemDialog] = useState(false); // Create SubItem
     const [editingSubItem, setEditingSubItem] = useState<EvaluationSubItem | null>(null); // Edit SubItem
@@ -249,35 +320,18 @@ const CategoryItem: React.FC<CategoryItemProps> = ({ formId, category, onEdit, o
     });
 
     const handleSaveSubItem = (data: CreateSubItemRequest) => {
-        // If editing, we might need to preserve ID or use a different call.
-        // The prompts says "POST ... (Add/Modify)". So maybe we just pass the ID in the body if it exists?
-        // But `CreateSubItemRequest` doesn't have ID.
-        // Ideally we should have `updateSubItem` if modifying.
-        // I'll assume `createSubItem` handles it or I need to handle it.
-        // Since I don't have `updateSubItem` in service yet (oops, I missed it in service based on plan?
-        // Plan: POST .../subitems (소항목 추가/수정) -> ONE endpoint.
-        // So if I include subItemId in body, it updates?
-        // `CreateSubItemRequest` defined in types didn't include ID.
-        // Let's assume for now we just call the same API.
-        const payload = { ...data };
-        if (editingSubItem) {
-            // payload.subItemId = editingSubItem.subItemId; // If the API supports it
-            // Since I can't easily change the type definition in the middle of this file generation without context loss,
-            // I will assume the backend handles upsert based on name or I'm creating new ones.
-            // Actually, for "Edit", usually it's PUT /subitems/{id} OR POST /subitems with ID.
-            // The plan says: POST .../subitems (Add/Modify).
-            // It's ambiguous. I'll proceed with creating sending the data.
-            // Wait, I should probably check if I can add ID to the payload.
-            (payload as any).subItemId = editingSubItem.subItemId;
-        }
         subItemMutation.mutate({ data, subItemId: editingSubItem?.subItemId });
     };
 
     return (
-        <Card variant="outlined" sx={{ mb: 2 }}>
+        <Card variant="outlined" sx={{ mb: 2, ...style }} ref={setNodeRef}>
             <CardHeader
                 title={
                     <Stack direction="row" alignItems="center" spacing={2}>
+                        <IconButton {...attributes} {...listeners} size="small" sx={{ cursor: 'grab' }}>
+                            <DragIcon />
+                        </IconButton>
+                        <Chip label={`${category.displayOrder}`} size="small" color="primary" />
                         <Typography variant="h6">{category.categoryName}</Typography>
                         {!category.enabled && <Chip label="Disabled" size="small" />}
                         <Chip label={`Weight: ${category.weight}`} size="small" variant="outlined" />
@@ -300,9 +354,18 @@ const CategoryItem: React.FC<CategoryItemProps> = ({ formId, category, onEdit, o
             <Collapse in={expanded} timeout="auto" unmountOnExit>
                 <CardContent>
                     <Box mb={2}>
-                        <Typography variant="body2" color="text.secondary" style={{ whiteSpace: 'pre-line' }}>
-                            {category.promptSection}
-                        </Typography>
+                        <Typography variant="subtitle2" gutterBottom>Instructions</Typography>
+                        {(category.instructions && category.instructions.length > 0) ? (
+                            <List dense sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
+                                {category.instructions.map((inst, idx) => (
+                                    <ListItem key={idx}>
+                                        <ListItemText primary={inst} />
+                                    </ListItem>
+                                ))}
+                            </List>
+                        ) : (
+                            <Typography variant="body2" color="text.secondary">No instructions.</Typography>
+                        )}
                     </Box>
 
                     <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
@@ -316,7 +379,7 @@ const CategoryItem: React.FC<CategoryItemProps> = ({ formId, category, onEdit, o
                         <LinearProgress />
                     ) : (
                         <List dense>
-                            {subItems?.map((subItem) => (
+                            {subItems?.sort((a, b) => a.displayOrder - b.displayOrder).map((subItem) => (
                                 <React.Fragment key={subItem.subItemId}>
                                     <ListItem
                                         secondaryAction={
@@ -333,10 +396,40 @@ const CategoryItem: React.FC<CategoryItemProps> = ({ formId, category, onEdit, o
                                         }
                                     >
                                         <ListItemText
-                                            primary={`${subItem.displayOrder}. ${subItem.subItemName}`}
-                                            secondary={`${subItem.evaluationCriteria?.length || 0} Criteria`}
+                                            primary={
+                                                <Typography variant="subtitle2" fontWeight="bold">
+                                                    {subItem.displayOrder}. {subItem.subItemName}
+                                                </Typography>
+                                            }
                                         />
                                     </ListItem>
+
+                                    {/* Evaluation Criteria Details */}
+                                    {subItem.evaluationCriteria && subItem.evaluationCriteria.length > 0 && (
+                                        <Box sx={{ pl: 4, pr: 8, pb: 2 }}>
+                                            <Grid container spacing={1}>
+                                                {subItem.evaluationCriteria.map((crit) => (
+                                                    <Grid item xs={12} key={crit.criteriaId}>
+                                                        <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
+                                                            <Stack direction="row" spacing={1} alignItems="flex-start">
+                                                                <Chip label={crit.criteriaId} size="small" sx={{ height: 20, fontSize: '0.7rem', minWidth: 40 }} />
+                                                                <Box>
+                                                                    <Typography variant="body2" fontWeight={500}>
+                                                                        {crit.description}
+                                                                    </Typography>
+                                                                    {crit.details && (
+                                                                        <Typography variant="caption" color="text.secondary" display="block">
+                                                                            {crit.details}
+                                                                        </Typography>
+                                                                    )}
+                                                                </Box>
+                                                            </Stack>
+                                                        </Paper>
+                                                    </Grid>
+                                                ))}
+                                            </Grid>
+                                        </Box>
+                                    )}
                                     <Divider />
                                 </React.Fragment>
                             ))}
@@ -354,6 +447,7 @@ const CategoryItem: React.FC<CategoryItemProps> = ({ formId, category, onEdit, o
                     onSubmit={handleSaveSubItem}
                     initialData={editingSubItem || undefined}
                     isLoading={subItemMutation.isPending}
+                    defaultDisplayOrder={(subItems?.length || 0) + 1}
                 />
             )}
         </Card>
@@ -371,6 +465,7 @@ const QMEvaluationFormDetail: React.FC = () => {
     // Form State
     const [formName, setFormName] = useState('');
     const [description, setDescription] = useState('');
+    const [systemPrompt, setSystemPrompt] = useState('');
     const [version, setVersion] = useState('');
     const [status, setStatus] = useState<any>('DRAFT');
 
@@ -378,11 +473,12 @@ const QMEvaluationFormDetail: React.FC = () => {
     const [openCategoryDialog, setOpenCategoryDialog] = useState(false);
     const [editingCategory, setEditingCategory] = useState<EvaluationCategory | null>(null);
     const [categoryFormData, setCategoryFormData] = useState<CreateCategoryRequest>({
+        categoryId: '',
         categoryName: '',
         displayOrder: 1,
         enabled: true,
         weight: 0,
-        promptSection: '',
+        instructions: [],
         feedbackMessageTemplate: '',
     });
 
@@ -400,11 +496,46 @@ const QMEvaluationFormDetail: React.FC = () => {
         enabled: !!formId,
     });
 
+    // DnD Sensors
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    const handleDragEnd = async (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id || !categories) return;
+
+        const oldIndex = categories.findIndex((c) => c.categoryId === active.id);
+        const newIndex = categories.findIndex((c) => c.categoryId === over.id);
+
+        if (oldIndex !== -1 && newIndex !== -1) {
+            const newOrder = arrayMove(categories, oldIndex, newIndex);
+            const updates = newOrder.map((cat, index) => ({
+                categoryId: cat.categoryId,
+                displayOrder: index + 1
+            }));
+
+            try {
+                await Promise.all(updates.map(u =>
+                    updateCategory(formId!, u.categoryId, { displayOrder: u.displayOrder }, config)
+                ));
+                queryClient.invalidateQueries({ queryKey: ['qm-categories', formId] });
+            } catch (err) {
+                console.error("Failed to reorder:", err);
+                alert("Failed to save reorder.");
+            }
+        }
+    };
+
     // Initialize form state
     React.useEffect(() => {
         if (form) {
             setFormName(form.formName);
             setDescription(form.description || '');
+            setSystemPrompt(form.systemPrompt || '');
             setVersion(form.version);
             setStatus(form.status);
         }
@@ -449,21 +580,23 @@ const QMEvaluationFormDetail: React.FC = () => {
         if (category) {
             setEditingCategory(category);
             setCategoryFormData({
+                categoryId: category.categoryId,
                 categoryName: category.categoryName,
                 displayOrder: category.displayOrder,
                 enabled: category.enabled,
                 weight: category.weight,
-                promptSection: category.promptSection,
+                instructions: category.instructions || [],
                 feedbackMessageTemplate: category.feedbackMessageTemplate,
             });
         } else {
             setEditingCategory(null);
             setCategoryFormData({
+                categoryId: '',
                 categoryName: '',
                 displayOrder: (categories?.length || 0) + 1,
                 enabled: true,
                 weight: 10,
-                promptSection: '## ',
+                instructions: [],
                 feedbackMessageTemplate: '',
             });
         }
@@ -490,16 +623,25 @@ const QMEvaluationFormDetail: React.FC = () => {
                         <Typography variant="h6" gutterBottom>Basic Info</Typography>
                         <Stack spacing={3}>
                             <TextField
-                                label="Form Name" fullWidth
+                                label="Form Name" fullWidth required
                                 value={formName} onChange={(e) => setFormName(e.target.value)}
+                                error={!formName.trim()}
+                                helperText={!formName.trim() ? "평가표 명은 필수 항목입니다." : ""}
                             />
                             <TextField
                                 label="Description" fullWidth multiline rows={3}
                                 value={description} onChange={(e) => setDescription(e.target.value)}
                             />
                             <TextField
-                                label="Version" fullWidth
+                                label="System Prompt" fullWidth multiline rows={8}
+                                value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)}
+                                helperText="AI 평가 모델에 전달될 시스템 프롬프트입니다."
+                            />
+                            <TextField
+                                label="Version" fullWidth required
                                 value={version} onChange={(e) => setVersion(e.target.value)}
+                                error={!version.trim()}
+                                helperText={!version.trim() ? "버전은 필수 항목입니다." : ""}
                             />
                             <FormControl fullWidth>
                                 <InputLabel>Status</InputLabel>
@@ -511,8 +653,8 @@ const QMEvaluationFormDetail: React.FC = () => {
                             </FormControl>
                             <Button
                                 variant="contained" startIcon={<SaveIcon />}
-                                onClick={() => updateFormMutation.mutate({ formName, description, version, status })}
-                                disabled={updateFormMutation.isPending}
+                                onClick={() => updateFormMutation.mutate({ formName, description, systemPrompt, version, status })}
+                                disabled={!formName.trim() || !version.trim() || updateFormMutation.isPending}
                             >
                                 Save Changes
                             </Button>
@@ -529,16 +671,20 @@ const QMEvaluationFormDetail: React.FC = () => {
                         </Button>
                     </Stack>
 
-                    {categories?.map((category) => (
-                        <CategoryItem
-                            key={category.categoryId}
-                            formId={formId!}
-                            category={category}
-                            onEdit={handleOpenCategoryDialog}
-                            onDelete={(id) => { if (window.confirm('Delete category?')) deleteCategoryMutation.mutate(id); }}
-                            config={config}
-                        />
-                    ))}
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                        <SortableContext items={categories?.map(c => c.categoryId) || []} strategy={verticalListSortingStrategy}>
+                            {categories?.sort((a, b) => a.displayOrder - b.displayOrder).map((category) => (
+                                <SortableCategoryItem
+                                    key={category.categoryId}
+                                    formId={formId!}
+                                    category={category}
+                                    onEdit={handleOpenCategoryDialog}
+                                    onDelete={(id) => { if (window.confirm('Delete category?')) deleteCategoryMutation.mutate(id); }}
+                                    config={config}
+                                />
+                            ))}
+                        </SortableContext>
+                    </DndContext>
                 </Grid>
             </Grid>
 
@@ -548,9 +694,19 @@ const QMEvaluationFormDetail: React.FC = () => {
                 <DialogContent>
                     <Stack spacing={3} mt={1}>
                         <TextField
+                            label="Category ID (Key)" fullWidth required
+                            disabled={!!editingCategory}
+                            value={categoryFormData.categoryId}
+                            onChange={(e) => setCategoryFormData({ ...categoryFormData, categoryId: e.target.value })}
+                            error={!categoryFormData.categoryId?.trim()}
+                            helperText={!categoryFormData.categoryId?.trim() ? "카테고리 ID는 필수 항목입니다." : (editingCategory ? "ID cannot be changed after creation" : "Unique identifier (e.g., accuracy, speed)")}
+                        />
+                        <TextField
                             label="Category Name" fullWidth required
                             value={categoryFormData.categoryName}
                             onChange={(e) => setCategoryFormData({ ...categoryFormData, categoryName: e.target.value })}
+                            error={!categoryFormData.categoryName?.trim()}
+                            helperText={!categoryFormData.categoryName?.trim() ? "카테고리 명은 필수 항목입니다." : ""}
                         />
                         <Stack direction="row" spacing={2}>
                             <TextField
@@ -573,12 +729,34 @@ const QMEvaluationFormDetail: React.FC = () => {
                             }
                             label="Enabled"
                         />
-                        <TextField
-                            label="Prompt Section" fullWidth multiline rows={6}
-                            value={categoryFormData.promptSection}
-                            onChange={(e) => setCategoryFormData({ ...categoryFormData, promptSection: e.target.value })}
-                            helperText="Use Markdown for prompt section"
-                        />
+                        {/* Instructions List Management */}
+                        <Typography variant="subtitle2" sx={{ mt: 2 }}>Instructions</Typography>
+                        {(categoryFormData.instructions || []).map((instruction, index) => (
+                            <Stack key={index} direction="row" spacing={1} alignItems="center">
+                                <TextField
+                                    fullWidth size="small"
+                                    value={instruction}
+                                    onChange={(e) => {
+                                        const newInstructions = [...(categoryFormData.instructions || [])];
+                                        newInstructions[index] = e.target.value;
+                                        setCategoryFormData({ ...categoryFormData, instructions: newInstructions });
+                                    }}
+                                />
+                                <IconButton onClick={() => {
+                                    const newInstructions = (categoryFormData.instructions || []).filter((_, i) => i !== index);
+                                    setCategoryFormData({ ...categoryFormData, instructions: newInstructions });
+                                }}>
+                                    <DeleteIcon />
+                                </IconButton>
+                            </Stack>
+                        ))}
+                        <Button
+                            startIcon={<AddIcon />} size="small"
+                            onClick={() => setCategoryFormData({ ...categoryFormData, instructions: [...(categoryFormData.instructions || []), ''] })}
+                        >
+                            Add Instruction
+                        </Button>
+
                         <TextField
                             label="Feedback Message Template" fullWidth multiline rows={3}
                             value={categoryFormData.feedbackMessageTemplate}
@@ -591,7 +769,7 @@ const QMEvaluationFormDetail: React.FC = () => {
                     <Button
                         variant="contained"
                         onClick={() => categoryMutation.mutate({ data: categoryFormData, categoryId: editingCategory?.categoryId })}
-                        disabled={!categoryFormData.categoryName || categoryMutation.isPending}
+                        disabled={!categoryFormData.categoryName || !categoryFormData.categoryId || categoryMutation.isPending}
                     >
                         Save
                     </Button>
@@ -602,3 +780,4 @@ const QMEvaluationFormDetail: React.FC = () => {
 };
 
 export default QMEvaluationFormDetail;
+

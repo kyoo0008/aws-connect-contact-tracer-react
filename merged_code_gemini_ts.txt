@@ -216,12 +216,14 @@ import {
 export interface CreateFormRequestDTO {
   formName: string;
   description?: string;
+  systemPrompt?: string;
   status?: QmEvaluationFormStatus;
 }
 
 export interface UpdateFormRequestDTO {
   formName?: string;
   description?: string;
+  systemPrompt?: string;
   status?: QmEvaluationFormStatus;
 }
 
@@ -235,7 +237,7 @@ export interface CreateCategoryRequestDTO {
   displayOrder: number;
   enabled?: boolean;
   weight?: number;
-  promptSection?: string;
+  instructions?: string[];
   feedbackMessageTemplate?: string;
 }
 
@@ -244,7 +246,7 @@ export interface UpdateCategoryRequestDTO {
   displayOrder?: number;
   enabled?: boolean;
   weight?: number;
-  promptSection?: string;
+  instructions?: string[];
   feedbackMessageTemplate?: string;
 }
 
@@ -258,6 +260,7 @@ export interface CreateSubItemRequestDTO {
   displayOrder: number;
   evaluationCriteria: EvaluationCriterion[];
   outputJsonSchema?: Record<string, unknown>;
+  resultJsonFormat?: string;
 }
 
 export interface UpdateSubItemRequestDTO {
@@ -265,6 +268,7 @@ export interface UpdateSubItemRequestDTO {
   displayOrder?: number;
   evaluationCriteria?: EvaluationCriterion[];
   outputJsonSchema?: Record<string, unknown>;
+  resultJsonFormat?: string;
 }
 
 // ========================
@@ -275,6 +279,7 @@ export interface FormListItemDTO {
   formId: string;
   formName: string;
   description?: string;
+  systemPrompt?: string;
   version: string;
   status: QmEvaluationFormStatus;
   categoryCount: number;
@@ -291,6 +296,7 @@ export interface FormDetailResponseDTO {
   formId: string;
   formName: string;
   description?: string;
+  systemPrompt?: string;
   version: string;
   status: QmEvaluationFormStatus;
   categories: EvaluationCategory[];
@@ -678,8 +684,8 @@ export interface BulkActionItem {
   /** 대항목 */
   category: EvaluationCategory;
   /** 액션 타입 (확인 또는 이의제기) */
-  action: 'confirm' | 'object';
-  /** 이의제기 사유 (action이 'object'일 때 필수) */
+  action: 'confirm' | 'objection';
+  /** 이의제기 사유 (action이 'objection'일 때 필수) */
   reason?: string;
 }
 
@@ -2587,6 +2593,7 @@ export const postSubItem = async (event: ALBEvent): Promise<ALBResult> => {
         failCondition: criteria.failCondition,
       })),
       outputJsonSchema: body.outputJsonSchema,
+      resultJsonFormat: body.resultJsonFormat?.trim(),
     };
 
     await qmEvaluationFormRepository.upsertSubItem(formId, categoryId, subItem);
@@ -2749,6 +2756,7 @@ export const postEvaluationForm = async (event: ALBEvent): Promise<ALBResult> =>
       formId,
       formName: body.formName.trim(),
       description: body.description?.trim(),
+      systemPrompt: body.systemPrompt?.trim(),
       version: '1.0.0',
       status: body.status || 'DRAFT',
       createdAt: now,
@@ -2765,6 +2773,7 @@ export const postEvaluationForm = async (event: ALBEvent): Promise<ALBResult> =>
       formId: formRecord.formId,
       formName: formRecord.formName,
       description: formRecord.description,
+      systemPrompt: formRecord.systemPrompt,
       version: formRecord.version,
       status: formRecord.status,
       createdAt: formRecord.createdAt,
@@ -3415,6 +3424,7 @@ export const getEvaluationForm = async (event: ALBEvent): Promise<ALBResult> => 
       formId: form.formId,
       formName: form.formName,
       description: form.description,
+      systemPrompt: form.systemPrompt,
       version: form.version,
       status: form.status,
       categories,
@@ -3812,7 +3822,7 @@ const extractFormIdFromPath = (path: string): string | null => {
  *   - displayOrder: number (required)
  *   - enabled: boolean (optional, default: true)
  *   - weight: number (optional, default: 0)
- *   - promptSection: string (optional)
+ *   - instructions: string[] (optional)
  *   - feedbackMessageTemplate: string (optional)
  */
 export const postCategory = async (event: ALBEvent): Promise<ALBResult> => {
@@ -3854,7 +3864,7 @@ export const postCategory = async (event: ALBEvent): Promise<ALBResult> => {
       displayOrder: body.displayOrder,
       enabled: body.enabled ?? true,
       weight: body.weight ?? 0,
-      promptSection: body.promptSection?.trim(),
+      instructions: body.instructions,
       feedbackMessageTemplate: body.feedbackMessageTemplate?.trim(),
     };
 
@@ -3977,14 +3987,14 @@ export const postAgentBulkAction = async (event: ALBEvent): Promise<ALBResult> =
         );
       }
 
-      if (!action.action || (action.action !== 'confirm' && action.action !== 'object')) {
+      if (!action.action || (action.action !== 'confirm' && action.action !== 'objection')) {
         throw new BadRequestError(
-          `actions[${i}].action is invalid: ${action.action}. Valid actions are: confirm, object`,
+          `actions[${i}].action is invalid: ${action.action}. Valid actions are: confirm, objection`,
         );
       }
 
-      if (action.action === 'object' && (!action.reason || action.reason.trim() === '')) {
-        throw new BadRequestError(`actions[${i}].reason is required when action is 'object'`);
+      if (action.action === 'objection' && (!action.reason || action.reason.trim() === '')) {
+        throw new BadRequestError(`actions[${i}].reason is required when action is 'objection'`);
       }
     }
 
@@ -4039,7 +4049,7 @@ export const postAgentBulkAction = async (event: ALBEvent): Promise<ALBResult> =
         }
 
         // 이의제기는 FAIL 결과에 대해서만 가능
-        if (action.action === 'object' && currentState.evaluationStatus !== 'FAIL') {
+        if (action.action === 'objection' && currentState.evaluationStatus !== 'FAIL') {
           validationResults.push({
             category: action.category,
             success: false,
@@ -4343,6 +4353,7 @@ export const putEvaluationForm = async (event: ALBEvent): Promise<ALBResult> => 
     await qmEvaluationFormRepository.updateForm(formId, {
       formName: body.formName?.trim(),
       description: body.description?.trim(),
+      systemPrompt: body.systemPrompt?.trim(),
       status: body.status,
       version: newVersion,
       updatedAt: now,
@@ -4357,6 +4368,7 @@ export const putEvaluationForm = async (event: ALBEvent): Promise<ALBResult> => 
       formId: updatedForm?.formId,
       formName: updatedForm?.formName,
       description: updatedForm?.description,
+      systemPrompt: updatedForm?.systemPrompt,
       version: updatedForm?.version,
       status: updatedForm?.status,
       createdAt: updatedForm?.createdAt,
@@ -4419,6 +4431,7 @@ export const getEvaluationForms = async (event: ALBEvent): Promise<ALBResult> =>
           formId: form.formId,
           formName: form.formName,
           description: form.description,
+          systemPrompt: form.systemPrompt,
           version: form.version,
           status: form.status,
           categoryCount,

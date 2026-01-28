@@ -4,6 +4,7 @@ export interface QmEvaluationForm {
     formId: string;
     formName: string;
     description?: string;
+    systemPrompt?: string;
     version: string;
     status: 'ACTIVE' | 'INACTIVE' | 'DRAFT';
     createdAt: string;
@@ -16,7 +17,7 @@ export interface EvaluationCategory {
     displayOrder: number;
     enabled: boolean;
     weight: number;
-    promptSection?: string;
+    instructions?: string[];
     feedbackMessageTemplate?: string;
 }
 
@@ -26,6 +27,7 @@ export interface EvaluationSubItem {
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
     outputJsonSchema?: Record<string, unknown>;
+    resultJsonFormat?: string;
 }
 
 export interface EvaluationCriterion {
@@ -38,6 +40,7 @@ export interface EvaluationCriterion {
 export interface CreateQmEvaluationFormRequest {
     formName: string;
     description?: string;
+    systemPrompt?: string;
     version: string;
     status: 'ACTIVE' | 'INACTIVE' | 'DRAFT';
 }
@@ -45,6 +48,7 @@ export interface CreateQmEvaluationFormRequest {
 export interface UpdateQmEvaluationFormRequest {
     formName?: string;
     description?: string;
+    systemPrompt?: string;
     version?: string;
     status?: 'ACTIVE' | 'INACTIVE' | 'DRAFT';
 }
@@ -55,7 +59,7 @@ export interface CreateCategoryRequest {
     displayOrder: number;
     enabled?: boolean;
     weight?: number;
-    promptSection?: string;
+    instructions?: string[];
     feedbackMessageTemplate?: string;
 }
 
@@ -64,7 +68,7 @@ export interface UpdateCategoryRequest {
     displayOrder?: number;
     enabled?: boolean;
     weight?: number;
-    promptSection?: string;
+    instructions?: string[];
     feedbackMessageTemplate?: string;
 }
 
@@ -74,6 +78,7 @@ export interface CreateSubItemRequest {
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
     outputJsonSchema?: Record<string, unknown>;
+    resultJsonFormat?: string;
 }
 
 export interface UpdateSubItemRequest {
@@ -81,4 +86,6 @@ export interface UpdateSubItemRequest {
     displayOrder?: number;
     evaluationCriteria?: EvaluationCriterion[];
     outputJsonSchema?: Record<string, unknown>;
+    resultJsonFormat?: string;
 }
+

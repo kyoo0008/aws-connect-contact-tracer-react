@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     Box,
@@ -72,6 +72,7 @@ import {
     createSubItem,
     updateSubItem,
     deleteSubItem,
+    updateCategoryOrder,
 } from '@/services/qmEvaluationFormService';
 import {
     EvaluationCategory,
@@ -104,9 +105,13 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
         subItemId: '',
         subItemName: '',
         displayOrder: initialData?.displayOrder || defaultDisplayOrder,
-        evaluationCriteria: [],
         resultJsonFormat: initialData?.resultJsonFormat || '',
+        instruction: initialData?.instruction || '',
         ...initialData,
+        evaluationCriteria: (initialData?.evaluationCriteria || []).map((crit, i) => ({
+            ...crit,
+            criteriaId: `${i + 1}`,
+        })),
     });
     const [jsonError, setJsonError] = useState<string | null>(null);
 
@@ -129,7 +134,9 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
     };
 
     const handleDeleteCriteria = (index: number) => {
-        const newCriteria = formData.evaluationCriteria.filter((_, i) => i !== index);
+        const newCriteria = formData.evaluationCriteria
+            .filter((_, i) => i !== index)
+            .map((crit, i) => ({ ...crit, criteriaId: `${i + 1}` }));
         setFormData((prev) => ({ ...prev, evaluationCriteria: newCriteria }));
     };
 
@@ -165,6 +172,15 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                         onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) })}
                     />
                     <TextField
+                        label="Instruction (가이드)"
+                        fullWidth
+                        multiline
+                        rows={3}
+                        value={formData.instruction}
+                        onChange={(e) => setFormData({ ...formData, instruction: e.target.value })}
+                        helperText="AI를 위한 추가 가이드라인입니다."
+                    />
+                    <TextField
                         label="Result JSON Format"
                         fullWidth
                         multiline
@@ -191,9 +207,10 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                                         label="ID"
                                         size="small"
                                         fullWidth
+                                        disabled
                                         value={criterion.criteriaId}
                                         onChange={(e) => handleCriteriaChange(index, 'criteriaId', e.target.value)}
-                                        placeholder="1.1.1"
+                                        placeholder="1"
                                     />
                                 </Grid>
                                 <Grid item xs={12} sm={4}>
@@ -267,9 +284,19 @@ interface CategoryItemProps {
     onEdit: (category: EvaluationCategory) => void;
     onDelete: (categoryId: string) => void;
     config: any;
+    allExpanded?: boolean;
+    allSubExpanded?: boolean;
 }
 
-const SortableCategoryItem: React.FC<CategoryItemProps> = ({ formId, category, onEdit, onDelete, config }) => {
+const SortableCategoryItem: React.FC<CategoryItemProps> = ({
+    formId,
+    category,
+    onEdit,
+    onDelete,
+    config,
+    allExpanded,
+    allSubExpanded
+}) => {
     const {
         attributes,
         listeners,
@@ -283,8 +310,17 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({ formId, category, o
         transition,
     };
     const [expanded, setExpanded] = useState(false);
+    const [subItemsExpanded, setSubItemsExpanded] = useState(false);
     const [openSubItemDialog, setOpenSubItemDialog] = useState(false); // Create SubItem
     const [editingSubItem, setEditingSubItem] = useState<EvaluationSubItem | null>(null); // Edit SubItem
+
+    useEffect(() => {
+        if (allExpanded !== undefined) setExpanded(allExpanded);
+    }, [allExpanded]);
+
+    useEffect(() => {
+        if (allSubExpanded !== undefined) setSubItemsExpanded(allSubExpanded);
+    }, [allSubExpanded]);
 
     const queryClient = useQueryClient();
 
@@ -332,7 +368,7 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({ formId, category, o
                             <DragIcon />
                         </IconButton>
                         <Chip label={`${category.displayOrder}`} size="small" color="primary" />
-                        <Typography variant="h6">{category.categoryName}</Typography>
+                        <Typography variant="h6">{category.categoryId} ( {category.categoryName} )</Typography>
                         {!category.enabled && <Chip label="Disabled" size="small" />}
                         <Chip label={`Weight: ${category.weight}`} size="small" variant="outlined" />
                     </Stack>
@@ -359,7 +395,7 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({ formId, category, o
                             <List dense sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
                                 {category.instructions.map((inst, idx) => (
                                     <ListItem key={idx}>
-                                        <ListItemText primary={inst} />
+                                        <ListItemText primary={inst} primaryTypographyProps={{ sx: { whiteSpace: 'pre-wrap' } }} />
                                     </ListItem>
                                 ))}
                             </List>
@@ -369,7 +405,12 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({ formId, category, o
                     </Box>
 
                     <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                        <Typography variant="subtitle1" fontWeight={600}>SubItems</Typography>
+                        <Stack direction="row" spacing={2} alignItems="center">
+                            <Typography variant="subtitle1" fontWeight={600}>SubItems</Typography>
+                            <Button size="small" onClick={() => setSubItemsExpanded(!subItemsExpanded)}>
+                                {subItemsExpanded ? 'Collapse All Details' : 'Expand All Details'}
+                            </Button>
+                        </Stack>
                         <Button startIcon={<AddIcon />} size="small" onClick={() => { setEditingSubItem(null); setOpenSubItemDialog(true); }}>
                             Add SubItem
                         </Button>
@@ -398,38 +439,71 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({ formId, category, o
                                         <ListItemText
                                             primary={
                                                 <Typography variant="subtitle2" fontWeight="bold">
-                                                    {subItem.displayOrder}. {subItem.subItemName}
+                                                    {subItem.displayOrder}. {subItem.subItemId} ( {subItem.subItemName} )
                                                 </Typography>
                                             }
                                         />
                                     </ListItem>
 
-                                    {/* Evaluation Criteria Details */}
-                                    {subItem.evaluationCriteria && subItem.evaluationCriteria.length > 0 && (
-                                        <Box sx={{ pl: 4, pr: 8, pb: 2 }}>
-                                            <Grid container spacing={1}>
-                                                {subItem.evaluationCriteria.map((crit) => (
-                                                    <Grid item xs={12} key={crit.criteriaId}>
-                                                        <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
-                                                            <Stack direction="row" spacing={1} alignItems="flex-start">
-                                                                <Chip label={crit.criteriaId} size="small" sx={{ height: 20, fontSize: '0.7rem', minWidth: 40 }} />
-                                                                <Box>
-                                                                    <Typography variant="body2" fontWeight={500}>
-                                                                        {crit.description}
-                                                                    </Typography>
-                                                                    {crit.details && (
-                                                                        <Typography variant="caption" color="text.secondary" display="block">
-                                                                            {crit.details}
+                                    <Collapse in={subItemsExpanded}>
+                                        {/* Instruction Display */}
+                                        {subItem.instruction && (
+                                            <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
+                                                <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', whiteSpace: 'pre-wrap', display: 'block' }}>
+                                                    Guide: {subItem.instruction}
+                                                </Typography>
+                                            </Box>
+                                        )}
+
+                                        {/* Result JSON Format Display */}
+                                        {subItem.resultJsonFormat && (
+                                            <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
+                                                <Typography variant="caption" color="primary" fontWeight={600} display="block">
+                                                    AI 추출 포맷 (JSON):
+                                                </Typography>
+                                                <Paper
+                                                    variant="outlined"
+                                                    sx={{
+                                                        p: 1,
+                                                        bgcolor: 'grey.100',
+                                                        fontFamily: 'monospace',
+                                                        fontSize: '0.75rem',
+                                                        whiteSpace: 'pre-wrap',
+                                                        borderStyle: 'dashed'
+                                                    }}
+                                                >
+                                                    {subItem.resultJsonFormat}
+                                                </Paper>
+                                            </Box>
+                                        )}
+
+                                        {/* Evaluation Criteria Details */}
+                                        {subItem.evaluationCriteria && subItem.evaluationCriteria.length > 0 && (
+                                            <Box sx={{ pl: 4, pr: 8, pb: 2 }}>
+                                                <Grid container spacing={1}>
+                                                    {subItem.evaluationCriteria.map((crit) => (
+                                                        <Grid item xs={12} key={crit.criteriaId}>
+                                                            <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
+                                                                <Stack direction="row" spacing={1} alignItems="flex-start">
+                                                                    <Chip label={crit.criteriaId} size="small" sx={{ height: 20, fontSize: '0.7rem', minWidth: 40 }} />
+                                                                    <Box>
+                                                                        <Typography variant="body2" fontWeight={500} sx={{ whiteSpace: 'pre-wrap' }}>
+                                                                            {crit.description}
                                                                         </Typography>
-                                                                    )}
-                                                                </Box>
-                                                            </Stack>
-                                                        </Paper>
-                                                    </Grid>
-                                                ))}
-                                            </Grid>
-                                        </Box>
-                                    )}
+                                                                        {crit.details && (
+                                                                            <Typography variant="caption" color="text.secondary" display="block" sx={{ whiteSpace: 'pre-wrap' }}>
+                                                                                {crit.details}
+                                                                            </Typography>
+                                                                        )}
+                                                                    </Box>
+                                                                </Stack>
+                                                            </Paper>
+                                                        </Grid>
+                                                    ))}
+                                                </Grid>
+                                            </Box>
+                                        )}
+                                    </Collapse>
                                     <Divider />
                                 </React.Fragment>
                             ))}
@@ -520,7 +594,8 @@ const QMEvaluationFormDetail: React.FC = () => {
 
             try {
                 await Promise.all(updates.map(u =>
-                    updateCategory(formId!, u.categoryId, { displayOrder: u.displayOrder }, config)
+                    updateCategoryOrder(formId!, u.categoryId, { displayOrder: u.displayOrder }, config)
+
                 ));
                 queryClient.invalidateQueries({ queryKey: ['qm-categories', formId] });
             } catch (err) {
@@ -603,6 +678,10 @@ const QMEvaluationFormDetail: React.FC = () => {
         setOpenCategoryDialog(true);
     };
 
+    // Bulk Expansion States
+    const [bulkExpandCategories, setBulkExpandCategories] = useState<boolean | undefined>(undefined);
+    const [bulkExpandSubItems, setBulkExpandSubItems] = useState<boolean | undefined>(undefined);
+
     if (isFormLoading) return <Box p={4}><CircularProgress /></Box>;
     if (!form) return <Box p={4}>Form not found</Box>;
 
@@ -665,7 +744,17 @@ const QMEvaluationFormDetail: React.FC = () => {
                 {/* Right Col: Categories & SubItems */}
                 <Grid item xs={12} md={8}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                        <Typography variant="h6">Categories ({categories?.length || 0})</Typography>
+                        <Stack direction="row" spacing={2} alignItems="center">
+                            <Typography variant="h6">Categories ({categories?.length || 0})</Typography>
+                            <Stack direction="row" spacing={1}>
+                                <Button size="small" variant="outlined" onClick={() => setBulkExpandCategories(!bulkExpandCategories)}>
+                                    {bulkExpandCategories ? 'Collapse All Categories' : 'Expand All Categories'}
+                                </Button>
+                                <Button size="small" variant="outlined" onClick={() => setBulkExpandSubItems(!bulkExpandSubItems)}>
+                                    {bulkExpandSubItems ? 'Collapse All SubItems' : 'Expand All SubItems'}
+                                </Button>
+                            </Stack>
+                        </Stack>
                         <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenCategoryDialog()}>
                             Add Category
                         </Button>
@@ -681,6 +770,8 @@ const QMEvaluationFormDetail: React.FC = () => {
                                     onEdit={handleOpenCategoryDialog}
                                     onDelete={(id) => { if (window.confirm('Delete category?')) deleteCategoryMutation.mutate(id); }}
                                     config={config}
+                                    allExpanded={bulkExpandCategories}
+                                    allSubExpanded={bulkExpandSubItems}
                                 />
                             ))}
                         </SortableContext>

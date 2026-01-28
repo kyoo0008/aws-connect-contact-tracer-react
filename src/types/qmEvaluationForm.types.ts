@@ -28,6 +28,7 @@ export interface EvaluationSubItem {
     evaluationCriteria: EvaluationCriterion[];
     outputJsonSchema?: Record<string, unknown>;
     resultJsonFormat?: string;
+    instruction?: string;
 }
 
 export interface EvaluationCriterion {
@@ -79,6 +80,7 @@ export interface CreateSubItemRequest {
     evaluationCriteria: EvaluationCriterion[];
     outputJsonSchema?: Record<string, unknown>;
     resultJsonFormat?: string;
+    instruction?: string;
 }
 
 export interface UpdateSubItemRequest {
@@ -87,5 +89,5 @@ export interface UpdateSubItemRequest {
     evaluationCriteria?: EvaluationCriterion[];
     outputJsonSchema?: Record<string, unknown>;
     resultJsonFormat?: string;
+    instruction?: string;
 }
-

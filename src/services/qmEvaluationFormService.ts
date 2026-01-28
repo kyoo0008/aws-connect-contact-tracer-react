@@ -317,6 +317,45 @@ export async function updateCategory(
 }
 
 /**
+ * Update an existing Category
+ */
+export async function updateCategoryOrder(
+    formId: string,
+    categoryId: string,
+    data: UpdateCategoryRequest,
+    config: AWSConfig
+): Promise<EvaluationCategory> {
+    const apiBaseUrl = getApiBaseUrl(config.environment);
+
+    try {
+        const response = await fetch(
+            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/order`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-aws-region': config.region,
+                    'x-environment': config.environment,
+                    ...(config.credentials && {
+                        'x-aws-credentials': JSON.stringify(config.credentials),
+                    }),
+                },
+                body: JSON.stringify({ ...data, categoryId }),
+            }
+        );
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `Failed to update category: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error updating category ${categoryId} for form ${formId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Delete a Category
  */
 export async function deleteCategory(

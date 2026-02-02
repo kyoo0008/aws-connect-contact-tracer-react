@@ -1057,6 +1057,30 @@ const StatusChip: React.FC<{ status: string }> = ({ status }) => {
 // 대항목 상태 레이블 및 색상 매핑
 const getEvaluationStatusConfig = (status: EvaluationStatusType) => {
   switch (status) {
+    case 'GEMINI_EVAL_PROCESSING':
+      return {
+        label: 'AI 평가 처리 중',
+        color: 'info' as const,
+        icon: <AIIcon fontSize="small" />,
+        bgColor: 'info.50',
+        borderColor: 'info.main',
+      };
+    case 'GEMINI_EVAL_FAILED':
+      return {
+        label: 'AI 평가 실패',
+        color: 'error' as const,
+        icon: <AIIcon fontSize="small" />,
+        bgColor: 'error.50',
+        borderColor: 'error.main',
+      };
+    case 'GEMINI_EVAL_COMPLETED':
+      return {
+        label: 'AI 평가 완료',
+        color: 'info' as const,
+        icon: <AIIcon fontSize="small" />,
+        bgColor: 'info.50',
+        borderColor: 'info.main',
+      };
     case 'GEMINI_EVAL_COMPLETED':
       return {
         label: 'AI 평가 완료',

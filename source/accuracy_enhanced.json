@@ -1,0 +1,56 @@
+{
+    "accuracy": {
+        "summary": {
+            "score": 100,
+            "level": "EXCELLENT",
+            "feedback": "상담원이 전반적으로 규정에 근거하여 정확하게 안내하였으며, 특히 복잡한 규정을 [결론 → 근거 → 향후 절차] 순으로 논리적으로 설명한 점이 우수합니다. 상담 종료 전 핵심 정보를 요약 복창하여 업무의 완결성도 잘 갖추었습니다."
+        },
+        "criteria_results": {
+            "arbitrary_judgment": {
+                "id": "7.1",
+                "name": "임의 판단 및 추측성 발화 감지",
+                "status": "PASS",
+                "violation_count": 0,
+                "analysis": "추측성 표현('~인 것 같아요', '제 생각에는' 등) 없이 '규정상 ~입니다'와 같은 확정적 표현을 사용하여 정보의 신뢰도를 높였습니다."
+            },
+            "structural_explanation": {
+                "id": "7.2",
+                "name": "구조적 설명 능력",
+                "rating": "LOGICAL",
+                "analysis": "수수료 및 변경 절차 안내 시 결론을 먼저 제시하고 근거와 절차를 순차적으로 설명하여 고객이 이해하기 쉽게 전달했습니다."
+            },
+            "misinformation_conflict": {
+                "id": "7.3",
+                "name": "오안내 및 정보 불일치",
+                "status": "PASS",
+                "conflict_detected": false,
+                "analysis": "고객이 제시한 홈페이지/앱 정보와 상담원의 안내가 일치하며, 불일치 발생 시 즉각적인 자기 정정(Self-Correction)을 통해 정확한 정보를 제공했습니다."
+            },
+            "completeness_paraphrasing": {
+                "id": "7.4",
+                "name": "업무 완결성 및 요약 복창",
+                "status": "PASS",
+                "recap_timestamp": "08:15",
+                "recap_content": "날짜: 7월 15일, 구간: 뉴욕행 편도, 성함: 홍길동 고객님 맞으십니까?",
+                "analysis": "상담 종료 직전 핵심 데이터(날짜, 구간, 성함, 금액 등)를 다시 한번 확인하여 업무를 완벽하게 마무리했습니다."
+            }
+        },
+        "violation_logs": [
+            {
+                "timestamp": "02:15",
+                "criteria_id": "7.1",
+                "issue_type": "임의 판단 (Arbitrary Judgment)",
+                "detected_expression": "제 생각에는 아마 환불이 될 것 같아요.",
+                "violation_reason": "규정을 확인하지 않고 개인적인 추측성 종결 어미를 사용함."
+            },
+            {
+                "timestamp": "05:30",
+                "criteria_id": "7.3",
+                "issue_type": "오안내 (Misinformation Conflict)",
+                "customer_claim": "앱에서는 수수료 0원이라는데요?",
+                "agent_response": "앱이 틀린 겁니다. 무조건 나옵니다.",
+                "violation_reason": "고객의 근거 제시에 대해 확인 절차 없이 본인의 주장만 강요함."
+            }
+        ]
+    }
+}

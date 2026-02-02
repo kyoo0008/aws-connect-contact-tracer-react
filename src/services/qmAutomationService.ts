@@ -511,8 +511,12 @@ export type QMEvaluationStatus =
  */
 export function getQMEvaluationStatusLabel(status?: string): string {
   switch (status) {
+    case 'GEMINI_EVAL_PROCESSING':
+      return 'AI 평가 처리 중';
     case 'GEMINI_EVAL_COMPLETED':
       return 'AI 평가 완료';
+    case 'GEMINI_EVAL_FAILED':
+      return 'AI 평가 실패';
     case 'AGENT_CONFIRM_COMPLETED':
       return '상담사 확인 완료';
     case 'AGENT_OBJECTION_REQUESTED':
@@ -531,8 +535,12 @@ export function getQMEvaluationStatusLabel(status?: string): string {
  */
 export function getQMEvaluationStatusColor(status?: string): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' {
   switch (status) {
-    case 'GEMINI_EVAL_COMPLETED':
+    case 'GEMINI_EVAL_PROCESSING':
       return 'info';
+    case 'GEMINI_EVAL_COMPLETED':
+      return 'success';
+    case 'GEMINI_EVAL_FAILED':
+      return 'error';
     case 'AGENT_CONFIRM_COMPLETED':
       return 'success';
     case 'AGENT_OBJECTION_REQUESTED':

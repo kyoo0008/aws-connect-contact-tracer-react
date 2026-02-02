@@ -311,16 +311,13 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
     };
     const [expanded, setExpanded] = useState(false);
     const [subItemsExpanded, setSubItemsExpanded] = useState(false);
+    const [expandedSubItemIds, setExpandedSubItemIds] = useState<Record<string, boolean>>({});
     const [openSubItemDialog, setOpenSubItemDialog] = useState(false); // Create SubItem
     const [editingSubItem, setEditingSubItem] = useState<EvaluationSubItem | null>(null); // Edit SubItem
 
     useEffect(() => {
         if (allExpanded !== undefined) setExpanded(allExpanded);
     }, [allExpanded]);
-
-    useEffect(() => {
-        if (allSubExpanded !== undefined) setSubItemsExpanded(allSubExpanded);
-    }, [allSubExpanded]);
 
     const queryClient = useQueryClient();
 
@@ -330,6 +327,38 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
         queryFn: () => getSubItems(formId, category.categoryId, config),
         enabled: expanded, // Only fetch when expanded
     });
+
+    useEffect(() => {
+        if (allSubExpanded !== undefined) {
+            setSubItemsExpanded(allSubExpanded);
+            if (subItems) {
+                const newStates: Record<string, boolean> = {};
+                subItems.forEach(item => {
+                    newStates[item.subItemId] = allSubExpanded;
+                });
+                setExpandedSubItemIds(newStates);
+            }
+        }
+    }, [allSubExpanded, subItems]);
+
+    const handleToggleAllSubItems = () => {
+        const nextState = !subItemsExpanded;
+        setSubItemsExpanded(nextState);
+        if (subItems) {
+            const newStates: Record<string, boolean> = {};
+            subItems.forEach(item => {
+                newStates[item.subItemId] = nextState;
+            });
+            setExpandedSubItemIds(newStates);
+        }
+    };
+
+    const toggleSubItem = (subItemId: string) => {
+        setExpandedSubItemIds(prev => ({
+            ...prev,
+            [subItemId]: !prev[subItemId]
+        }));
+    };
 
     // Create/Update SubItem Mutation
     const subItemMutation = useMutation({
@@ -404,10 +433,32 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                         )}
                     </Box>
 
+                    <Box mb={2}>
+                        <Typography variant="subtitle2" gutterBottom>Feedback Message</Typography>
+                        {category.feedbackMessageTemplate ? (
+                            // <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>{category.feedbackMessageTemplate}</Typography>
+                            <Paper
+                                variant="outlined"
+                                sx={{
+                                    p: 1,
+                                    bgcolor: 'grey.100',
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.75rem',
+                                    whiteSpace: 'pre-wrap',
+                                    borderStyle: 'dashed'
+                                }}
+                            >
+                                {category.feedbackMessageTemplate}
+                            </Paper>
+                        ) : (
+                            <Typography variant="body2" color="text.secondary">No feedback message.</Typography>
+                        )}
+                    </Box>
+
                     <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
                         <Stack direction="row" spacing={2} alignItems="center">
                             <Typography variant="subtitle1" fontWeight={600}>SubItems</Typography>
-                            <Button size="small" onClick={() => setSubItemsExpanded(!subItemsExpanded)}>
+                            <Button size="small" onClick={handleToggleAllSubItems}>
                                 {subItemsExpanded ? 'Collapse All Details' : 'Expand All Details'}
                             </Button>
                         </Stack>
@@ -436,6 +487,9 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                             </>
                                         }
                                     >
+                                        <IconButton size="small" onClick={() => toggleSubItem(subItem.subItemId)} sx={{ mr: 1 }}>
+                                            {expandedSubItemIds[subItem.subItemId] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                        </IconButton>
                                         <ListItemText
                                             primary={
                                                 <Typography variant="subtitle2" fontWeight="bold">
@@ -445,7 +499,7 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                         />
                                     </ListItem>
 
-                                    <Collapse in={subItemsExpanded}>
+                                    <Collapse in={expandedSubItemIds[subItem.subItemId] || false}>
                                         {/* Instruction Display */}
                                         {subItem.instruction && (
                                             <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
@@ -564,7 +618,7 @@ const QMEvaluationFormDetail: React.FC = () => {
     });
 
     // Fetch Categories
-    const { data: categories, isLoading: isCategoriesLoading } = useQuery({
+    const { data: categories } = useQuery({
         queryKey: ['qm-categories', formId],
         queryFn: () => getCategories(formId!, config),
         enabled: !!formId,

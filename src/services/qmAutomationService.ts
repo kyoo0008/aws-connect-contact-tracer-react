@@ -505,7 +505,11 @@ export function getStatusColor(status: QMStatus): 'default' | 'primary' | 'secon
  * QM 평가 상태(qmEvaluationStatus) 타입
  */
 export type QMEvaluationStatus =
+  | 'GEMINI_EVAL_PROCESSING'
+  | 'GEMINI_EVAL_FAILED'
   | 'GEMINI_EVAL_COMPLETED'
+  | 'QA_FEEDBACK_PROCESSING'
+  | 'AGENT_CHECK_PROCESSING'
   | 'AGENT_CONFIRM_COMPLETED'
   | 'AGENT_OBJECTION_REQUESTED'
   | 'QA_AGENT_OBJECTION_ACCEPTED'
@@ -517,11 +521,11 @@ export type QMEvaluationStatus =
 export function getQMEvaluationStatusLabel(status?: string): string {
   switch (status) {
     case 'GEMINI_EVAL_PROCESSING':
-      return 'AI 평가 처리 중';
+      return 'AI QM 평가 진행 중';
     case 'GEMINI_EVAL_COMPLETED':
       return 'AI 평가 완료';
     case 'GEMINI_EVAL_FAILED':
-      return 'AI 평가 실패';
+      return 'AI QM 평가 실패';
     case 'AGENT_CONFIRM_COMPLETED':
       return '상담사 확인 완료';
     case 'AGENT_OBJECTION_REQUESTED':
@@ -530,6 +534,10 @@ export function getQMEvaluationStatusLabel(status?: string): string {
       return 'QA 이의제기 수용';
     case 'QA_AGENT_OBJECTION_REJECTED':
       return 'QA 이의제기 거절';
+    case 'AGENT_CHECK_PROCESSING':
+      return '상담원 확인 작업 중';
+    case 'QA_FEEDBACK_PROCESSING':
+      return 'QA 피드백 작성 중';
     default:
       return status || '-';
   }
@@ -554,6 +562,10 @@ export function getQMEvaluationStatusColor(status?: string): 'default' | 'primar
       return 'success';
     case 'QA_AGENT_OBJECTION_REJECTED':
       return 'error';
+    case 'AGENT_CHECK_PROCESSING':
+      return 'info';
+    case 'QA_FEEDBACK_PROCESSING':
+      return 'info';
     default:
       return 'default';
   }

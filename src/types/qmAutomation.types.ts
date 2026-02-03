@@ -229,9 +229,11 @@ export interface QMAutomationListResponse {
 
 // 대항목 상태 타입
 export type EvaluationStatusType =
-  | 'GEMINI_EVAL_PROCESSING'       // AI QM 평가 처리 중
+  | 'GEMINI_EVAL_PROCESSING'       // AI QM 평가 진행 중
   | 'GEMINI_EVAL_FAILED'           // AI QM 평가 실패
   | 'GEMINI_EVAL_COMPLETED'        // AI QM 평가 완료
+  | 'QA_FEEDBACK_PROCESSING'       // QA 피드백 작성 중
+  | 'AGENT_CHECK_PROCESSING'       // 상담원 확인 작업 중
   | 'AGENT_CONFIRM_COMPLETED'      // 상담원 확인 완료
   | 'AGENT_OBJECTION_REQUESTED'    // 상담원 이의제기 요청됨
   | 'QA_AGENT_OBJECTION_ACCEPTED'  // QA가 상담원 이의제기 수용

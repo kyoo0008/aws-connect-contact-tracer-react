@@ -40,7 +40,7 @@ export async function callGeminiPrompt(
 ): Promise<GeminiPromptResponse> {
   const apiBaseUrl = getApiBaseUrl();
 
-  const response = await fetch(`${apiBaseUrl}/api/agent/v1/gemini/prompt`, {
+  const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation/simple-prompt`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -1664,7 +1664,7 @@ app.all('/api/agent/v1/qm-evaluation-form*', async (req, res) => {
 /**
  * Gemini Simple Prompt API
  *
- * POST /api/agent/v1/gemini/prompt
+ * POST /api/agent/v1/qm-automation/simple-prompt
  * Body: {
  *   prompt: string,
  *   model: string (e.g., "gemini-2.5-flash"),
@@ -1672,7 +1672,7 @@ app.all('/api/agent/v1/qm-evaluation-form*', async (req, res) => {
  * }
  * Headers: x-aws-credentials, x-aws-region, x-environment
  */
-app.post('/api/agent/v1/gemini/prompt', async (req, res) => {
+app.post('/api/agent/v1/qm-automation/simple-prompt', async (req, res) => {
   try {
     const { prompt, model, files } = req.body;
 

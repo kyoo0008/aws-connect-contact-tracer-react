@@ -479,7 +479,7 @@ const QMAutomationList: React.FC = () => {
                   size="small"
                   fullWidth
                   label="센터"
-                  placeholder="예: Seoul"
+                  placeholder="예: SELRS"
                   value={searchFilters.agentCenter || ''}
                   onChange={(e) =>
                     setSearchFilters({ ...searchFilters, agentCenter: e.target.value })
@@ -530,7 +530,11 @@ const QMAutomationList: React.FC = () => {
                     }
                   >
                     <MenuItem value="">전체</MenuItem>
+                    <MenuItem value="GEMINI_EVAL_PROCESSING">AI QM 평가 진행 중</MenuItem>
+                    <MenuItem value="GEMINI_EVAL_FAILED">AI QM 평가 실패</MenuItem>
                     <MenuItem value="GEMINI_EVAL_COMPLETED">AI 평가 완료</MenuItem>
+                    <MenuItem value="QA_FEEDBACK_PROCESSING">QA 피드백 작성 중</MenuItem>
+                    <MenuItem value="AGENT_CHECK_PROCESSING">상담원 확인 작업 중</MenuItem>
                     <MenuItem value="AGENT_CONFIRM_COMPLETED">상담사 확인 완료</MenuItem>
                     <MenuItem value="AGENT_OBJECTION_REQUESTED">상담원 이의 제기</MenuItem>
                     <MenuItem value="QA_AGENT_OBJECTION_ACCEPTED">QA 이의제기 수용</MenuItem>

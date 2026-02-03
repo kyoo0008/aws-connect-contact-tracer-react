@@ -254,10 +254,12 @@ const QMAutomationList: React.FC = () => {
       appliedFilters.qaFeedbackYN,
       appliedFilters.qmEvaluationStatus,
       appliedFilters.qaAgentUserName,
+      page,
+      rowsPerPage,
     ],
     queryFn: async () => {
       // Search with filters
-      if (!appliedStartDate || !appliedEndDate) return [];
+      if (!appliedStartDate || !appliedEndDate) return { items: [], pagination: { totalCount: 0, totalPages: 0, page: 1, pageSize: rowsPerPage }, filters: {} };
       const filters: QMAutomationSearchFilters = {
         startMonth: appliedStartDate.format('YYYYMM'),
         endMonth: appliedEndDate.format('YYYYMM'),
@@ -269,6 +271,9 @@ const QMAutomationList: React.FC = () => {
       if (appliedFilters.qaFeedbackYN) filters.qaFeedbackYN = appliedFilters.qaFeedbackYN;
       if (appliedFilters.qmEvaluationStatus) filters.qmEvaluationStatus = appliedFilters.qmEvaluationStatus;
       if (appliedFilters.qaAgentUserName) filters.qaAgentUserName = appliedFilters.qaAgentUserName;
+
+      filters.page = page + 1; // Material UI is 0-indexed, backend is 1-indexed
+      filters.pageSize = rowsPerPage;
 
       return getQMAutomationListSearch(config, filters);
     },
@@ -574,7 +579,7 @@ const QMAutomationList: React.FC = () => {
       )}
 
       {/* Empty State */}
-      {!isLoading && !error && (!qmList || qmList.length === 0) && (
+      {!isLoading && !error && (!qmList || qmList.items.length === 0) && (
         <Paper elevation={0} sx={{ p: 4, textAlign: 'center', bgcolor: 'grey.50' }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             QM 분석 기록이 없습니다
@@ -593,7 +598,7 @@ const QMAutomationList: React.FC = () => {
       )}
 
       {/* QM List Table */}
-      {!isLoading && qmList && qmList.length > 0 && (
+      {!isLoading && qmList && qmList.items.length > 0 && (
         <>
           <TableContainer component={Paper}>
             <Table>
@@ -629,24 +634,7 @@ const QMAutomationList: React.FC = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {[...qmList]
-                  .sort((a, b) => {
-                    // orderBy가 null이면 정렬하지 않음
-                    if (!orderBy) return 0;
-
-                    let comparison = 0;
-                    if (orderBy === 'connectedToAgentTimestamp') {
-                      const dateA = new Date(a.connectedToAgentTimestamp || 0).getTime();
-                      const dateB = new Date(b.connectedToAgentTimestamp || 0).getTime();
-                      comparison = dateA - dateB;
-                    } else if (orderBy === 'updatedAt') {
-                      const dateA = new Date(a.completedAt || a.createdAt || 0).getTime();
-                      const dateB = new Date(b.completedAt || b.createdAt || 0).getTime();
-                      comparison = dateA - dateB;
-                    }
-                    return order === 'desc' ? -comparison : comparison;
-                  })
-                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                {qmList.items
                   .map((item: QMAutomationListItem) => (
                     <TableRow
                       key={item.requestId}
@@ -729,9 +717,9 @@ const QMAutomationList: React.FC = () => {
             </Table>
           </TableContainer>
           <TablePagination
-            rowsPerPageOptions={[5, 10, 25]}
+            rowsPerPageOptions={[5, 10, 15, 25, 50]}
             component="div"
-            count={qmList.length}
+            count={qmList.pagination.totalCount}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}

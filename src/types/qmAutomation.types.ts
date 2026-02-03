@@ -206,6 +206,19 @@ export interface QMAutomationListItem {
   qmEvaluationStatus?: string;
 }
 
+export interface QMAutomationPagination {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+}
+
+export interface QMAutomationSearchResponse {
+  items: QMAutomationListItem[];
+  filters: any;
+  pagination: QMAutomationPagination;
+}
+
 export interface QMAutomationListResponse {
   items: QMAutomationListItem[];
   total: number;

@@ -18,21 +18,21 @@ export interface ProfileMapping {
  */
 export const profileMappings: ProfileMapping[] = [
   {
-    keyword: '-DEV-',
+    keyword: 'DEV-',
     region: 'ap-northeast-2',
     instanceId: '08352314-25ec-473b-b997-f064366798b8',
     environment: 'dev',
     logGroupName: '/aws/connect/kal-servicecenter-dev',
   },
   {
-    keyword: '-STG-',
+    keyword: 'STG-',
     region: 'ap-northeast-2',
     instanceId: '61925798-4f7a-4aca-993e-882f6c5182bc',
     environment: 'stg',
     logGroupName: '/aws/connect/kal-servicecenter-stg',
   },
   {
-    keyword: '-PRD-',
+    keyword: 'PRD-',
     region: 'ap-northeast-2',
     instanceId: '41810ec8-c661-4972-b81c-59976d316de9',
     environment: 'prd',

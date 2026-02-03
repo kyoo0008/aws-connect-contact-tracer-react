@@ -14,6 +14,7 @@ import {
   BulkAgentActionRequest,
   BulkAgentActionResponse,
   BulkQAFeedbackRequest,
+  QMAutomationSearchResponse,
 } from '@/types/qmAutomation.types';
 import { AWSConfig } from '@/types/contact.types';
 
@@ -298,8 +299,10 @@ export interface QMAutomationSearchFilters {
   qaFeedbackYN?: 'Y' | 'N';
   qmEvaluationStatus?: string;
   contactId?: string;
-  qaAgentUserName?: string,
+  qaAgentUserName?: string;
   limit?: number;
+  page?: number;
+  pageSize?: number;
 }
 
 /**
@@ -308,7 +311,7 @@ export interface QMAutomationSearchFilters {
 export async function getQMAutomationListSearch(
   config: AWSConfig,
   filters: QMAutomationSearchFilters
-): Promise<QMAutomationListItem[]> {
+): Promise<QMAutomationSearchResponse> {
   const apiBaseUrl = getApiBaseUrl(config.environment);
 
   try {
@@ -325,6 +328,8 @@ export async function getQMAutomationListSearch(
     if (filters.qaAgentUserName) params.append('qaAgentUserName', filters.qaAgentUserName);
     if (filters.contactId) params.append('contactId', filters.contactId);
     if (filters.limit) params.append('limit', filters.limit.toString());
+    if (filters.page) params.append('page', filters.page.toString());
+    if (filters.pageSize) params.append('pageSize', filters.pageSize.toString());
 
     const queryString = params.toString();
     const url = queryString
@@ -350,7 +355,7 @@ export async function getQMAutomationListSearch(
     }
 
     const data = await response.json();
-    return data.items || [];
+    return data;
   } catch (error) {
     console.error('Error searching QM Automation list:', error);
     throw error;

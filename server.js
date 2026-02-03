@@ -1089,7 +1089,8 @@ app.get('/api/agent/v1/qm-automation/search', async (req, res) => {
     const queryStringParameters = {};
     const allowedParams = [
       'startMonth', 'endMonth', 'agentId', 'agentUserName', 'agentCenter',
-      'agentConfirmYN', 'qaFeedbackYN', 'qmEvaluationStatus', 'contactId', 'qaAgentUserName'
+      'agentConfirmYN', 'qaFeedbackYN', 'qmEvaluationStatus', 'contactId', 'qaAgentUserName',
+      'page', 'pageSize'
     ];
 
     for (const param of allowedParams) {

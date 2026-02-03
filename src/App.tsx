@@ -18,6 +18,7 @@ import QMAutomationList from './pages/QMAutomationList';
 import QMAutomationDetail from './pages/QMAutomationDetail';
 import QMEvaluationFormList from './pages/QMEvaluationFormList';
 import QMEvaluationFormDetail from './pages/QMEvaluationFormDetail';
+import GeminiPlayground from './pages/GeminiPlayground';
 import Help from './pages/Help';
 
 // Components
@@ -207,6 +208,7 @@ function App() {
                       <Route path="/qm-automation/detail/:requestId" element={<QMAutomationDetail />} />
                       <Route path="/qm-evaluation-form" element={<QMEvaluationFormList />} />
                       <Route path="/qm-evaluation-form/:formId" element={<QMEvaluationFormDetail />} />
+                      <Route path="/gemini-playground" element={<GeminiPlayground />} />
                       <Route path="/logs/:contactId?" element={<LogAnalysis />} />
                       <Route path="/xray-trace" element={<XRayTraceViewer />} />
                       <Route path="/settings" element={<Settings />} />

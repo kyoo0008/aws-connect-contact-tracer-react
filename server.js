@@ -1657,6 +1657,103 @@ app.all('/api/agent/v1/qm-evaluation-form*', async (req, res) => {
   }
 });
 
+// ========================================
+// Gemini API
+// ========================================
+
+/**
+ * Gemini Simple Prompt API
+ *
+ * POST /api/agent/v1/gemini/prompt
+ * Body: {
+ *   prompt: string,
+ *   model: string (e.g., "gemini-2.5-flash"),
+ *   files?: [{ mimeType: string, data: string (base64) }]
+ * }
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ */
+app.post('/api/agent/v1/gemini/prompt', async (req, res) => {
+  try {
+    const { prompt, model, files } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'prompt is required' });
+    }
+    if (!model) {
+      return res.status(400).json({ error: 'model is required' });
+    }
+
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req);
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-gemini-handler`;
+
+    // Construct Lambda payload
+    const lambdaPayload = {
+      invocationType: 'RequestResponse',
+      input: {
+        action: 'simplePrompt',
+        prompt: prompt,
+        model: model,
+      }
+    };
+
+    // Add files if provided
+    if (files && Array.isArray(files) && files.length > 0) {
+      lambdaPayload.input.files = files;
+    }
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(lambdaPayload),
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+
+    // Handle Lambda error
+    if (result.errorMessage) {
+      console.error('Lambda Execution Error:', result);
+      return res.status(502).json({ error: 'Lambda Execution Failed', message: result.errorMessage });
+    }
+
+    const statusCode = result.statusCode || 200;
+    let responseBody = result.body;
+
+    // Parse body if it's a string
+    if (responseBody && typeof responseBody === 'string') {
+      try {
+        responseBody = JSON.parse(responseBody);
+      } catch (e) {
+        // Keep as string if not JSON
+      }
+    }
+
+    if (statusCode >= 400) {
+      return res.status(statusCode).json({
+        error: responseBody?.error || 'Request failed',
+        message: responseBody?.message || responseBody || 'Unknown error',
+        statusCode: statusCode
+      });
+    }
+
+    // Success - return the parsed response
+    res.status(statusCode).json(responseBody || result);
+
+  } catch (error) {
+    console.error('Error invoking Gemini Lambda:', error);
+    res.status(500).json({ error: 'Failed to invoke Gemini API', message: error.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

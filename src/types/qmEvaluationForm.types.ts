@@ -91,3 +91,29 @@ export interface UpdateSubItemRequest {
     resultJsonFormat?: string;
     instruction?: string;
 }
+
+// Bulk Update Category Request
+export interface BulkCategoryItem {
+    categoryId: string;
+    categoryName: string;
+    displayOrder: number;
+    enabled: boolean;
+    weight: number;
+    instructions?: string[];
+    feedbackMessageTemplate?: string;
+    subItems?: BulkSubItem[];
+}
+
+export interface BulkSubItem {
+    subItemId: string;
+    subItemName: string;
+    displayOrder: number;
+    evaluationCriteria: EvaluationCriterion[];
+    outputJsonSchema?: Record<string, unknown>;
+    resultJsonFormat?: string;
+    instruction?: string;
+}
+
+export interface BulkUpdateCategoriesRequest {
+    categories: BulkCategoryItem[];
+}

@@ -9,6 +9,7 @@ import {
     UpdateCategoryRequest,
     CreateSubItemRequest,
     UpdateSubItemRequest,
+    BulkUpdateCategoriesRequest,
 } from '@/types/qmEvaluationForm.types';
 
 // API Base URL - Environment dependent
@@ -546,6 +547,49 @@ export async function deleteSubItem(
         }
     } catch (error) {
         console.error(`Error deleting subitem ${subItemId}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Bulk Update Categories (with SubItems)
+ */
+export async function bulkUpdateCategories(
+    formId: string,
+    data: BulkUpdateCategoriesRequest,
+    config: AWSConfig
+): Promise<EvaluationCategory[]> {
+    const apiBaseUrl = getApiBaseUrl(config.environment);
+
+    try {
+        const response = await fetch(
+            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/bulk`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-aws-region': config.region,
+                    'x-environment': config.environment,
+                    ...(config.credentials && {
+                        'x-aws-credentials': JSON.stringify(config.credentials),
+                    }),
+                },
+                body: JSON.stringify(data),
+            }
+        );
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `Failed to bulk update categories: ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (Array.isArray(result)) return result;
+        if (result.categories && Array.isArray(result.categories)) return result.categories;
+        if (result.data && Array.isArray(result.data)) return result.data;
+        return [];
+    } catch (error) {
+        console.error(`Error bulk updating categories for form ${formId}:`, error);
         throw error;
     }
 }

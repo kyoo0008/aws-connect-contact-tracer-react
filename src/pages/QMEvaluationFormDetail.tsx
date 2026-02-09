@@ -41,6 +41,8 @@ import {
     ExpandMore as ExpandMoreIcon,
     ExpandLess as ExpandLessIcon,
     DragIndicator as DragIcon,
+    Upload as UploadIcon,
+    Download as DownloadIcon,
 } from '@mui/icons-material';
 import {
     DndContext,
@@ -73,6 +75,7 @@ import {
     updateSubItem,
     deleteSubItem,
     updateCategoryOrder,
+    bulkUpdateCategories,
 } from '@/services/qmEvaluationFormService';
 import {
     EvaluationCategory,
@@ -81,7 +84,187 @@ import {
     UpdateQmEvaluationFormRequest,
     CreateCategoryRequest,
     CreateSubItemRequest,
+    BulkUpdateCategoriesRequest,
+    BulkCategoryItem,
 } from '@/types/qmEvaluationForm.types';
+
+// --- Bulk Update Dialog Component ---
+interface BulkUpdateDialogProps {
+    open: boolean;
+    onClose: () => void;
+    onSubmit: (data: BulkUpdateCategoriesRequest) => void;
+    isLoading: boolean;
+    currentCategories?: EvaluationCategory[];
+}
+
+const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
+    open,
+    onClose,
+    onSubmit,
+    isLoading,
+    currentCategories,
+}) => {
+    const [jsonInput, setJsonInput] = useState('');
+    const [jsonError, setJsonError] = useState<string | null>(null);
+
+    // Generate sample JSON from current categories
+    const generateSampleJson = () => {
+        if (currentCategories && currentCategories.length > 0) {
+            const sampleData: BulkUpdateCategoriesRequest = {
+                categories: currentCategories.map(cat => ({
+                    categoryId: cat.categoryId,
+                    categoryName: cat.categoryName,
+                    displayOrder: cat.displayOrder,
+                    enabled: cat.enabled,
+                    weight: cat.weight,
+                    instructions: cat.instructions || [],
+                    feedbackMessageTemplate: cat.feedbackMessageTemplate || '',
+                    subItems: [],
+                })),
+            };
+            setJsonInput(JSON.stringify(sampleData, null, 2));
+        } else {
+            const sampleData: BulkUpdateCategoriesRequest = {
+                categories: [
+                    {
+                        categoryId: 'greeting',
+                        categoryName: '인사',
+                        displayOrder: 1,
+                        enabled: true,
+                        weight: 1,
+                        instructions: ['인사말 평가 지침'],
+                        feedbackMessageTemplate: '피드백 템플릿',
+                        subItems: [
+                            {
+                                subItemId: 'opening',
+                                subItemName: '오프닝 인사',
+                                displayOrder: 1,
+                                evaluationCriteria: [
+                                    {
+                                        criteriaId: '1.1.1',
+                                        description: '표준 인사말 준수',
+                                        details: '상세 내용',
+                                    },
+                                ],
+                                outputJsonSchema: {},
+                                resultJsonFormat: '포맷',
+                                instruction: '지시사항',
+                            },
+                        ],
+                    },
+                ],
+            };
+            setJsonInput(JSON.stringify(sampleData, null, 2));
+        }
+        setJsonError(null);
+    };
+
+    const handleSubmit = () => {
+        try {
+            const parsed = JSON.parse(jsonInput);
+            if (!parsed.categories || !Array.isArray(parsed.categories)) {
+                setJsonError('JSON must contain a "categories" array');
+                return;
+            }
+            // Validate each category has required fields
+            for (const cat of parsed.categories) {
+                if (!cat.categoryId || !cat.categoryName) {
+                    setJsonError('Each category must have "categoryId" and "categoryName"');
+                    return;
+                }
+            }
+            setJsonError(null);
+            onSubmit(parsed);
+        } catch (e) {
+            setJsonError('Invalid JSON format');
+        }
+    };
+
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target?.result as string;
+                setJsonInput(content);
+                setJsonError(null);
+            };
+            reader.readAsText(file);
+        }
+    };
+
+    const handleDownloadTemplate = () => {
+        generateSampleJson();
+        const blob = new Blob([jsonInput || ''], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'bulk-categories-template.json';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+            <DialogTitle>Bulk Update Categories</DialogTitle>
+            <DialogContent>
+                <Stack spacing={2} sx={{ mt: 1 }}>
+                    <Stack direction="row" spacing={2}>
+                        <Button
+                            variant="outlined"
+                            startIcon={<DownloadIcon />}
+                            onClick={generateSampleJson}
+                        >
+                            Load Current Data
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            component="label"
+                            startIcon={<UploadIcon />}
+                        >
+                            Upload JSON File
+                            <input
+                                type="file"
+                                hidden
+                                accept=".json"
+                                onChange={handleFileUpload}
+                            />
+                        </Button>
+                    </Stack>
+                    <TextField
+                        label="Categories JSON"
+                        fullWidth
+                        multiline
+                        rows={20}
+                        value={jsonInput}
+                        onChange={(e) => {
+                            setJsonInput(e.target.value);
+                            setJsonError(null);
+                        }}
+                        error={!!jsonError}
+                        helperText={jsonError || 'Paste or upload JSON data for bulk category update'}
+                        sx={{
+                            '& .MuiInputBase-input': {
+                                fontFamily: 'monospace',
+                                fontSize: '0.85rem',
+                            },
+                        }}
+                    />
+                </Stack>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Cancel</Button>
+                <Button
+                    variant="contained"
+                    onClick={handleSubmit}
+                    disabled={!jsonInput.trim() || isLoading}
+                >
+                    {isLoading ? 'Updating...' : 'Bulk Update'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
 
 // --- SubItem Dialog Component ---
 interface SubItemDialogProps {
@@ -600,6 +783,7 @@ const QMEvaluationFormDetail: React.FC = () => {
     // Category Dialog State
     const [openCategoryDialog, setOpenCategoryDialog] = useState(false);
     const [editingCategory, setEditingCategory] = useState<EvaluationCategory | null>(null);
+    const [openBulkUpdateDialog, setOpenBulkUpdateDialog] = useState(false);
     const [categoryFormData, setCategoryFormData] = useState<CreateCategoryRequest>({
         categoryId: '',
         categoryName: '',
@@ -703,6 +887,23 @@ const QMEvaluationFormDetail: React.FC = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['qm-categories', formId] });
         }
+    });
+
+    // Bulk Update Categories Mutation
+    const bulkUpdateMutation = useMutation({
+        mutationFn: async (data: BulkUpdateCategoriesRequest) => {
+            return bulkUpdateCategories(formId!, data, config);
+        },
+        onSuccess: () => {
+            setOpenBulkUpdateDialog(false);
+            queryClient.invalidateQueries({ queryKey: ['qm-categories', formId] });
+            // Also invalidate subitems queries since they might be updated
+            queryClient.invalidateQueries({ queryKey: ['qm-subitems', formId] });
+            alert('Categories bulk updated successfully.');
+        },
+        onError: (error) => {
+            alert(`Failed to bulk update categories: ${(error as Error).message}`);
+        },
     });
 
     const handleOpenCategoryDialog = (category?: EvaluationCategory) => {
@@ -809,9 +1010,18 @@ const QMEvaluationFormDetail: React.FC = () => {
                                 </Button>
                             </Stack>
                         </Stack>
-                        <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenCategoryDialog()}>
-                            Add Category
-                        </Button>
+                        <Stack direction="row" spacing={1}>
+                            <Button
+                                variant="outlined"
+                                startIcon={<UploadIcon />}
+                                onClick={() => setOpenBulkUpdateDialog(true)}
+                            >
+                                Bulk Update
+                            </Button>
+                            <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenCategoryDialog()}>
+                                Add Category
+                            </Button>
+                        </Stack>
                     </Stack>
 
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -877,15 +1087,18 @@ const QMEvaluationFormDetail: React.FC = () => {
                         {/* Instructions List Management */}
                         <Typography variant="subtitle2" sx={{ mt: 2 }}>Instructions</Typography>
                         {(categoryFormData.instructions || []).map((instruction, index) => (
-                            <Stack key={index} direction="row" spacing={1} alignItems="center">
+                            <Stack key={index} direction="row" spacing={1} alignItems="flex-start">
                                 <TextField
-                                    fullWidth size="small"
+                                    fullWidth
+                                    multiline
+                                    rows={3}
                                     value={instruction}
                                     onChange={(e) => {
                                         const newInstructions = [...(categoryFormData.instructions || [])];
                                         newInstructions[index] = e.target.value;
                                         setCategoryFormData({ ...categoryFormData, instructions: newInstructions });
                                     }}
+                                    placeholder={`Instruction ${index + 1}`}
                                 />
                                 <IconButton onClick={() => {
                                     const newInstructions = (categoryFormData.instructions || []).filter((_, i) => i !== index);
@@ -920,6 +1133,15 @@ const QMEvaluationFormDetail: React.FC = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Bulk Update Dialog */}
+            <BulkUpdateDialog
+                open={openBulkUpdateDialog}
+                onClose={() => setOpenBulkUpdateDialog(false)}
+                onSubmit={(data) => bulkUpdateMutation.mutate(data)}
+                isLoading={bulkUpdateMutation.isPending}
+                currentCategories={categories}
+            />
         </Box>
     );
 };

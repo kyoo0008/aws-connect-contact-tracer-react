@@ -292,6 +292,10 @@ export async function getQMAutomationListAll(
 export interface QMAutomationSearchFilters {
   startMonth?: string;  // YYYYMM format
   endMonth?: string;    // YYYYMM format
+  startDate?: string;  // YYYYMMDD format
+  endDate?: string;    // YYYYMMDD format
+  qmStartDate?: string;  // YYYYMMDD format
+  qmEndDate?: string;    // YYYYMMDD format
   agentId?: string;
   agentUserName?: string;
   agentCenter?: string;
@@ -303,6 +307,8 @@ export interface QMAutomationSearchFilters {
   limit?: number;
   page?: number;
   pageSize?: number;
+  orderBy?: string;
+  order?: 'asc' | 'desc';
 }
 
 /**
@@ -319,6 +325,10 @@ export async function getQMAutomationListSearch(
     const params = new URLSearchParams();
     if (filters.startMonth) params.append('startMonth', filters.startMonth);
     if (filters.endMonth) params.append('endMonth', filters.endMonth);
+    if (filters.startDate) params.append('startDate', filters.startDate);
+    if (filters.endDate) params.append('endDate', filters.endDate);
+    if (filters.qmStartDate) params.append('qmStartDate', filters.qmStartDate);
+    if (filters.qmEndDate) params.append('qmEndDate', filters.qmEndDate);
     if (filters.agentId) params.append('agentId', filters.agentId);
     if (filters.agentUserName) params.append('agentUserName', filters.agentUserName);
     if (filters.agentCenter) params.append('agentCenter', filters.agentCenter);
@@ -330,6 +340,8 @@ export async function getQMAutomationListSearch(
     if (filters.limit) params.append('limit', filters.limit.toString());
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.pageSize) params.append('pageSize', filters.pageSize.toString());
+    if (filters.orderBy) params.append('orderBy', filters.orderBy);
+    if (filters.order) params.append('order', filters.order);
 
     const queryString = params.toString();
     const url = queryString

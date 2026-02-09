@@ -150,8 +150,10 @@ const QMAutomationList: React.FC = () => {
   // Search Date Range State (Default: Last 30 days)
   const [startDate, setStartDate] = useState<Dayjs | null>(dayjs().subtract(30, 'day'));
   const [endDate, setEndDate] = useState<Dayjs | null>(dayjs());
+  const [qmStartDate, setQmStartDate] = useState<Dayjs | null>(dayjs().subtract(30, 'day'));
+  const [qmEndDate, setQmEndDate] = useState<Dayjs | null>(dayjs());
 
-  // Search Filters State (for input fields)
+  // Search Filters State
   const [searchFilters, setSearchFilters] = useState<QMAutomationSearchFilters>({
     contactId: '',
     agentUserName: '',
@@ -161,32 +163,17 @@ const QMAutomationList: React.FC = () => {
     qmEvaluationStatus: '',
     qaAgentUserName: '',
   });
-  // Applied filters (used in query)
-  const [appliedFilters, setAppliedFilters] = useState<QMAutomationSearchFilters>({
-    contactId: '',
-    agentUserName: '',
-    agentCenter: '',
-    agentConfirmYN: undefined,
-    qaFeedbackYN: undefined,
-    qmEvaluationStatus: '',
-    qaAgentUserName: '',
-  });
-  const [appliedStartDate, setAppliedStartDate] = useState<Dayjs | null>(dayjs().subtract(30, 'day'));
-  const [appliedEndDate, setAppliedEndDate] = useState<Dayjs | null>(dayjs());
   const [showFilters, setShowFilters] = useState(true);
+
+  // Search trigger counter - queryKey에 포함하여 검색 버튼/Enter 시 re-fetch
+  const [searchTrigger, setSearchTrigger] = useState(0);
 
   // Auto-search when navigated from ContactFlowViewer with contactId
   useEffect(() => {
     if (locationState?.contactId) {
-      const newFilters = {
-        ...searchFilters,
-        contactId: locationState.contactId,
-      };
-      setSearchFilters(newFilters);
-      setAppliedFilters(newFilters);
-      setAppliedStartDate(startDate);
-      setAppliedEndDate(endDate);
+      setSearchFilters(prev => ({ ...prev, contactId: locationState.contactId! }));
       setPage(0);
+      setSearchTrigger(prev => prev + 1);
 
       // Clear state to prevent re-search on back navigation
       window.history.replaceState({}, document.title);
@@ -208,25 +195,21 @@ const QMAutomationList: React.FC = () => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(property);
+    setPage(0);
+    setSearchTrigger(prev => prev + 1);
   };
 
   // Handle search action
   const handleSearch = () => {
-    setAppliedFilters({ ...searchFilters });
-    setAppliedStartDate(startDate);
-    setAppliedEndDate(endDate);
     setPage(0);
-    refetch();
+    setSearchTrigger(prev => prev + 1);
   };
 
   // Handle select box change with immediate search
   const handleSelectChange = (field: keyof QMAutomationSearchFilters, value: string | undefined) => {
-    const newFilters = { ...searchFilters, [field]: value };
-    setSearchFilters(newFilters);
-    setAppliedFilters({ ...newFilters });
-    setAppliedStartDate(startDate);
-    setAppliedEndDate(endDate);
+    setSearchFilters(prev => ({ ...prev, [field]: value }));
     setPage(0);
+    setSearchTrigger(prev => prev + 1);
   };
 
   // Handle Enter key in search fields
@@ -245,35 +228,32 @@ const QMAutomationList: React.FC = () => {
   } = useQuery({
     queryKey: [
       'qm-automation-list',
-      appliedStartDate?.format('YYYYMM'),
-      appliedEndDate?.format('YYYYMM'),
-      appliedFilters.contactId,
-      appliedFilters.agentUserName,
-      appliedFilters.agentCenter,
-      appliedFilters.agentConfirmYN,
-      appliedFilters.qaFeedbackYN,
-      appliedFilters.qmEvaluationStatus,
-      appliedFilters.qaAgentUserName,
+      searchTrigger,
       page,
       rowsPerPage,
     ],
     queryFn: async () => {
       // Search with filters
-      if (!appliedStartDate || !appliedEndDate) return { items: [], pagination: { totalCount: 0, totalPages: 0, page: 1, pageSize: rowsPerPage }, filters: {} };
+      if (!startDate || !endDate) return { items: [], pagination: { totalCount: 0, totalPages: 0, page: 1, pageSize: rowsPerPage }, filters: {} };
       const filters: QMAutomationSearchFilters = {
-        startMonth: appliedStartDate.format('YYYYMM'),
-        endMonth: appliedEndDate.format('YYYYMM'),
+        startDate: startDate.format('YYYYMMDD'),
+        endDate: endDate.format('YYYYMMDD'),
+        qmStartDate: qmStartDate ? qmStartDate.format('YYYYMMDD') : undefined,
+        qmEndDate: qmEndDate ? qmEndDate.format('YYYYMMDD') : undefined,
       };
-      if (appliedFilters.contactId) filters.contactId = appliedFilters.contactId;
-      if (appliedFilters.agentUserName) filters.agentUserName = appliedFilters.agentUserName;
-      if (appliedFilters.agentCenter) filters.agentCenter = appliedFilters.agentCenter;
-      if (appliedFilters.agentConfirmYN) filters.agentConfirmYN = appliedFilters.agentConfirmYN;
-      if (appliedFilters.qaFeedbackYN) filters.qaFeedbackYN = appliedFilters.qaFeedbackYN;
-      if (appliedFilters.qmEvaluationStatus) filters.qmEvaluationStatus = appliedFilters.qmEvaluationStatus;
-      if (appliedFilters.qaAgentUserName) filters.qaAgentUserName = appliedFilters.qaAgentUserName;
+
+      if (searchFilters.contactId) filters.contactId = searchFilters.contactId;
+      if (searchFilters.agentUserName) filters.agentUserName = searchFilters.agentUserName;
+      if (searchFilters.agentCenter) filters.agentCenter = searchFilters.agentCenter;
+      if (searchFilters.agentConfirmYN) filters.agentConfirmYN = searchFilters.agentConfirmYN;
+      if (searchFilters.qaFeedbackYN) filters.qaFeedbackYN = searchFilters.qaFeedbackYN;
+      if (searchFilters.qmEvaluationStatus) filters.qmEvaluationStatus = searchFilters.qmEvaluationStatus;
+      if (searchFilters.qaAgentUserName) filters.qaAgentUserName = searchFilters.qaAgentUserName;
 
       filters.page = page + 1; // Material UI is 0-indexed, backend is 1-indexed
       filters.pageSize = rowsPerPage;
+      filters.orderBy = orderBy || undefined;
+      filters.order = order;
 
       return getQMAutomationListSearch(config, filters);
     },
@@ -375,7 +355,7 @@ const QMAutomationList: React.FC = () => {
 
               <Stack direction="row" spacing={1} alignItems="center">
                 <DatePicker
-                  label="Start Date"
+                  label="상담 시작일"
                   value={startDate}
                   format="YYYY-MM-DD"
                   onChange={(newValue) => setStartDate(newValue)}
@@ -383,10 +363,28 @@ const QMAutomationList: React.FC = () => {
                 />
                 <Typography>-</Typography>
                 <DatePicker
-                  label="End Date"
+                  label="상담 종료일"
                   value={endDate}
                   format="YYYY-MM-DD"
                   onChange={(newValue) => setEndDate(newValue)}
+                  slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
+                />
+              </Stack>
+
+              <Stack direction="row" spacing={1} alignItems="center">
+                <DatePicker
+                  label="QM 시작일"
+                  value={qmStartDate}
+                  format="YYYY-MM-DD"
+                  onChange={(newValue) => setQmStartDate(newValue)}
+                  slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
+                />
+                <Typography>-</Typography>
+                <DatePicker
+                  label="QM 종료일"
+                  value={qmEndDate}
+                  format="YYYY-MM-DD"
+                  onChange={(newValue) => setQmEndDate(newValue)}
                   slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
                 />
               </Stack>

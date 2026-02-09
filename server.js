@@ -1088,9 +1088,9 @@ app.get('/api/agent/v1/qm-automation/search', async (req, res) => {
     // Construct ALB-like event payload with all query parameters
     const queryStringParameters = {};
     const allowedParams = [
-      'startMonth', 'endMonth', 'agentId', 'agentUserName', 'agentCenter',
+      'startDate', 'endDate', 'qmStartDate', 'qmEndDate', 'agentId', 'agentUserName', 'agentCenter',
       'agentConfirmYN', 'qaFeedbackYN', 'qmEvaluationStatus', 'contactId', 'qaAgentUserName',
-      'page', 'pageSize'
+      'page', 'pageSize', 'orderBy', 'order'
     ];
 
     for (const param of allowedParams) {
@@ -1564,6 +1564,20 @@ app.post('/api/agent/v1/qm-automation/qa-bulk-feedback', async (req, res) => {
  * QM Evaluation Form API Proxy (All methods)
  * Routes: /api/agent/v1/qm-evaluation-form*
  * Proxies all requests to QM Automation Lambda
+ *
+ * Supported endpoints:
+ * - GET  /api/agent/v1/qm-evaluation-form                                    - List all forms
+ * - POST /api/agent/v1/qm-evaluation-form                                    - Create form
+ * - GET  /api/agent/v1/qm-evaluation-form/{formId}                           - Get form details
+ * - PUT  /api/agent/v1/qm-evaluation-form/{formId}                           - Update form
+ * - DELETE /api/agent/v1/qm-evaluation-form/{formId}                         - Delete form
+ * - GET  /api/agent/v1/qm-evaluation-form/{formId}/categories                - List categories
+ * - POST /api/agent/v1/qm-evaluation-form/{formId}/categories                - Create/Update category
+ * - PUT  /api/agent/v1/qm-evaluation-form/{formId}/categories/bulk           - Bulk update categories
+ * - DELETE /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId} - Delete category
+ * - GET  /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems - List subitems
+ * - POST /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems - Create/Update subitem
+ * - DELETE /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems/{subItemId} - Delete subitem
  */
 app.all('/api/agent/v1/qm-evaluation-form*', async (req, res) => {
   try {

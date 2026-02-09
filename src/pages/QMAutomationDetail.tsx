@@ -970,6 +970,7 @@ const LABEL_MAP: Record<string, string> = {
   accuracy: '정확성',
   efficiency: '효율성',
   proactivity: '적극성',
+  proactiveness: '적극성',
   waitManagement: '대기 관리',
   // 인사 소항목
   opening: '첫인사',
@@ -1036,6 +1037,8 @@ const StatusChip: React.FC<{ status: string }> = ({ status }) => {
         return { label: 'PASS', color: 'success' as const, icon: <CheckIcon fontSize="small" /> };
       case 'FAIL':
         return { label: 'FAIL', color: 'error' as const, icon: <ErrorIcon fontSize="small" /> };
+      case 'WARNING':
+        return { label: 'WARNING', color: 'warning' as const, icon: <WarningIcon fontSize="small" /> };
       case 'N/A':
         return { label: 'N/A', color: 'default' as const, icon: <InfoIcon fontSize="small" /> };
       default:
@@ -2208,6 +2211,7 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
     if (scores.length === 0) return null;
     return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
   }, [sectionKeys, summary]);
+  // const totalScore = Number(summary[`finalScore`])
 
   // 벌크 모달용 카테고리 정보 생성
   const categoryInfoList: CategoryInfo[] = React.useMemo(() => {
@@ -2283,7 +2287,7 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
         {totalScore !== null && (
           <Box sx={{ mt: 2, textAlign: 'center' }}>
             <Typography variant="caption" color="text.secondary">
-              평균 점수
+              최종 점수
             </Typography>
             <Typography
               variant="h4"

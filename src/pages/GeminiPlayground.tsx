@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -35,6 +35,7 @@ import {
   InsertDriveFile as FileIcon,
   Clear as ClearIcon,
 } from '@mui/icons-material';
+import { useLocation } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useConfig } from '@/contexts/ConfigContext';
 import {
@@ -44,6 +45,7 @@ import {
   GeminiFile,
   GeminiPromptResponse,
 } from '@/services/geminiService';
+import { getQMAutomationStatus } from '@/services/qmAutomationService';
 
 const GEMINI_MODELS = [
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
@@ -60,9 +62,32 @@ interface AttachedFile {
 
 const GeminiPlayground: React.FC = () => {
   const { config } = useConfig();
+  const location = useLocation();
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState('gemini-2.5-flash');
+  const locationState = location.state as { requestId?: string } | null;
+  const [requestId, setRequestId] = useState(locationState?.requestId || '');
+  const [createdAt, setCreatedAt] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+
+  // requestId가 있으면 status API로 createdAt 자동 조회
+  useEffect(() => {
+    if (!requestId.trim() || !config.credentials) {
+      setCreatedAt('');
+      return;
+    }
+    let cancelled = false;
+    getQMAutomationStatus(requestId.trim(), config)
+      .then((data) => {
+        if (!cancelled && data.createdAt) {
+          setCreatedAt(data.createdAt);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCreatedAt('');
+      });
+    return () => { cancelled = true; };
+  }, [requestId, config]);
   const [response, setResponse] = useState<GeminiPromptResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -82,6 +107,8 @@ const GeminiPlayground: React.FC = () => {
         {
           prompt,
           model,
+          requestId: requestId.trim() || undefined,
+          createdAt: createdAt.trim() || undefined,
           files: files.length > 0 ? files : undefined,
         },
         config
@@ -162,6 +189,8 @@ const GeminiPlayground: React.FC = () => {
 
   const handleClear = () => {
     setPrompt('');
+    setRequestId('');
+    setCreatedAt('');
     setResponse(null);
     attachedFiles.forEach((f) => {
       if (f.preview) URL.revokeObjectURL(f.preview);
@@ -215,6 +244,26 @@ const GeminiPlayground: React.FC = () => {
               ))}
             </Select>
           </FormControl>
+
+          {/* Request ID & Created At 입력 */}
+          <Stack direction="row" spacing={2}>
+            <TextField
+              label="Request ID"
+              value={requestId}
+              onChange={(e) => setRequestId(e.target.value)}
+              placeholder="Enter Request ID (optional)"
+              fullWidth
+              size="small"
+            />
+            <TextField
+              label="Created At"
+              value={createdAt}
+              placeholder="Request ID 입력 시 자동 조회"
+              fullWidth
+              size="small"
+              InputProps={{ readOnly: true }}
+            />
+          </Stack>
 
           {/* 프롬프트 입력 */}
           <TextField

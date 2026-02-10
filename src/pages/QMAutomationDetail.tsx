@@ -48,6 +48,7 @@ import {
   Business as BusinessIcon,
   Email as EmailIcon,
   Badge as BadgeIcon,
+  SmartToy as SmartToyIcon,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -244,6 +245,16 @@ const QMAutomationDetail: React.FC = () => {
                   <IconButton onClick={() => refetch()}>
                     <RefreshIcon />
                   </IconButton>
+                </Tooltip>
+                <Tooltip title="Gemini Playground에서 열기">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<SmartToyIcon />}
+                    onClick={() => navigate('/gemini-playground', { state: { requestId } })}
+                  >
+                    Gemini Playground
+                  </Button>
                 </Tooltip>
               </Stack>
             </Box>

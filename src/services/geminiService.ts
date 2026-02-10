@@ -18,6 +18,8 @@ export interface GeminiFile {
 export interface GeminiPromptRequest {
   prompt: string;
   model: string;
+  requestId?: string;
+  createdAt?: string;
   files?: GeminiFile[];
 }
 
@@ -53,6 +55,8 @@ export async function callGeminiPrompt(
     body: JSON.stringify({
       prompt: request.prompt,
       model: request.model,
+      ...(request.requestId && { requestId: request.requestId }),
+      ...(request.createdAt && { createdAt: request.createdAt }),
       files: request.files,
     }),
   });

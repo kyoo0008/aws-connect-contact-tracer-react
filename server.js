@@ -1688,7 +1688,7 @@ app.all('/api/agent/v1/qm-evaluation-form*', async (req, res) => {
  */
 app.post('/api/agent/v1/qm-automation/simple-prompt', async (req, res) => {
   try {
-    const { prompt, model, files } = req.body;
+    const { prompt, model, files, requestId, createdAt } = req.body;
 
     if (!prompt) {
       return res.status(400).json({ error: 'prompt is required' });
@@ -1713,9 +1713,11 @@ app.post('/api/agent/v1/qm-automation/simple-prompt', async (req, res) => {
     const lambdaPayload = {
       invocationType: 'RequestResponse',
       input: {
-        action: 'simplePrompt',
+        action: 'simple_prompt',
         prompt: prompt,
         model: model,
+        pk: requestId,
+        sk: createdAt,
       }
     };
 

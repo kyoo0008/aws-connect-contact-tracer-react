@@ -146,6 +146,8 @@ export interface QMAutomationInput {
   audioOriginalKey?: string;
   audioPresignedUrl?: string;
   useContextCaching?: boolean;
+  useEvaluationFormPrompt?: boolean;
+  evaluationFormId?: string;
   inputTokens?: number;
   toolResult?: {
     functionCalls?: FunctionCall[];
@@ -277,6 +279,16 @@ export interface EvaluationSectionData {
 export interface EvaluationResult {
   details: Record<string, EvaluationSectionData>; // 대항목 > 소항목 + states 동적 구조
   summary: Record<string, string>; // 요약 정보 (점수, 결과 등)
+}
+
+// ============================================
+// 오디오 Presigned URL 응답 타입
+// ============================================
+
+export interface AudioPresignedUrlResponse {
+  requestId: string;
+  audioPresignedUrl: string;
+  audioPresignedUrlExpiresAt: string;
 }
 
 // ============================================

@@ -1,0 +1,824 @@
+{
+    "categories": [
+        {
+            "categoryId": "greeting",
+            "categoryName": "인사 (Greeting)",
+            "displayOrder": 1,
+            "enabled": true,
+            "weight": 1,
+            "instructions": [
+                "\n* **[평가 요소]**\n  - 시작 인사(이름 포함), 끝 인사(이름 포함), 추가 문의 확인 여부.\n* **[감점 기준]**\n  - **WARNING (-5점 조건):**\n    1. 표준 시작 인사는 했으나 이름이 불명확함.\n    2. 표준 끝인사는 했으나 이름이 불명확함.\n    3. 끝인사 전 \"추가 문의사항\"을 확인하지 않음.\n  - **FAIL (-10점 조건):**\n    1. 인사말이나 이름을 아예 말하지 않음.\n    2. 위 WARNING 조건이 2개 이상 발생.\n",
+                "첫인사와 끝인사의 표준 준수 여부를 평가합니다.",
+                "고객 인사에 대한 호응 여부를 확인합니다.",
+                "추가 문의 확인 여부를 검증합니다."
+            ],
+            "feedbackMessageTemplate": "상담원에게 전달할 피드백 문구 (표준 미러 시: 고객이 느끼는 감정을 포함하여 코칭 멘트 작성 / 표준 준수 시: 칭찬 멘트 작성)",
+            "subItems": [
+                {
+                    "subItemId": "opening",
+                    "subItemName": "첫인사 평가 (Opening)",
+                    "displayOrder": 1,
+                    "evaluationCriteria": [
+                        {
+                            "description": "표준 인사말 준수 여부",
+                            "details": "기본: '안녕하십니까? [상담원 이름]입니다.' 형식을 갖추었는가? 예외: '기다려주셔서 감사합니다. [상담원 이름]입니다.'도 정답으로 인정. 필수 요소: '인사말(안녕하십니까/감사합니다)'과 '이름'이 모두 포함되어야 함.",
+                            "passCondition": "인사말과 이름이 모두 포함된 경우",
+                            "criteriaId": "1",
+                            "failCondition": "인사말이나 이름 중 하나라도 누락된 경우"
+                        },
+                        {
+                            "description": "적극성 및 준비 상태",
+                            "details": "고객이 먼저 '여보세요'라고 말하게 하지 않았는가? 통화 연결 후 즉시 응대하는가? (스크립트 상 고객 발화가 먼저 시작되면 감점)",
+                            "passCondition": "상담원이 먼저 인사를 시작한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "고객이 먼저 '여보세요'라고 말한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"status\": \"PASS/WARNING/FAIL\",\n  \"reason\": \"평가 근거 요약\"\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "response",
+                    "subItemName": "인사말 호응 평가 (Response)",
+                    "displayOrder": 2,
+                    "evaluationCriteria": [
+                        {
+                            "description": "고객 인사에 대한 호응",
+                            "details": "고객이 '수고하십니다' 발언 시 -> '감사합니다'로 응대하는가? 고객이 '통화하기 힘드네요' 발언 시 -> '기다려 주셔서 감사합니다'로 응대하는가? 예외: 고객이 인사 없이 바로 용건을 말한 경우, 호응이가 없어도 감점하지 않음. 감점 예외: 고객의 인사에 '네'라고만 답하거나 무시한 경우. 대기 불만 제기 시: '기다리시게 해서 죄송합니다. 신속하게 도와드리겠습니다.'",
+                            "passCondition": "고객 인사에 적절한 호응을 한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "고객 인사에 '네'라고만 답하거나 무시한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"status\": \"PASS/WARNING/FAIL (or N/A)\",\n  \"reason\": \"고객 인사가 없었다면 N/A, 그 외 평가 근거\"\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "additionalInquiryCheck",
+                    "subItemName": "추가 문의 확인",
+                    "displayOrder": 3,
+                    "evaluationCriteria": [
+                        {
+                            "description": "추가 문의 확인 (필수)",
+                            "details": "상담 종료 전 '추가 문의사항 있으십니까?' 또는 '다른 요청사항이 있으십니까?' 등의 질문을 하는가?",
+                            "passCondition": "추가 문의 확인 질문을 한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "추가 문의 확인 없이 상담을 종료한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"status\": \"PASS/WARNING/FAIL\",\n  \"reason\": \"추가 문의 확인 멘트 유무\"\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "closing",
+                    "subItemName": "끝인사 평가 (Closing)",
+                    "displayOrder": 4,
+                    "evaluationCriteria": [
+                        {
+                            "description": "표준 끝인사 준수 여부",
+                            "details": "기본: '감사합니다. [상담원 이름]입니다(이었습니다).' 상황별 변화: 불만/미해결 종료 시: '죄송합니다. [상담원 이름]입니다.' 상담 중 이름을 이미 밝힌 경우: '감사합니다' (이름 생략 가능). 고객이 듣지 않을 경우: '문의 사항 없으시면 먼저 종료하겠습니다.' 대기 불만 제기 시: '기다리시게 해서 죄송합니다. 신속하게 도와드리겠습니다.'",
+                            "passCondition": "상황에 맞는 적절한 끝인사를 한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "끝인사나 이름을 누락한 경우"
+                        },
+                        {
+                            "description": "이름 명확성",
+                            "details": "끝인사 시 이름을 포함하는가? (정 예외 상황 제외)",
+                            "passCondition": "끝인사에 이름이 포함된 경우",
+                            "criteriaId": "2",
+                            "failCondition": "끝인사에 이름이 누락된 경우 (예외 상황 제외)"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"status\": \"PASS/WARNING/FAIL\",\n  \"reason\": \"끝인사 및 이름 언급 여부\"\n}",
+                    "instruction": ""
+                }
+            ]
+        },
+        {
+            "categoryId": "voiceProduction",
+            "categoryName": "음성연출 (VoiceProduction)",
+            "displayOrder": 2,
+            "enabled": true,
+            "weight": 1,
+            "instructions": [
+                "* **[평가 요소]**  \n- Tone & Manner(친절함), 쿠션 멘트 사용, 부정적 상황 핸들링.\n* **[감점 기준]**  \n- **WARNING (-5점 조건):**    \n1. 간헐적(1회)으로 부정적 감정(침묵, 짜증 등) 노출.    \n2. 초반 단조롭다가 중반 이후 회복됨 (일관성 부족).    \n3. 쿠션 멘트(양해 멘트) 미사용 4회~7회.    \n4. 부정적 내용을 일부만 긍정 화법으로 전환.  \n- **FAIL (-10점 조건):**    \n1. 지속적인 부정적 감정 노출.    \n2. 부정적 내용을 계속 부정형 문장(\"안돼요\")으로만 응대.    \n3. 쿠션 멘트 미사용 8회 이상.",
+                "정중함과 친밀감의 조화를 평가합니다.",
+                "부정적 상황 핸들링 능력을 확인합니다.",
+                "적극적 경청 및 호응 여부를 검증합니다."
+            ],
+            "feedbackMessageTemplate": "상담원 피드백 (표준 미러 시: 고객의 사정을 대변하여 코칭 / 준수 시: 구체적인 칭찬)",
+            "subItems": [
+                {
+                    "subItemId": "toneManner",
+                    "subItemName": "정중함과 친밀감의 조화 (ToneManner)",
+                    "displayOrder": 1,
+                    "evaluationCriteria": [
+                        {
+                            "description": "종결 어미 혼합 사용",
+                            "details": "일반 상담 시: '요/조체(친밀감, ~해요)'와 '다/까체(정중함, ~습니다)'가 적절히(약 5:5) 섞여 있는지 확인하십시오. 예외: 상담 전체가 지나치게 딱딱하거나(군대식 말투), 반대로 지나치게 가벼워진(친구 대화) 확인하십시오.",
+                            "passCondition": "요/조체와 다/까체가 적절히 혼합된 경우",
+                            "criteriaId": "1",
+                            "failCondition": "한쪽으로 치우쳐 딱딱하거나 가벼운 경우"
+                        },
+                        {
+                            "description": "거절/부정 상담 시 톤의 변화",
+                            "details": "고객에게 불리한 정보(결항, 불가, 만석 등)를 전달하는 순간을 찾으십시오. 이때는 '다/까체(~습니다/죄송합니다)'를 사용하여 정중하고 침착한 톤으로 전환하는지 확인하십시오.",
+                            "passCondition": "부정적 정보 전달 시 정중한 톤을 사용한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "부정적 정보를 가벼운 톤으로 전달한 경우"
+                        },
+                        {
+                            "description": "고압적/부정적 표현 감점",
+                            "details": "'안되거든요', '규정이라서요'와 같이 단절적이고 차가운 종결 어미가 사용되었는지 확인하십시오. 한숨 소리(STT에 (한숨) 등이 기록된 경우)나 지친듯한 짜증 섞인 발음이 텍스트에 드러나는지 확인하십시오.",
+                            "passCondition": "고압적/부정적 표현이 없는 경우",
+                            "criteriaId": "3",
+                            "failCondition": "고압적/부정적 표현이 발견된 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"status\": \"PASS/WARNING/FAIL\",\n  \"reason\": \"어조와 어미 분석 결과\"\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "handlingNegativity",
+                    "subItemName": "부정적 상황 핸들링 (HandlingNegativity)",
+                    "displayOrder": 2,
+                    "evaluationCriteria": [
+                        {
+                            "description": "쿠션멘트(Cushion Words) 필수 사용",
+                            "details": "거절, 불가, 오래 대기가 필요한 순간에 아래 키워드가 사용되었는지 확인하십시오. 키워드: '번거로우시겠지만', '죄로우지만', '불편하시겠지만', '양해 부탁드립니다', '죄송합니다만'",
+                            "passCondition": "쿠션멘트를 적절히 사용한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "쿠션멘트 없이 거절/불가를 전달한 경우"
+                        },
+                        {
+                            "description": "긍정 화법 및 대안 제시 (Positive Framing)",
+                            "details": "'안 됩니다'로 끝나는 것이 아니라, '~를 통해 가능합니다' 또는 '~방법이 있습니다'로 전환하는지 확인하십시오. 예: '환불 안 돼요' (Fail) -> '규정상 환불은 어렵지만, 변경은 가능하십니다' (Pass)",
+                            "passCondition": "긍정 화법과 대안을 제시한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "'안 됩니다'로만 종결한 경우"
+                        },
+                        {
+                            "description": "진심 어린 사과",
+                            "details": "규정 사유나 고객 불편 발생 시 단순 '네'가 아닌 '죄송합니다', '많이 당황하셨겠습니다' 등의 표현이 포함되었는지 확인하십시오.",
+                            "passCondition": "진심 어린 사과 표현을 사용한 경우",
+                            "criteriaId": "3",
+                            "failCondition": "단순 '네'로만 응답한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"status\": \"PASS/WARNING/FAIL\",\n  \"cushionWordsUsed\": [\n    \"사용된 쿠션멘트 나열\"\n  ],\n  \"reason\": \"쿠션멘트 사용 여부 및 대안 제시 여부\"\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "activeListening",
+                    "subItemName": "적극적 경청 및 호응 (ActiveListening)",
+                    "displayOrder": 3,
+                    "evaluationCriteria": [
+                        {
+                            "description": "호응어의 다양성",
+                            "details": "상담원이 '네', '네네'만 반복하는지(기계적 호응) 확인하십시오. '그러셨군요', '확인해 보겠습니다', '맞습니다', '많이 기다리셨죠' 등 다양한 표현을 사용하는지 평가하십시오.",
+                            "passCondition": "다양한 호응 표현을 사용한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "'네'만 기계적으로 반복한 경우"
+                        },
+                        {
+                            "description": "핵심어 반복(Paraphrasing)",
+                            "details": "고객이 말한 핵심 단어나 요청 사항을 상담원이 따라 말하며 확인하는 과정이 있는지 체크하십시오.",
+                            "passCondition": "고객의 핵심 요청을 재확인한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "핵심 요청 확인 없이 진행한 경우"
+                        },
+                        {
+                            "description": "침묵 방지",
+                            "details": "고객이 '여보세요?', '듣고 계세요?'라고 묻는 상황이 발생한다면, 이는 적절한 호응 타이밍을 놓친 것으로 간주하여 FAIL 처리하십시오.",
+                            "passCondition": "고객이 침묵 확인 질문을 하지 않은 경우",
+                            "criteriaId": "3",
+                            "failCondition": "고객이 '여보세요?', '듣고 계세요?'라고 물은 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"status\": \"PASS/WARNING/FAIL\",\n  \"reason\": \"호응어 다양성 및 핵심어 반복 여부\"\n}",
+                    "instruction": ""
+                }
+            ]
+        },
+        {
+            "categoryId": "speed",
+            "categoryName": "상담속도 (Speed)",
+            "displayOrder": 3,
+            "enabled": true,
+            "weight": 1,
+            "instructions": [
+                "\n* **[평가 요소]**\n  - 끼어들기(Interruption), 말하기 속도(Pacing), 재설명 요구 빈도.\n* **[감점 기준]**\n  - **WARNING (-5점 조건):**\n    1. 중요 정보(규정, 동의)를 지나치게 빠르게 안내.\n    2. 상담원 끼어들기/말겹침 4회 발생.\n  - **FAIL (-10점 조건):**\n    1. 고객의 재설명 요청(2회 이상)에도 속도 미조절.\n    2. 상담원 끼어들기/말겹침 5회 이상 발생.\n",
+                "상담원의 말 끊김(라이딩) 발생 여부를 분석합니다.",
+                "이해도 확인과 속도 조절 능력을 평가합니다."
+            ],
+            "feedbackMessageTemplate": "데이터 기반의 구체적 피드백 (예: 03:15 구간에서 고객 말이 끝나기 2.9초 전에 라이딩했습니다. 양해 멘트가 필요합니다.)",
+            "subItems": [
+                {
+                    "subItemId": "interruptionAnalysis",
+                    "subItemName": "상담원 발화 중단 분석 (InterruptionAnalysis)",
+                    "displayOrder": 1,
+                    "evaluationCriteria": [
+                        {
+                            "description": "PASS (정상 응대 - 예외 처리)",
+                            "details": "단순 호응: 내용이 '네', '예', '음' 등이며, 겹침 시간이 500ms(0.5초) 미만인 경우. 정보 수집 완료: 고객의 Sentiment가 NEUTRAL이고 문장이 완결된 후(종결어미 감지) 즉시 응대하는 경우. 침묵 후 발화: 상담원 Begin - 고객 End >= 1000ms (1초 이상의 공백 후 발화).",
+                            "passCondition": "위 예외 조건에 해당하는 경우",
+                            "criteriaId": "1",
+                            "failCondition": "해당 없음"
+                        },
+                        {
+                            "description": "FAIL (감점 대상 - 중단 발생)",
+                            "details": "유형 A (명백한 겹침): 겹침 지속 시간이 2000ms(2초) 이상인 경우. (LoudnessScore가 양쪽 모두 높다면 '언쟁'으로 기록) 유형 B (복합 호응 라이딩): '네'로 시작하지만 뒤이어 문장이 계속되며, 고객 발화 도중(Agent Begin < Customer End)에 시작된 경우. 유형 C (말꼬리 덮기): 고객이 말을 맺거나 흐리는 중에 치고 들어간 경우. 양해 멘트 부재: 위 겹침 상황에서 '죄송합니다만', '잠시만요' 등의 사과 표현이 없는 경우.",
+                            "passCondition": "해당 없음",
+                            "criteriaId": "2",
+                            "failCondition": "위 FAIL 조건에 해당하는 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"summary\": {\n    \"totalInterruptions\": 0,\n    \"grade\": \"PASS/WARNING/FAIL\"\n  },\n  \"events\": [\n    {\n      \"type\": \"유형 설명\",\n      \"timestampStart\": \"mm:ss\",\n      \"timestampEnd\": \"mm:ss\",\n      \"contentContext\": \"고객/상담원 발화 내용\",\n      \"apologyUsed\": \"true/false\",\n      \"judgment\": \"PASS/FAIL\"\n    }\n  ]\n}",
+                    "instruction": "# [InterruptionAnalysis 작성 절차 (Thinking Process)]\n분석 결과 작성 시, 바로 JSON을 출력하지 말고 내부적으로 다음 순서를 따르십시오:\n1. 상담원 끼어들기(Interruption) 타임스탬프를 먼저 모두 나열하십시오.\n2. 나열된 타임스탬프가 총 몇 개인지 세어보십시오. (Count)\n3. 그 Count 값을 `totalInterruptions`에 입력하십시오.\n4. 그 후 각 타임스탬프에 해당하는 상세 내용을 `events` 리스트에 작성하십시오."
+                },
+                {
+                    "subItemId": "pacingUnderstanding",
+                    "subItemName": "어조 조절 및 이해도 확인 (PacingUnderstanding)",
+                    "displayOrder": 2,
+                    "evaluationCriteria": [
+                        {
+                            "description": "핵심 정보 구간 분석",
+                            "details": "금액, 날짜, 규정 등 숫자/조건이 포함된 상담원 발화 구간을 찾으십시오. 해당 구간의 글자 수 대비 시간이 너무 짧으면(빠른 어조) 경고하십시오.",
+                            "passCondition": "핵심 정보를 적절한 속도로 전달한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "핵심 정보를 지나치게 빠르게 전달한 경우"
+                        },
+                        {
+                            "description": "고객 이해도 실패 감지",
+                            "details": "고객 발화 중 '뭐라고요?', '네?', '다시요', '빨라서' 등이 포함된 경우. 또는 고객 Sentiment가 NEGATIVE로 변하면서 재질문하는 경우.",
+                            "passCondition": "고객이 재확인 요청을 하지 않은 경우",
+                            "criteriaId": "2",
+                            "failCondition": "고객이 이해하지 못해 재질문한 경우"
+                        },
+                        {
+                            "description": "상담원 대응",
+                            "details": "재질문 발생 시 상담원의 다음 발화 속도가 느려졌는지, 혹은 문장이 간결해졌는지 확인하십시오. (어조와 동일하면 FAIL)",
+                            "passCondition": "재질문 후 속도를 조절한 경우",
+                            "criteriaId": "3",
+                            "failCondition": "재질문 후에도 동일한 속도로 진행한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"summary\": {\n    \"reExplanationRequests\": 0,\n    \"assessment\": \"Good/Fast/Slow\"\n  },\n  \"issues\": [\n    {\n      \"timestamp\": \"mm:ss\",\n      \"category\": \"어조 빠름/핵심 정보 전달 미흡\",\n      \"customerReaction\": \"고객 반응\",\n      \"agentResponseQuality\": \"상담원 대응 평가\"\n    }\n  ]\n}",
+                    "instruction": ""
+                }
+            ]
+        },
+        {
+            "categoryId": "languageUse",
+            "categoryName": "언어사용 (LanguageUse)",
+            "displayOrder": 4,
+            "enabled": true,
+            "weight": 1,
+            "instructions": [
+                "\n* **[평가 요소]**\n  - 사물 존칭(\"요금이 나오셨습니다\"), 반토막말(\"성함은요?\"), 비속어/은어.\n* **[감점 기준]**\n  - **WARNING (-5점 조건):**\n    1. 문법 오류/사물 존칭/정중하지 못한 표현 10~14회.\n    2. 은어/비속어/금지어(캔슬, 리펀드 등) 1회 사용.\n    3. 반토막말(명사형 종결) 10~13회.\n  - **FAIL (-10점 조건):**\n    1. 문법 오류/사물 존칭 15회 이상.\n    2. 은어/비속어 2회 이상.\n    3. 반토막말 14회 이상.\n",
+                "문법 및 사물 존칭 오류를 검출합니다.",
+                "부적절한 어휘 사용 여부를 확인합니다.",
+                "정중하지 못한 어감 및 화법을 평가합니다.",
+                "습관적 추임새 및 혼잣말을 검출합니다."
+            ],
+            "feedbackMessageTemplate": "데이터 기반의 구체적 피드백 (예: 03:15 구간에서 고객 말이 끝나기 2.9초 전에 라이딩했습니다. 양해 멘트가 필요합니다.)",
+            "subItems": [
+                {
+                    "subItemId": "grammarObjectHonorifics",
+                    "subItemName": "문법 및 사물 존칭 오류 (GrammarObjectHonorifics)",
+                    "displayOrder": 1,
+                    "evaluationCriteria": [
+                        {
+                            "description": "검출 패턴 (Detection Patterns)",
+                            "details": "종결형 오류: 문장이 끝날 때 존칭 사용. 예: '요금이 5만원이세요', '좌석이 많으시겠습니다'. 연결형/활용형 오류 (중요): 문장 중간이나 동사 활용에서 존칭 사용. 주어(예약, 처리, 확인, 결재 등) + 용언이(나오셨고, 되셨으니, 되셨으면, 나오셨습니다). 검출 예시: (X) '예약은 어제 완료가 되셨고' -> FAIL (사유: '예약'은 사물이므로 '완료되었고'가 맞음). (X) '결제가 되셨으니' -> FAIL (사유: '결제'는 사물이므로 '되었으니'가 맞음). (O) '고객님의 탑승이 되셨고' -> PASS (주어가 '고객(사람)'이므로 인정)",
+                            "passCondition": "사물에 존칭을 사용하지 않은 경우",
+                            "criteriaId": "1",
+                            "failCondition": "사물에 존칭(-시-)을 사용한 경우"
+                        },
+                        {
+                            "description": "적절한 표현 기준",
+                            "details": "'완료되었습니다', '완료되고', '확인됩니다', '되었습니다' 등 객관적 용언어 사용.",
+                            "passCondition": "객관적 용언을 사용한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "사물에 존칭 용언을 사용한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"events\": [\n    {\n      \"timestamp\": \"mm:ss\",\n      \"errorSentence\": \"오류 문장\",\n      \"correction\": \"수정 제안\",\n      \"reason\": \"오류 사유\"\n    }\n  ]\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "inappropriateVocabulary",
+                    "subItemName": "부적절한 어휘 사용 (InappropriateVocabulary)",
+                    "displayOrder": 2,
+                    "evaluationCriteria": [
+                        {
+                            "description": "내부 용어 및 거친 표현",
+                            "details": "금지어: '소리가 팔리다', '예약이 살리다', '편을 끊다', '마일을 뽑다', '빵꾸나다'.",
+                            "passCondition": "금지어를 사용하지 않은 경우",
+                            "criteriaId": "1",
+                            "failCondition": "금지어를 사용한 경우"
+                        },
+                        {
+                            "description": "과도한 외래어 및 전문 용어",
+                            "details": "금지어: '캔슬(Cancel)', '리펀드(Refund)', '조인트(Joint)', '노쇼(No-show)'. 기준: 고객이 이해하기 쉬운 우리말(취소, 환불, 연결, 미탑승) 대신 외래어를 사용한 경우.",
+                            "passCondition": "쉬운 우리말을 사용한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "전문 외래어를 사용한 경우"
+                        },
+                        {
+                            "description": "직장 관점의 표현",
+                            "details": "예시: '입력해 드릴게요', '기록 만들게요', '이쪽 받을게요'. 권장: '확인해 드리겠습니다', '예약해 드리겠습니다', '결제 도와드리겠습니다'.",
+                            "passCondition": "고객 관점의 표현을 사용한 경우",
+                            "criteriaId": "3",
+                            "failCondition": "직장 관점의 표현을 사용한 경우"
+                        },
+                        {
+                            "description": "문맥에 맞지 않는 미사여구 및 부사 (Awkward Expressions)",
+                            "details": "분석 목표: 상담원의 전문성을 떨어뜨리는 불필요한 양념이나 주관적 노력 강조 표현을 검출하십시오. 금지 키워드: '열심히', '노력해서', '최선을 다해', '잘 해보겠습니다'. 판단 기준: 고객의 요청(조회, 예약, 변경 등)은 시스템을 통해 '정확'하고 '신속'하게 처리되어야 하는 영역입니다. 상담원이 '열심히 하겠다'고 말하는 것은 업무 처리가 상담원의 노력 여하에 달린 것처럼 들리게 하며, 결과가 실패할 수도 있다는 불확실한 뉘앙스를 줍니다. 검출 예시: (X) '제가 열심히 시도해 보도록 하겠습니다.' -> FAIL (사유: 업무 처리는 '열심히'가 아니라 '정확하게' 해야 함). (O) '제가 신속하게 확인해 보겠습니다.' -> PASS. (O) '규정에 맞는지 정확히 체크해 보겠습니다.' -> PASS",
+                            "passCondition": "객관적이고 정확한 표현을 사용한 경우",
+                            "criteriaId": "4",
+                            "failCondition": "주관적 노력 강조 표현을 사용한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"events\": [\n    {\n      \"timestamp\": \"mm:ss\",\n      \"category\": \"내부 용어/외래어/직장관점\",\n      \"detectedWord\": \"검출된 단어\",\n      \"correction\": \"수정 제안\",\n      \"context\": \"사용 맥락\"\n    }\n  ]\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "unpoliteToneManner",
+                    "subItemName": "정중하지 못한 어감 및 화법 (UnpoliteToneManner)",
+                    "displayOrder": 3,
+                    "evaluationCriteria": [
+                        {
+                            "description": "발화 마감 및 성의 없는 종결",
+                            "details": "명사형 종결: '성함은요?', '날짜는요?', '잠시만요'. (완전한 문장이 아님) 반말체 질문: '~지요?'가 아닌 '~죠?'의 빈번한 사용.",
+                            "passCondition": "완전한 문장으로 종결한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "명사형 종결이나 반말체를 사용한 경우"
+                        },
+                        {
+                            "description": "부정/단정적 표현",
+                            "details": "금지 패턴: '아니죠', '그건 모르죠', '글쎄요'. (고객 무시 또는 책임 회피)",
+                            "passCondition": "긍정적/수용적 표현을 사용한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "부정적/단정적 표현을 사용한 경우"
+                        },
+                        {
+                            "description": "공식화하지 않은 연결어 (변명조)",
+                            "details": "금지 패턴: '~하구요', '~하거든요', '~했잖아요'.",
+                            "passCondition": "공식적인 연결어를 사용한 경우",
+                            "criteriaId": "3",
+                            "failCondition": "변명조 연결어를 사용한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"events\": [\n    {\n      \"timestamp\": \"mm:ss\",\n      \"type\": \"발화 마감/단정적 표현/변명조\",\n      \"detectedSentence\": \"검출된 문장\",\n      \"correction\": \"수정 제안\",\n      \"analysis\": \"분석 내용\"\n    }\n  ]\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "badHabits",
+                    "subItemName": "습관적 추임새 및 혼잣말 (Bad Habits)",
+                    "displayOrder": 4,
+                    "evaluationCriteria": [
+                        {
+                            "description": "불필요한 종결어미 '네' 반복 (Repetitive Ending 'Ne')",
+                            "details": "패턴: 문장이 완결되었음에도 불구하고 습관적으로 끝에 '네.'를 덧붙이는 행위. 검출 예시: '알겠습니다. 네.', '확인해 드리겠습니다. 네.', '예약 도와드리겠습니다. 네.' 행위: 위와 같은 패턴이 상담 내 2회 이상 발견될 경우 LanguageUse 내 badHabits 항목에 기록하고 감점하십시오.",
+                            "passCondition": "불필요한 '네' 반복이 2회 미만인 경우",
+                            "criteriaId": "1",
+                            "failCondition": "불필요한 '네' 반복이 2회 이상인 경우"
+                        },
+                        {
+                            "description": "의미 없는 추임새 및 독백",
+                            "details": "'뭐~', '어~', '음~', '아무튼', '일단'이 문장 시작마다 반복되는지 확인. 업무 처리 중 '어디보자...', '이게 얼마더라...' 등 독백이 포함되었는지 확인.",
+                            "passCondition": "의미 없는 추임새가 없는 경우",
+                            "criteriaId": "2",
+                            "failCondition": "의미 없는 추임새가 반복되는 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"events\": [\n    {\n      \"timestamp\": \"mm:ss\",\n      \"habitType\": \"추임새/혼잣말\",\n      \"content\": \"검출된 내용\",\n      \"count\": \"반복 횟수\"\n    }\n  ]\n}",
+                    "instruction": ""
+                }
+            ]
+        },
+        {
+            "categoryId": "waitManagement",
+            "categoryName": "대기관리 (WaitManagement)",
+            "displayOrder": 5,
+            "enabled": true,
+            "weight": 1,
+            "instructions": [
+                "\n* **[대기 구간 정의]** (상담원 End ~ 상담원 Begin 기준)\n  - Short(5~19초), Medium(20~29초), Long(30초~2분), Extended(3분 이상)\n* **[감점 기준]**\n  - **WARNING (-5점 조건):**\n    1. Short Hold(5~19초)에서 양해 멘트 미사용 3~4회.\n    2. Medium Hold(20~29초)에서 양해 멘트 미사용 1회.\n    3. 2분 이상 대기 후 복귀 시 감사 멘트 미사용.\n    4. 고객 항의에 대한 사과 부재.\n  - **FAIL (-10점 조건):**\n    1. Short Hold(5~19초)에서 양해 멘트 미사용 5회 이상.\n    2. Long Hold(30초 이상)에서 양해 멘트 미사용 1회.\n    3. Extended Hold(3분 이상)에서 중간 안내 미흡.\n",
+                "대기 시간(Silence Gap)을 계산하고 분류합니다.",
+                "대기 멘트 및 감사 표현을 검증합니다.",
+                "감정 분석 및 사과 행동을 평가합니다."
+            ],
+            "feedbackMessageTemplate": "상담원에게 전달할 데이터 기반 피드백 (예: 04:10 구간 고객의 음량이 85dB로 높아졌을 때 변명을 먼저 하셨습니다. / 02:30 구간 '됐어요'라는 냉소적 반응에 기계적으로 응대하여 불만이 심화되었습니다.)",
+            "subItems": [
+                {
+                    "subItemId": "holdProcessEvaluation",
+                    "subItemName": "대기 시간 계산 및 분류",
+                    "displayOrder": 1,
+                    "evaluationCriteria": [
+                        {
+                            "description": "대기 시간 계산 공식",
+                            "details": "리스트를 순차적으로 탐색하며, (현재 발화 Begin) - (이전 발화 End) 값을 계산하십시오.",
+                            "passCondition": "계산 완료",
+                            "criteriaId": "1",
+                            "failCondition": "해당 없음"
+                        },
+                        {
+                            "description": "대기 유형 분류",
+                            "details": "Short Hold: Gap이 5,000ms ~ 19,999ms (5초 ~ 19초). Long Hold: Gap이 20,000ms 이상 (20초 이상). Extended Hold: Gap이 180,000ms 이상 (3분 이상).",
+                            "passCondition": "대기 유형 분류 완료",
+                            "criteriaId": "2",
+                            "failCondition": "해당 없음"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"summary\": {\n    \"totalHoldsDetected\": 0,\n    \"violationShortHold\": 0,\n    \"violationLongHold\": 0,\n    \"finalResult\": \"PASS/WARNING/FAIL\"\n  },\n  \"details\": [\n    {\n      \"seq\": 1,\n      \"gapStartTime\": \"mm:ss\",\n      \"gapEndTime\": \"mm:ss\",\n      \"durationSec\": 15.5,\n      \"holdType\": \"SHORT/LONG/EXTENDED\",\n      \"preHoldContent\": \"직전 발화\",\n      \"isPreHoldValid\": true,\n      \"postHoldContent\": \"직후 발화\",\n      \"isPostHoldValid\": true\n    }\n  ]\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "holdMentCheck",
+                    "subItemName": "대기 멘트 및 감사 표현 검증",
+                    "displayOrder": 2,
+                    "evaluationCriteria": [
+                        {
+                            "description": "사전 양해 (Pre-Hold Check)",
+                            "details": "대기 발생 직전 상담원 발화에 '잠시만 기다려 주십시오', '확인해 보겠습니다' 등의 양해어가 있는가? 감점 기준: Short Hold(5~19초): 양해어 미사용 3회 이상 누적 시 FAIL. Long Hold(20초+): 양해어 미사용 1회 이상 발생 시 FAIL.",
+                            "passCondition": "양해어를 적절히 사용한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "양해어 없이 대기를 유발한 경우"
+                        },
+                        {
+                            "description": "사후 감사 (Post-Hold Check)",
+                            "details": "대기 발생 직후 상담원 발화에 '기다려 주셔서 감사합니다' 등의 감사 인사가 있는가? 감점 기준: 대기 시간이 120초(2분) 이상이었는데 복귀 후 감사 멘트가 없으면 FAIL.",
+                            "passCondition": "감사 멘트를 사용한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "감사 멘트 없이 복귀한 경우"
+                        },
+                        {
+                            "description": "중간 안내 (Extended Hold Check)",
+                            "details": "대기가 3분을 초과하는 경우, 도중에 '시간이 더 소요됩니다' 안내나 Call Back 제안이 있었는지 확인.",
+                            "passCondition": "중간 안내를 제공한 경우",
+                            "criteriaId": "3",
+                            "failCondition": "중간 안내 없이 3분 이상 대기시킨 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"preHoldViolations\": 0,\n  \"postHoldViolations\": 0,\n  \"extendedHoldViolations\": 0\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "apologyEvaluation",
+                    "subItemName": "감정 분석 및 사과 행동 (EmotionApology)",
+                    "displayOrder": 3,
+                    "evaluationCriteria": [
+                        {
+                            "description": "감정 유형 분류 - Type A: 격앙된 분노 (Hot Anger)",
+                            "details": "기준: LoudnessScore Max 값이 80 이상이거나, 평균 대비 급격히 상승한 구간. 특징: 직접적인 항의, 큰 목소리.",
+                            "passCondition": "Type A 감정에 적절히 대응한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "Type A 감정에 부적절하게 대응한 경우"
+                        },
+                        {
+                            "description": "감정 유형 분류 - Type B: 냉소적 비판 (Cold Cynicism)",
+                            "details": "기준: LoudnessScore는 정상 범위(60~75)이나, 비꼬는 언어 패턴이 감지됨. 패턴 예시: 반문('참 대단하시다네요'), 체념('됐습니다', '알아서 하세요'), 한숨 섞인 단답('후.. 네.'), 비교('내 돈 받을 땐 안 그러던데').",
+                            "passCondition": "Type B 감정에 공감을 표현한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "Type B 감정에 기계적으로 대응한 경우"
+                        },
+                        {
+                            "description": "대응 적절성 검증 - Type A 대응 (덜 격앙)",
+                            "details": "즉각성: 감정 표출 직후 상담원의 첫 말이 사과인가? 무변명: '그게 아니라서' 등의 변명 없이 깔끔하게 인정하는가? 정중함: '죄송해요'(해요체)가 아닌 '죄송합니다/송구합니다'(다까체)를 사용하는가?",
+                            "passCondition": "즉각적이고 정중한 사과를 한 경우",
+                            "criteriaId": "3",
+                            "failCondition": "변명하거나 가벼운 사과를 한 경우"
+                        },
+                        {
+                            "description": "대응 적절성 검증 - Type B 대응 (덜 냉소)",
+                            "details": "공감 및 쿠션: 기계적인 매뉴얼 답변('규정입니다') 대신, '고객님 많이 답답하셨겠습니다'와 같은 감정 일치(Empathy) 멘트가 있었는가? (냉소적인 고객에게 공감 없이 규정만 내세우면 FAIL)",
+                            "passCondition": "공감 멘트를 사용한 경우",
+                            "criteriaId": "4",
+                            "failCondition": "기계적으로 규정만 안내한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"summary\": \"PASS/WARNING/FAIL\",\n  \"triggerEvents\": [\n    {\n      \"timestamp\": \"mm:ss\",\n      \"emotionType\": \"TYPEA/TYPEB\",\n      \"detectionEvidence\": \"감지 근거\",\n      \"customerContent\": \"고객 발화\",\n      \"agentResponse\": \"상담원 대응\",\n      \"evaluation\": \"PASS/FAIL\"\n    }\n  ]\n}",
+                    "instruction": ""
+                }
+            ]
+        },
+        {
+            "categoryId": "efficiency",
+            "categoryName": "효율성 (Efficiency)",
+            "displayOrder": 6,
+            "enabled": true,
+            "weight": 1,
+            "instructions": [
+                "\n* **[평가 요소]**\n  - 니즈 파악, 프로세스 준수, AICC 정보 활용, 오안내 정정.\n* **[감점 기준]**\n  - **WARNING (-5점 조건):**\n    1. 니즈 파악 지연 및 비효율적 리드.\n    2. 오안내 후 정정(상담원 스스로 2회 OR 고객 지적 1회).\n    3. 불필요한 정보 재질의(2회 이상).\n    4. AICC 인증 정보 중복 질의.\n  - **FAIL (-10점 조건):**\n    1. 오안내 후 정정(상담원 스스로 3회 OR 고객 지적 2회).\n",
+                "니즈 파악 및 구체화 능력을 평가합니다.",
+                "대화 리드 및 표준 프로세스 준수 여부를 확인합니다.",
+                "AICC 정보 활용 및 중복 질문 방지를 검증합니다.",
+                "비효율 및 부정확성을 감지합니다."
+            ],
+            "feedbackMessageTemplate": "피드백 문구 (예: 고객이 '좌석 변경'이라고 모호하게 말했을 때, 상담원님이 '승급인지 배정인지' 바로 구체적으로 질문하여 니즈를 빠르게 파악한 점이 훌륭합니다.)",
+            "subItems": [
+                {
+                    "subItemId": "needsIdentification",
+                    "subItemName": "니즈 파악 및 구체화 (NeedsIdentification)",
+                    "displayOrder": 1,
+                    "evaluationCriteria": [
+                        {
+                            "description": "구체화 질문 (Clarification)",
+                            "details": "상황: 고객이 '표 있어요?', '변경 돼나요?' 등 모호하게 질문했을 때. Good: 즉시 '어느 노선, 몇 분이십니까?', '정확한 날짜가 언제이십니까?'라고 구체적 정보(5W1H)를 묻는 경우. Bad: '네?', '어떤 거요?' 등 단순 반문으로 해석 낭비하는 경우.",
+                            "passCondition": "구체적인 정보를 즉시 질문한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "단순 반문으로 시간을 낭비한 경우"
+                        },
+                        {
+                            "description": "내재 목적 확인",
+                            "details": "고객이 횡설수설이나 상황 설명만 길게 늘어놓을 때(30초 이상), '무엇을 도와드릴까요?' 또는 '어떤 점이 궁금하십니까?'라고 개입하여 목적을 고정하는지 확인.",
+                            "passCondition": "목적을 명확히 확인한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "목적 확인 없이 수동적으로 청취한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"identifiedPurpose\": \"내재 목적 요약\",\n  \"clarificationQuality\": \"GOOD/BAD/N/A\",\n  \"evidenceContext\": {\n    \"timestamp\": \"mm:ss\",\n    \"triggerSituation\": \"고객의 모호한 요청\",\n    \"agentClarifyingQuestion\": \"상담원의 구체화 질문\",\n    \"customerConfirmation\": \"고객의 확정 답변\"\n  }\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "leadingStandardProcess",
+                    "subItemName": "대화 리드 및 표준 프로세스 (LeadingStandardProcess)",
+                    "displayOrder": 2,
+                    "evaluationCriteria": [
+                        {
+                            "description": "예약 정보 확인 필수 문구 (Exact Phrase Matching)",
+                            "details": "아래 3가지 문구 중 하나라도 정확히(또는 매우 유사하게) 사용되었는지 확인하십시오: '예약번호 또는 전화로 사전 확인 부탁드립니다', '예약번호 또는 전화로 일정 확인 부탁드립니다', '예약번호 또는 전화로 스케줄 확인 부탁드립니다'",
+                            "passCondition": "필수 문구를 사용한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "필수 문구 없이 진행한 경우"
+                        },
+                        {
+                            "description": "중간 요약 (Summarization)",
+                            "details": "상담 중간이나 해결 단계 직전에, '지금까지 말씀하신 내용이 ~ 맞습니까?'라며 내용을 정리(Confirm)하는 구간이 있는지 확인.",
+                            "passCondition": "중간 요약을 수행한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "중간 요약 없이 진행한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"leadingStandardProcessCheck\": {\n    \"status\": \"PASS/WARNING/FAIL\",\n    \"missingScript\": \"누락된 필수 문구\"\n  },\n  \"summarizationCheck\": {\n    \"status\": \"PASS/WARNING/FAIL\",\n    \"timestamp\": \"mm:ss\"\n  }\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "aiccEfficiency",
+                    "subItemName": "AICC 정보 활용 및 중복 질문 방지 (AICCEfficiency)",
+                    "displayOrder": 3,
+                    "evaluationCriteria": [
+                        {
+                            "description": "AICC 인증 정보 활용",
+                            "details": "입력된 AICC JSON의 각 항목이 true일 때, 상담원이 해당 정보를 '개방형 질문'으로 물어보면 FAIL로 표시하십시오. NameAuthenticated == true: '성함이 어떻게 되세요?' (Fail) vs '홍길동 고객님 맞으십니까?' (Pass). DOBAuthenticated == true: '생년월일 불러주세요' (Fail) vs '입력하신 생년월일로 확인하겠습니다' (Pass). SkypassNumberAuthenticated == true: '회원번호 뭐예요?' (Fail) vs '회원번호 조회하겠습니다' (Pass).",
+                            "passCondition": "AICC 인증 정보를 적절히 활용한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "이미 인증된 정보를 다시 질문한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"status\": \"PASS/WARNING/FAIL\",\n  \"violationDetail\": \"위반 내용\"\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "inefficiencyErrorDetection",
+                    "subItemName": "비효율 및 부정확성 감지 (InefficiencyErrorDetection)",
+                    "displayOrder": 4,
+                    "evaluationCriteria": [
+                        {
+                            "description": "재설명 요구 (Repetition)",
+                            "details": "고객 발화 중 '아니 그게 아니고요', '아까 말씀드렸다시피', '제 말은 그게 아니라' 등 상담원의 오해를 정정하는 표현 감지.",
+                            "passCondition": "재설명 요구가 없는 경우",
+                            "criteriaId": "1",
+                            "failCondition": "고객이 재설명을 요구한 경우"
+                        },
+                        {
+                            "description": "정보 오류 지적 (Correction)",
+                            "details": "고객 발화 중 '아까는 ~라면서요', '규정에는 ~라고 되어 있는데요', '말이 다르잖아요' 등 오안내 지적 감지.",
+                            "passCondition": "정보 오류 지적이 없는 경우",
+                            "criteriaId": "2",
+                            "failCondition": "고객이 정보 오류를 지적한 경우"
+                        },
+                        {
+                            "description": "방치 (PassiveListening)",
+                            "details": "고객의 발화가 30초 이상 지속되는데 상담원이 '네.. 네..' 호응만 하고 해결책이나 방향을 제시하지 못하는 경우.",
+                            "passCondition": "적절한 개입과 해결책을 제시한 경우",
+                            "criteriaId": "3",
+                            "failCondition": "수동적으로 청취만 한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"summary\": {\n    \"repetitionCount\": 0,\n    \"misunderstandingCount\": 0\n  },\n  \"details\": [\n    {\n      \"timestamp\": \"mm:ss\",\n      \"issueType\": \"재설명 요구/정보 오류 지적/방치\",\n      \"causeAnalysis\": \"원인 분석\",\n      \"conversationSnippet\": \"관련 대화\"\n    }\n  ]\n}",
+                    "instruction": ""
+                }
+            ]
+        },
+        {
+            "categoryId": "accuracy",
+            "categoryName": "정확성 (Accuracy)",
+            "displayOrder": 7,
+            "enabled": true,
+            "weight": 1,
+            "instructions": [
+                "* **[평가 요소]**\n  - 임의 판단 금지(\"제 생각엔\"), 치명적 오안내, PNR 임의 수정.\n* **[감점 기준]**\n  - **WARNING (-5점 조건):**\n    1. 종료 시까지 수정되지 않은 사소한 오안내.\n    2. 오해를 유발할 수 있는 모호한 안내.\n    3. 추측성 발화(\"아마 될겁니다\") 사용.\n  - **FAIL (-10점 조건):**\n    1. 오안내/업무 오처리가 2건 이상.\n    2. 치명적인 오안내(금전적 피해, 규정 위반).\n    3. 고객 동의 없는 PNR 수정.\n",
+                "임의 판단 및 추측성 발화를 감지합니다.",
+                "구조적 설명 능력을 평가합니다.",
+                "오안내 및 정보 불일치를 검출합니다.",
+                "업무 완결성 및 예약 복창을 확인합니다."
+            ],
+            "feedbackMessageTemplate": "상담원 피드백 문구 (예: '제 생각에는'과 같은 추측성 표현은 고객에게 혼란을 주고 신뢰를 떨어뜨립니다. 규정을 근거하여 확정적인 표현(~입니다)을 사용해 주세요. 또한 마지막에 변경된 일정을 예약 복창해주셔야 업무가 완결됩니다.)",
+            "subItems": [
+                {
+                    "subItemId": "arbitraryJudgment",
+                    "subItemName": "임의 판단 및 추측성 발화 감지 (ArbitraryJudgment)",
+                    "displayOrder": 1,
+                    "evaluationCriteria": [
+                        {
+                            "description": "임의 판단 감점 기준",
+                            "details": "Fail Criteria (감점 예외): 아래 키워드나 뉘앙스가 포함된 경우. '제 생각에는', '개인적으로는', '아마 될 거예요', '보통은 그렇습니다', '글쎄요', '확실하지 않지만', '~인 것 같아요' (불확실한 종결 어미)",
+                            "passCondition": "확정적인 표현을 사용한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "추측성 표현을 사용한 경우"
+                        },
+                        {
+                            "description": "적절한 표현 기준",
+                            "details": "Pass Criteria: '규정은 ~입니다', '확인해 본 결과 ~입니다', '지침에 따르면' 등 확정적 표현 사용.",
+                            "passCondition": "규정/지침에 근거한 표현을 사용한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "개인적 추측으로 안내한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"count\": 0,\n  \"details\": [\n    {\n      \"timestamp\": \"mm:ss\",\n      \"detectedExpression\": \"검출된 표현\",\n      \"violationReason\": \"위반 사유\"\n    }\n  ]\n}",
+                    "instruction": "# [ArbitraryJudgment 작성 절차 (Thinking Process)]\n분석 결과 작성 시, 바로 JSON을 출력하지 말고 내부적으로 다음 순서를 따르십시오:\n1. Detection (탐지):** 전체 스크립트를 스캔하여 '임의 판단(ArbitraryJudgment)' 해당하는 발화를 모두 찾아내십시오.\n2. Listing (나열):** 찾아낸 발화들을 잠시 메모리에 리스트업하십시오.\n3. Counting (계수):**\n    * 리스트업 된 '임의 판단(ArbitraryJudgment)' 발화의 개수를 세십시오.\n5. Generation (생성):** 위 검증이 끝난 후 JSON을 작성하십시오. **(빈 리스트인데 count가 1이거나, 리스트가 있는데 count가 0이면 절대 안 됩니다.)**"
+                },
+                {
+                    "subItemId": "structuralExplanation",
+                    "subItemName": "구조적 설명 능력 (StructuralExplanation)",
+                    "displayOrder": 2,
+                    "evaluationCriteria": [
+                        {
+                            "description": "논리적 순서 평가",
+                            "details": "복잡한 규정(위약료, 환불, 변경 절차 등)을 안내할 때 [결론 → 근거 → 향후 절차]의 논리적 순서를 따르는지 평가하십시오. Good: 결론(됩니다/안됩니다)을 먼저 말하고, 근거(규정)를 댄 후, 절차(신청 방법)를 안내함. Bad: 횡설수설하거나, 근거를 설명하다가 결론이 흐리거나, 절차를 누락하는 경우.",
+                            "passCondition": "논리적 순서를 따른 경우",
+                            "criteriaId": "1",
+                            "failCondition": "횡설수설하거나 결론이 불명확한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"status\": \"PASS/WARNING/FAIL\",\n  \"analysis\": \"설명 구조 분석\"\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "misinformationConflict",
+                    "subItemName": "오안내 및 정보 불일치 (MisinformationConflict)",
+                    "displayOrder": 3,
+                    "evaluationCriteria": [
+                        {
+                            "description": "충돌 감지 (Conflict Detection)",
+                            "details": "고객이 제시한 증거(홈페이지, 앱 화면 등)와 상담원의 안내가 충돌하는 상황을 포착하십시오. 고객: '홈페이지에는 무료라고 되어 있는데요?', '앱에서는 된다고 나오는데요?'. 상담원 대응: Fail: 확인 없이 본인의 주장을 고수하거나 강압함 ('아니요, 제가 맞습니다'). Self-Correction (참작): '아, 잠시만요. 다시 확인하겠습니다... 예 고객님 말씀이 맞습니다.' (빠른 정정은 감점 항목 축소).",
+                            "passCondition": "고객 정보를 확인하고 정정한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "확인 없이 본인 주장을 고수한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"count\": 0,\n  \"details\": [\n    {\n      \"timestamp\": \"mm:ss\",\n      \"customerClaim\": \"고객 주장\",\n      \"agentResponse\": \"상담원 대응\",\n      \"violationReason\": \"위반 사유\"\n    }\n  ]\n}",
+                    "instruction": "# [오안내(MisinformationConflict) 작성 절차 (Thinking Process)]\n분석 결과 작성 시, 바로 JSON을 출력하지 말고 내부적으로 다음 순서를 따르십시오:\n1. Detection (탐지):** 전체 스크립트를 스캔하여 '오안내(MisinformationConflict)' 해당하는 발화를 모두 찾아내십시오.\n2. Listing (나열):** 찾아낸 발화들을 잠시 메모리에 리스트업하십시오.\n3. Counting (계수):**\n    * 리스트업 된 '오안내(MisinformationConflict) 발화의 개수를 세십시오.\n5. Generation (생성):** 위 검증이 끝난 후 JSON을 작성하십시오. **(빈 리스트인데 count가 1이거나, 리스트가 있는데 count가 0이면 절대 안 됩니다.)**"
+                },
+                {
+                    "subItemId": "completenessParaphrasing",
+                    "subItemName": "업무 완결성 및 예약 복창 (CompletenessParaphrasing)",
+                    "displayOrder": 4,
+                    "evaluationCriteria": [
+                        {
+                            "description": "핵심 데이터 재확인",
+                            "details": "상담 종료 시, 핵심 데이터(날짜, 구간, 성함, 금액)를 상담원이 재확인(Paraphrasing)하는지 확인하십시오. Required: '말씀하신 [날짜]에 [구간]으로 변경 맞으십니까?', '총 요금은 [금액]입니다.' Fail: 최종 확인 없이 '네, 알겠습니다' 하고 상담을 종료하는 경우.",
+                            "passCondition": "핵심 데이터를 재확인한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "재확인 없이 상담을 종료한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"status\": \"PASS/WARNING/FAIL\",\n  \"finalRecapTimestamp\": \"mm:ss 또는 '누락됨'\",\n  \"recapContent\": \"복창 내용\"\n}",
+                    "instruction": ""
+                }
+            ]
+        },
+        {
+            "categoryId": "proactiveness",
+            "categoryName": "적극성 (Proactiveness)",
+            "displayOrder": 8,
+            "enabled": true,
+            "weight": 1,
+            "instructions": [
+                "\n* **[평가 요소]**\n  - 구체적 설명, 선제적 대안 제시, 해결 노력.\n* **[감점 기준]**\n  - **WARNING (-5점 조건):**\n    1. 조건 설명 누락 또는 단답형 응대 1회.\n    2. 소극적 응대(고객 질문 후 대안 제시) 1회.\n  - **FAIL (-10점 조건):**\n    1. 조건 설명 전무(All Missing) 및 지속적 단답형.\n    2. 소극적 응대 2회 이상.\n    3. 대안 미제시.\n    ",
+                "구체적 설명 및 상황 파악 능력을 평가합니다.",
+                "대안 제시 및 문제 해결 능력을 확인합니다.",
+                "감점 요인을 탐지합니다."
+            ],
+            "feedbackMessageTemplate": "상담원 피드백 문구 (예: 거절 시 '안 됩니다'라고 바로 말씀하시기보다 '확인해 보겠지만...'이라는 양충 어구를 사용해 주세요. 또한 고객이 묻기 전에 '대신 변경은 가능합니다'라고 선제적으로 대안을 제시해야 적극적인 상담입니다.)",
+            "subItems": [
+                {
+                    "subItemId": "concreteExplanation",
+                    "subItemName": "구체적 설명 및 상황 파악 (Concrete Explanation)",
+                    "displayOrder": 1,
+                    "evaluationCriteria": [
+                        {
+                            "description": "상황 파악 질문 (Active Inquiry)",
+                            "details": "해결책 제시 전, '이용 목적이 어떻게 되십니까?', '언제 출발하십니까?' 등 고객 상황을 확인하는 질문이 1회 이상 있었는가?",
+                            "passCondition": "상황 파악 질문을 한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "상황 파악 없이 해결책을 제시한 경우"
+                        },
+                        {
+                            "description": "실행 중심 절차 안내 (Execution Guidance)",
+                            "details": "절차 설명 시 준비물, 주의사항, 소요시간 등 고객이 실제로 행동할 때 필요한 디테일을 언급하는가? Fail: '홈페이지에서 하시면 됩니다' (단답/불친절). Pass: '홈페이지 접속 후 마이페이지에서 신청 가능한데, 인증서가 필요하니 미리 준비해 주십시오.' (구체적)",
+                            "passCondition": "구체적인 절차와 준비물을 안내한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "단답으로 안내한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"situationInquiryPerformed\": true,\n  \"executionGuidanceQuality\": \"DETAILED/GENERIC/POOR\",\n  \"analysisLog\": \"분석 내용\"\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "problemSolving",
+                    "subItemName": "대안 제시 및 문제 해결 (Problem Solving)",
+                    "displayOrder": 2,
+                    "evaluationCriteria": [
+                        {
+                            "description": "거절 전 탐색/공감 (Empathy before Refusal)",
+                            "details": "'안 됩니다'라고 말하기 직전에 '잠시 확인해 보겠습니다', '방법이 있을지 찾아보겠습니다' 등의 양충/노력 과정이 있었는가? Fail: 고객 요청 즉시 '그건 안 돼요.'라고 단절적으로 거절.",
+                            "passCondition": "거절 전 확인/탐색 과정을 거친 경우",
+                            "criteriaId": "1",
+                            "failCondition": "즉시 단절적으로 거절한 경우"
+                        },
+                        {
+                            "description": "선제적 대안 제시 (Proactive Suggestion)",
+                            "details": "[중요] 고객이 '그럼 다른 방법은 없나요?'라고 묻기 전에, 상담원이 먼저 '대신 ~는 가능합니다'라고 제안하는가? Passive (소극적): 고객이 물어봐야만 대안을 내놓음. Proactive (적극적): 거절과 동시에(또는 직후) 상담원이 먼저 대안을 제시함.",
+                            "passCondition": "상담원이 먼저 대안을 제시한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "고객이 물어본 후에야 대안을 제시한 경우"
+                        },
+                        {
+                            "description": "선택권 존중 (Choice Offering)",
+                            "details": "'A와 B 중 어떤 것이 편하십니까?'와 같이 옵션을 제공하는가?",
+                            "passCondition": "선택 옵션을 제공한 경우",
+                            "criteriaId": "3",
+                            "failCondition": "선택권 없이 일방적으로 안내한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"empathyBeforeRefusal\": \"PASS/WARNING/FAIL\",\n  \"proactiveSuggestion\": \"PASS (선제적) / PASSIVE (소극적) / FAIL (미제시)\",\n  \"choiceOffering\": true\n}",
+                    "instruction": ""
+                },
+                {
+                    "subItemId": "negativeFactors",
+                    "subItemName": "감점 요인 탐지 (Negative Factors)",
+                    "displayOrder": 3,
+                    "evaluationCriteria": [
+                        {
+                            "description": "단답형 응대",
+                            "details": "설명 조건이 누락되거나 '네', '아니요' 위주로 짧게 끝내는 경우.",
+                            "passCondition": "충분한 설명을 제공한 경우",
+                            "criteriaId": "1",
+                            "failCondition": "단답으로 응대한 경우"
+                        },
+                        {
+                            "description": "대안 미제시",
+                            "details": "거절 후 대화가 끊기거나 고객이 스스로 방법을 찾게 만드는 경우.",
+                            "passCondition": "대안을 제시한 경우",
+                            "criteriaId": "2",
+                            "failCondition": "대안 없이 거절만 한 경우"
+                        }
+                    ],
+                    "outputJsonSchema": {},
+                    "resultJsonFormat": "{\n  \"summary\": {\n    \"totalCount\": 0,\n    \"primaryIssue\": \"주요 이슈\"\n  },\n  \"details\": [\n    {\n      \"timestamp\": \"mm:ss\",\n      \"issueType\": \"이슈 유형\",\n      \"context\": \"맥락\",\n      \"reason\": \"사유\"\n    }\n  ]\n}",
+                    "instruction": "[감점 요인 탐지 (Negative Factors) 작성 절차 (Thinking Process)]\n분석 결과 작성 시, 바로 JSON을 출력하지 말고 내부적으로 다음 순서를 따르십시오:\n1.  **Scanning (탐색):**\n    * **[거절 구간]**을 찾으십시오. (\"안 됩니다\", \"불가합니다\", \"어렵습니다\") -> 해당 구간 직전에 '확인 멘트'가 있는지, 직후에 '대안 제시'가 있는지 체크하십시오.\n    * **[설명 구간]**을 찾으십시오. -> 설명이 단답형인지, 구체적 절차(준비물 등)가 포함되었는지 체크하십시오.\n2.  **Counting (계수):**\n    * `totalCount`: 단답형 응대, 대안 미제시, 거절 전 탐색 누락, 소극적 대안 제시(고객 질문 후 답변)의 총합.\n3.  **Verification (검증):**\n    * `details` 배열에는 발견된 모든 항목이 구체적으로 기록되어야 합니다.\n4.  **Generation (생성):** 위 검증이 완료되면 JSON을 작성하십시오."
+                }
+            ]
+        }
+    ]
+}

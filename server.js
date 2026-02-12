@@ -126,26 +126,32 @@ app.get('/api/aws/auto-credentials', async (req, res) => {
     const awsConfigPath = path.join(os.homedir(), '.aws', 'config');
 
     if (!fs.existsSync(awsConfigPath)) {
-      return res.status(404).json({ error: 'AWS config file not found' });
+      return res.status(400).json({ error: 'AWS config file not found' });
     }
 
     const configContent = fs.readFileSync(awsConfigPath, 'utf-8');
     const config = ini.parse(configContent);
+
+    // SSO session 존재 여부 확인
+    const hasSsoSession = Object.keys(config).some(key => key.startsWith('sso-session '));
 
     // 기본 프로필 또는 첫 번째 SSO 프로필 찾기
     let selectedProfile = null;
     let selectedRegion = 'ap-northeast-2';
 
     for (const [key, value] of Object.entries(config)) {
-      if (key.startsWith('profile ') && value.sso_start_url) {
-        selectedProfile = key.replace('profile ', '');
-        selectedRegion = value.region || selectedRegion;
-        break;
+      if (key.startsWith('profile ')) {
+        // sso_start_url이 프로필에 직접 있거나, sso-session이 config에 존재하면 SSO 프로필로 간주
+        if (value.sso_start_url || hasSsoSession) {
+          selectedProfile = key.replace('profile ', '');
+          selectedRegion = value.region || selectedRegion;
+          break;
+        }
       }
     }
 
     if (!selectedProfile) {
-      return res.status(404).json({ error: 'No SSO profile found' });
+      return res.status(401).json({ error: 'No SSO profile found. Ensure your ~/.aws/config has [sso-session] or profiles with sso_start_url.' });
     }
 
     // SSO 자격 증명 가져오기
@@ -193,9 +199,12 @@ app.get('/api/aws/profiles', async (req, res) => {
 
     const profiles = [];
 
+    // SSO session 존재 여부 확인
+    const hasSsoSession = Object.keys(config).some(key => key.startsWith('sso-session '));
+
     for (const [key, value] of Object.entries(config)) {
-      // SSO 프로필만 필터링 (sso_start_url이 있는 프로필)
-      if (key.startsWith('profile ') && value.sso_start_url) {
+      // SSO 프로필 필터링: sso_start_url이 직접 있거나, sso-session이 config에 존재하는 경우
+      if (key.startsWith('profile ') && (value.sso_start_url || hasSsoSession)) {
         const profileName = key.replace('profile ', '');
 
         // SSO 캐시에서 로그인 상태 확인
@@ -1065,6 +1074,170 @@ app.get('/api/agent/v1/qm-automation/status', async (req, res) => {
 });
 
 /**
+ * 오디오 Presigned URL 조회 (Lambda 호출)
+ *
+ * GET /api/agent/v1/qm-automation/audio-presigned-url?requestId=xxx
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ *
+ * Response: { requestId, audioPresignedUrl, audioPresignedUrlExpiresAt }
+ */
+app.get('/api/agent/v1/qm-automation/audio-presigned-url', async (req, res) => {
+  try {
+    const { requestId } = req.query;
+
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req);
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    const payload = {
+      httpMethod: 'GET',
+      path: '/api/agent/v1/qm-automation/audio-presigned-url',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      queryStringParameters: {
+        requestId: requestId
+      }
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(responseData.data || responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Request failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(result.data || result);
+    }
+  } catch (error) {
+    console.error('Error invoking Audio Presigned URL Lambda:', error);
+    res.status(500).json({ error: 'Failed to fetch audio presigned URL', message: error.message });
+  }
+});
+
+/**
+ * 오디오 파일 프록시 (CORS 우회)
+ * 서버에서 presigned URL로 오디오를 다운로드하여 클라이언트에 스트리밍
+ *
+ * GET /api/agent/v1/qm-automation/audio-stream?requestId=xxx
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ *
+ * Response: audio binary stream
+ */
+app.get('/api/agent/v1/qm-automation/audio-stream', async (req, res) => {
+  try {
+    const { requestId } = req.query;
+
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req);
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    // 1) Lambda로 presigned URL 조회
+    const payload = {
+      httpMethod: 'GET',
+      path: '/api/agent/v1/qm-automation/audio-presigned-url',
+      headers: { 'Content-Type': 'application/json' },
+      queryStringParameters: { requestId }
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
+    });
+
+    const lambdaResponse = await lambdaClient.send(command);
+    const lambdaResult = JSON.parse(Buffer.from(lambdaResponse.Payload).toString());
+    const statusCode = lambdaResult.statusCode || 200;
+
+    if (statusCode >= 400) {
+      return res.status(statusCode).json({ error: 'Failed to get audio presigned URL' });
+    }
+
+    const responseData = lambdaResult.body
+      ? (typeof lambdaResult.body === 'string' ? JSON.parse(lambdaResult.body) : lambdaResult.body)
+      : lambdaResult;
+    const audioUrl = (responseData.data || responseData).audioPresignedUrl;
+
+    if (!audioUrl) {
+      return res.status(404).json({ error: 'Audio presigned URL not found' });
+    }
+
+    // 2) presigned URL에서 오디오 다운로드 후 클라이언트에 스트리밍
+    const audioResponse = await fetch(audioUrl);
+
+    if (!audioResponse.ok) {
+      return res.status(audioResponse.status).json({ error: 'Failed to fetch audio from S3' });
+    }
+
+    const contentType = audioResponse.headers.get('content-type') || 'audio/mpeg';
+    const contentLength = audioResponse.headers.get('content-length');
+
+    res.setHeader('Content-Type', contentType);
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+
+    // Node 18+ ReadableStream → Node stream pipe
+    const { Readable } = require('node:stream');
+    const nodeStream = Readable.fromWeb(audioResponse.body);
+    nodeStream.pipe(res);
+  } catch (error) {
+    console.error('Error streaming audio:', error);
+    res.status(500).json({ error: 'Failed to stream audio', message: error.message });
+  }
+});
+
+/**
  * QM Automation 검색 (다중 필터)
  *
  * GET /api/agent/v1/qm-automation/search
@@ -1810,6 +1983,7 @@ app.listen(PORT, () => {
 [QM Automation APIs] (Lambda Invoke)
 - POST /api/agent/v1/qm-automation                              - QM 상담 내용 분석
 - GET  /api/agent/v1/qm-automation/status?requestId=xxx         - QM 상세 조회
+- GET  /api/agent/v1/qm-automation/audio-presigned-url?requestId=xxx - 오디오 Presigned URL 조회
 - GET  /api/agent/v1/qm-automation/search                       - QM 검색 (다중 필터)
 
 [QM Evaluation State APIs] (이의제기/확인)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -25,6 +25,7 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
+  Slider,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -49,6 +50,10 @@ import {
   Email as EmailIcon,
   Badge as BadgeIcon,
   SmartToy as SmartToyIcon,
+  PlayArrow as PlayArrowIcon,
+  Pause as PauseIcon,
+  Stop as StopIcon,
+  VolumeUp as VolumeUpIcon,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -83,6 +88,8 @@ import {
   EvaluationState,
   EvaluationStatusType,
 } from '@/types/qmAutomation.types';
+import { getQmEvaluationForm } from '@/services/qmEvaluationFormService';
+import { QmEvaluationForm } from '@/types/qmEvaluationForm.types';
 import dayjs from 'dayjs';
 
 interface TabPanelProps {
@@ -96,6 +103,37 @@ const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
     <div role="tabpanel" hidden={value !== index}>
       {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
     </div>
+  );
+};
+
+// mm:ss 형식의 시간을 초로 변환
+const parseTimeToSeconds = (time: string): number | null => {
+  const match = time.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+};
+
+// 초를 mm:ss 형식으로 변환
+const formatSecondsToTime = (seconds: number): string => {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
+
+// 바로듣기 버튼 컴포넌트
+const PlayAtButton: React.FC<{ time: string; onPlayAt?: (time: string) => void }> = ({ time, onPlayAt }) => {
+  if (!onPlayAt || parseTimeToSeconds(time) === null) return null;
+  return (
+    <Tooltip title={`${time} 부터 재생`}>
+      <IconButton
+        size="small"
+        onClick={(e) => { e.stopPropagation(); onPlayAt(time); }}
+        sx={{ ml: 0.5, p: 0.25 }}
+        color="primary"
+      >
+        <PlayArrowIcon fontSize="small" />
+      </IconButton>
+    </Tooltip>
   );
 };
 
@@ -127,6 +165,142 @@ const QMAutomationDetail: React.FC = () => {
       return false;
     },
   });
+
+  // Fetch evaluation form when useEvaluationFormPrompt is true
+  const evaluationFormId = qmDetail?.input?.useEvaluationFormPrompt
+    ? qmDetail?.input?.evaluationFormId
+    : undefined;
+
+  const { data: evaluationForm } = useQuery({
+    queryKey: ['qm-evaluation-form', evaluationFormId],
+    queryFn: () => getQmEvaluationForm(evaluationFormId!, config),
+    enabled: !!evaluationFormId && isConfigured,
+  });
+
+  // 오디오를 서버 프록시를 통해 한번만 다운로드하여 Blob URL로 캐싱
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioBlobUrlRef = useRef<string | null>(null);
+  const [audioBlobReady, setAudioBlobReady] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const isAudioEnabled = !!requestId && isConfigured && qmDetail?.status === 'COMPLETED';
+
+  useEffect(() => {
+    if (!isAudioEnabled) return;
+    if (audioBlobUrlRef.current) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // 서버 프록시를 통해 오디오 다운로드 (CORS 우회)
+        const apiBaseUrl = 'http://localhost:8081';
+        const response = await fetch(
+          `${apiBaseUrl}/api/agent/v1/qm-automation/audio-stream?requestId=${encodeURIComponent(requestId!)}`,
+          {
+            headers: {
+              'x-aws-region': config.region,
+              'x-environment': config.environment,
+              ...(config.credentials && {
+                'x-aws-credentials': JSON.stringify(config.credentials),
+              }),
+            },
+          }
+        );
+        if (cancelled || !response.ok) return;
+        const blob = await response.blob();
+        if (cancelled) return;
+
+        const blobUrl = URL.createObjectURL(blob);
+        audioBlobUrlRef.current = blobUrl;
+        setAudioBlobReady(true);
+
+        if (audioRef.current) {
+          audioRef.current.src = blobUrl;
+        }
+      } catch (err) {
+        console.error('Failed to download audio:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAudioEnabled, requestId, config]);
+
+  // 컴포넌트 언마운트 시 Blob URL 해제
+  useEffect(() => {
+    return () => {
+      if (audioBlobUrlRef.current) {
+        URL.revokeObjectURL(audioBlobUrlRef.current);
+        audioBlobUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onDurationChange = () => setDuration(audio.duration);
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onEnded = () => { setIsPlaying(false); setCurrentTime(0); };
+
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('durationchange', onDurationChange);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
+    audio.addEventListener('ended', onEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('durationchange', onDurationChange);
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('ended', onEnded);
+    };
+  }, [audioBlobReady]);
+
+  const handlePlayAt = useCallback((time: string) => {
+    const audio = audioRef.current;
+    if (!audio || !audioBlobUrlRef.current) return;
+
+    const seconds = parseTimeToSeconds(time);
+    if (seconds === null) return;
+
+    audio.currentTime = Math.max(0, seconds - 2);
+    audio.play().catch(() => {});
+  }, []);
+
+  const handleTogglePlay = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play().catch(() => {});
+    }
+  }, [isPlaying]);
+
+  const handleStop = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    setCurrentTime(0);
+  }, []);
+
+  const handleSeek = useCallback((_: Event, value: number | number[]) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const newTime = typeof value === 'number' ? value : value[0];
+    audio.currentTime = newTime;
+    setCurrentTime(newTime);
+  }, []);
 
   // const score = qmDetail?.result?.geminiResponse
   //   ? extractScoreFromResponse(qmDetail.result.geminiResponse)
@@ -703,10 +877,12 @@ const QMAutomationDetail: React.FC = () => {
                 {qmDetail.result?.evaluationResult ? (
                   <EvaluationDetailView
                     evaluationResult={qmDetail.result.evaluationResult}
+                    evaluationForm={evaluationForm}
                     requestId={requestId}
                     onStateChange={() => refetch()}
                     defaultUserId={qmDetail.agentId}
                     defaultUserName={qmDetail.agentUserName}
+                    onPlayAt={audioBlobReady ? handlePlayAt : undefined}
                   />
                 ) : (
                   <Typography color="text.secondary">평가 상세 데이터가 없습니다.</Typography>
@@ -920,6 +1096,52 @@ const QMAutomationDetail: React.FC = () => {
         </>
       )
       }
+
+      {/* 숨겨진 오디오 엘리먼트 */}
+      <audio ref={audioRef} preload="none" />
+
+      {/* 미니 오디오 플레이어 */}
+      {audioBlobReady && (
+        <Paper
+          elevation={3}
+          sx={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1300,
+            px: 3,
+            py: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            bgcolor: 'background.paper',
+            borderTop: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <VolumeUpIcon color="primary" />
+          <IconButton size="small" onClick={handleTogglePlay} color="primary">
+            {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+          </IconButton>
+          <IconButton size="small" onClick={handleStop} disabled={!isPlaying && currentTime === 0}>
+            <StopIcon />
+          </IconButton>
+          <Typography variant="body2" sx={{ minWidth: 45, fontFamily: 'monospace' }}>
+            {formatSecondsToTime(currentTime)}
+          </Typography>
+          <Slider
+            size="small"
+            value={currentTime}
+            max={duration || 100}
+            onChange={handleSeek}
+            sx={{ flex: 1 }}
+          />
+          <Typography variant="body2" sx={{ minWidth: 45, fontFamily: 'monospace' }}>
+            {duration ? formatSecondsToTime(duration) : '--:--'}
+          </Typography>
+        </Paper>
+      )}
     </Box >
   );
 };
@@ -1421,7 +1643,7 @@ const isAccuracyIssues = (value: unknown): value is {
 };
 
 // 이벤트 렌더링 컴포넌트
-const EventItemView: React.FC<{ event: EvaluationEvent }> = ({ event }) => {
+const EventItemView: React.FC<{ event: EvaluationEvent; onPlayAt?: (time: string) => void }> = ({ event, onPlayAt }) => {
   const timestamp = event.timestamp ||
     (event.timestampStart && event.timestampEnd ? `${event.timestampStart} ~ ${event.timestampEnd}` : '');
 
@@ -1455,9 +1677,12 @@ const EventItemView: React.FC<{ event: EvaluationEvent }> = ({ event }) => {
         primary={
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
             {timestamp && (
-              <Typography variant="body2" fontWeight={600}>
-                {timestamp}
-              </Typography>
+              <>
+                <Typography variant="body2" fontWeight={600}>
+                  {timestamp}
+                </Typography>
+                {event.timestamp && <PlayAtButton time={event.timestamp} onPlayAt={onPlayAt} />}
+              </>
             )}
             {event.type && <Chip size="small" label={event.type} variant="outlined" />}
             {event.category && <Chip size="small" label={event.category} variant="outlined" />}
@@ -1546,8 +1771,8 @@ const getLevelColor = (level: string): 'success' | 'warning' | 'error' | 'info' 
 };
 
 // 소항목 렌더링 컴포넌트
-const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKey, value: rawValue }) => {
-  const label = getLabel(itemKey);
+const SubItemRenderer: React.FC<{ itemKey: string; value: unknown; label?: string; onPlayAt?: (time: string) => void }> = ({ itemKey, value: rawValue, label: propLabel, onPlayAt }) => {
+  const label = propLabel || getLabel(itemKey);
 
   // DynamoDB 형식 데이터를 JavaScript 객체로 변환
   const value = convertDynamoDBValue(rawValue);
@@ -1596,9 +1821,12 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKe
           <StatusChip status={value.status} />
         </Stack>
         {value.finalRecapTimestamp && (
-          <Typography variant="body2" color="text.secondary">
-            최종 확인 시점: {value.finalRecapTimestamp}
-          </Typography>
+          <Stack direction="row" alignItems="center" spacing={0.5}>
+            <Typography variant="body2" color="text.secondary">
+              최종 확인 시점: {value.finalRecapTimestamp}
+            </Typography>
+            <PlayAtButton time={value.finalRecapTimestamp} onPlayAt={onPlayAt} />
+          </Stack>
         )}
         {value.recapContent && (
           <Typography variant="body2" color="text.secondary">
@@ -1682,9 +1910,12 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKe
                   primary={
                     <>
                       {detail.timestamp && (
-                        <Typography component="span" variant="body2" fontWeight={600} sx={{ mr: 1 }}>
-                          {String(detail.timestamp)}
-                        </Typography>
+                        <>
+                          <Typography component="span" variant="body2" fontWeight={600} sx={{ mr: 0.5 }}>
+                            {String(detail.timestamp)}
+                          </Typography>
+                          <PlayAtButton time={String(detail.timestamp)} onPlayAt={onPlayAt} />
+                        </>
                       )}
                       {detail.issueType && <Chip size="small" label={String(detail.issueType)} variant="outlined" />}
                     </>
@@ -1865,6 +2096,7 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKe
                       variant="outlined"
                       icon={<TimeIcon />}
                     />
+                    <PlayAtButton time={detail.gapStartTime} onPlayAt={onPlayAt} />
                     <Chip
                       size="small"
                       label={`${detail.durationSec}초`}
@@ -1972,7 +2204,7 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKe
         {events.length > 0 ? (
           <List dense disablePadding>
             {events.map((event, idx) => (
-              <EventItemView key={idx} event={event} />
+              <EventItemView key={idx} event={event} onPlayAt={onPlayAt} />
             ))}
           </List>
         ) : (
@@ -2025,7 +2257,7 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown }> = ({ itemKe
         {events.length > 0 && (
           <List dense disablePadding>
             {events.map((event, idx) => (
-              <EventItemView key={idx} event={event as EvaluationEvent} />
+              <EventItemView key={idx} event={event as EvaluationEvent} onPlayAt={onPlayAt} />
             ))}
           </List>
         )}
@@ -2095,18 +2327,22 @@ const TERMINAL_STATUSES = new Set([
 // Evaluation Detail View Component - 동적 렌더링
 interface EvaluationDetailViewProps {
   evaluationResult: EvaluationResult;
+  evaluationForm?: QmEvaluationForm;
   requestId: string;
   onStateChange: () => void;
   defaultUserId?: string;
   defaultUserName?: string;
+  onPlayAt?: (time: string) => void;
 }
 
 const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
   evaluationResult,
+  evaluationForm,
   requestId,
   onStateChange,
   defaultUserId,
   defaultUserName,
+  onPlayAt,
 }) => {
   const { config } = useConfig();
   const { details, summary } = evaluationResult;
@@ -2198,8 +2434,51 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
     return response.results;
   };
 
-  // 대항목 키 추출 (details의 키들) - 알파벳 순 정렬
-  const sectionKeys = Object.keys(details).sort((a, b) => a.localeCompare(b));
+  // Form 기반 카테고리 순서 맵 생성
+  const categoryOrderMap = React.useMemo(() => {
+    if (!evaluationForm?.categories) return null;
+    const map = new Map<string, number>();
+    [...evaluationForm.categories]
+      .sort((a, b) => a.displayOrder - b.displayOrder)
+      .forEach((cat, idx) => map.set(cat.categoryId, idx));
+    return map;
+  }, [evaluationForm]);
+
+  // Form 기반 카테고리 라벨 맵 생성
+  const categoryLabelMap = React.useMemo(() => {
+    if (!evaluationForm?.categories) return null;
+    const map = new Map<string, string>();
+    evaluationForm.categories.forEach((cat) => map.set(cat.categoryId, cat.categoryName));
+    return map;
+  }, [evaluationForm]);
+
+  // Form 기반 서브아이템 순서/라벨 헬퍼
+  const getSubItemOrder = (categoryId: string, subItemId: string): number => {
+    if (!evaluationForm?.categories) return 999;
+    const cat = evaluationForm.categories.find(c => c.categoryId === categoryId);
+    const sub = cat?.subItems?.find(s => s.subItemId === subItemId);
+    return sub?.displayOrder ?? 999;
+  };
+
+  const getSubItemLabel = (categoryId: string, subItemId: string): string | undefined => {
+    if (!evaluationForm?.categories) return undefined;
+    const cat = evaluationForm.categories.find(c => c.categoryId === categoryId);
+    const sub = cat?.subItems?.find(s => s.subItemId === subItemId);
+    return sub?.subItemName;
+  };
+
+  // 대항목 키 추출 - Form이 있으면 displayOrder 기준, 없으면 알파벳 순
+  const sectionKeys = React.useMemo(() => {
+    const keys = Object.keys(details);
+    if (categoryOrderMap) {
+      return keys.sort((a, b) => {
+        const orderA = categoryOrderMap.get(a) ?? 999;
+        const orderB = categoryOrderMap.get(b) ?? 999;
+        return orderA - orderB;
+      });
+    }
+    return keys.sort((a, b) => a.localeCompare(b));
+  }, [details, categoryOrderMap]);
 
   // summary에서 Result/Score 키들 추출하여 대항목별 결과/점수 매핑
   const getSectionResult = (sectionKey: string): string | undefined => {
@@ -2385,7 +2664,13 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
           key !== 'feedbackMessage' &&
           key !== 'states' &&
           !key.toLowerCase().endsWith('score')
-        );
+        ).sort((a, b) => {
+          // Form이 있으면 displayOrder 기준 정렬
+          if (evaluationForm?.categories) {
+            return getSubItemOrder(sectionKey, a) - getSubItemOrder(sectionKey, b);
+          }
+          return 0; // Form이 없으면 원래 순서 유지
+        });
         const feedbackMessage = sectionData.feedbackMessage as string | undefined;
         const states = sectionData.states as EvaluationState[] | undefined;
         // 현재 상태 (가장 최신 seq)
@@ -2398,7 +2683,7 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
         const isGeminiCompleted = currentState?.status === 'GEMINI_EVAL_COMPLETED';
         const isObjectionRequested = currentState?.status === 'AGENT_OBJECTION_REQUESTED';
         const isFail = currentState?.evaluationStatus === 'FAIL';
-        const categoryLabel = getLabel(sectionKey);
+        const categoryLabel = categoryLabelMap?.get(sectionKey) || getLabel(sectionKey);
 
         return (
           <Accordion key={sectionKey} defaultExpanded>
@@ -2541,6 +2826,8 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                   key={subItemKey}
                   itemKey={subItemKey}
                   value={sectionData[subItemKey]}
+                  label={getSubItemLabel(sectionKey, subItemKey)}
+                  onPlayAt={onPlayAt}
                 />
               ))}
               {/* 피드백 메시지 */}

@@ -15,6 +15,7 @@ import {
   BulkAgentActionResponse,
   BulkQAFeedbackRequest,
   QMAutomationSearchResponse,
+  AudioPresignedUrlResponse,
 } from '@/types/qmAutomation.types';
 import { AWSConfig } from '@/types/contact.types';
 
@@ -195,6 +196,39 @@ export async function getQMAutomationStatus(
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
     const errorMessage = errorData.message || errorData.error || `Failed to get QM automation status: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+/**
+ * 오디오 Presigned URL 조회
+ */
+export async function getAudioPresignedUrl(
+  requestId: string,
+  config: AWSConfig
+): Promise<AudioPresignedUrlResponse> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const response = await fetch(
+    `${apiBaseUrl}/api/agent/v1/qm-automation/audio-presigned-url?requestId=${encodeURIComponent(requestId)}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-aws-region': config.region,
+        'x-environment': config.environment,
+        ...(config.credentials && {
+          'x-aws-credentials': JSON.stringify(config.credentials),
+        }),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `Failed to get audio presigned URL: ${response.status}`;
     throw new Error(errorMessage);
   }
 

@@ -9,6 +9,7 @@ export interface QmEvaluationForm {
     status: 'ACTIVE' | 'INACTIVE' | 'DRAFT';
     createdAt: string;
     updatedAt: string;
+    categories?: EvaluationCategory[];
 }
 
 export interface EvaluationCategory {
@@ -19,6 +20,7 @@ export interface EvaluationCategory {
     weight: number;
     instructions?: string[];
     feedbackMessageTemplate?: string;
+    subItems?: EvaluationSubItem[];
 }
 
 export interface EvaluationSubItem {

@@ -30,7 +30,6 @@ import {
     FormControlLabel,
     Chip,
     Stack,
-    LinearProgress,
 } from '@mui/material';
 import {
     ArrowBack as BackIcon,
@@ -66,11 +65,9 @@ import { useConfig } from '@/contexts/ConfigContext';
 import {
     getQmEvaluationForm,
     updateQmEvaluationForm,
-    getCategories,
     createCategory,
     updateCategory,
     deleteCategory,
-    getSubItems,
     createSubItem,
     updateSubItem,
     deleteSubItem,
@@ -85,7 +82,6 @@ import {
     CreateCategoryRequest,
     CreateSubItemRequest,
     BulkUpdateCategoriesRequest,
-    BulkCategoryItem,
 } from '@/types/qmEvaluationForm.types';
 
 // --- Bulk Update Dialog Component ---
@@ -107,20 +103,29 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
     const [jsonInput, setJsonInput] = useState('');
     const [jsonError, setJsonError] = useState<string | null>(null);
 
-    // Generate sample JSON from current categories
-    const generateSampleJson = () => {
+    // Generate sample JSON from current categories (with subItems already included)
+    const generateSampleJson = async () => {
         if (currentCategories && currentCategories.length > 0) {
-            const sampleData: BulkUpdateCategoriesRequest = {
-                categories: currentCategories.map(cat => ({
-                    categoryId: cat.categoryId,
-                    categoryName: cat.categoryName,
-                    displayOrder: cat.displayOrder,
-                    enabled: cat.enabled,
-                    weight: cat.weight,
-                    instructions: cat.instructions || [],
-                    feedbackMessageTemplate: cat.feedbackMessageTemplate || '',
-                    subItems: [],
+            const categoriesWithSubItems = currentCategories.map((cat) => ({
+                categoryId: cat.categoryId,
+                categoryName: cat.categoryName,
+                displayOrder: cat.displayOrder,
+                enabled: cat.enabled,
+                weight: cat.weight,
+                instructions: cat.instructions || [],
+                feedbackMessageTemplate: cat.feedbackMessageTemplate || '',
+                subItems: (cat.subItems || []).map(si => ({
+                    subItemId: si.subItemId,
+                    subItemName: si.subItemName,
+                    displayOrder: si.displayOrder,
+                    evaluationCriteria: si.evaluationCriteria || [],
+                    outputJsonSchema: si.outputJsonSchema || {},
+                    resultJsonFormat: si.resultJsonFormat || '',
+                    instruction: si.instruction || '',
                 })),
+            }));
+            const sampleData: BulkUpdateCategoriesRequest = {
+                categories: categoriesWithSubItems,
             };
             setJsonInput(JSON.stringify(sampleData, null, 2));
         } else {
@@ -193,8 +198,8 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
         }
     };
 
-    const handleDownloadTemplate = () => {
-        generateSampleJson();
+    const handleDownloadTemplate = async () => {
+        await generateSampleJson();
         const blob = new Blob([jsonInput || ''], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -464,6 +469,7 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
 interface CategoryItemProps {
     formId: string;
     category: EvaluationCategory;
+    categorySubItems?: EvaluationSubItem[];
     onEdit: (category: EvaluationCategory) => void;
     onDelete: (categoryId: string) => void;
     config: any;
@@ -474,6 +480,7 @@ interface CategoryItemProps {
 const SortableCategoryItem: React.FC<CategoryItemProps> = ({
     formId,
     category,
+    categorySubItems,
     onEdit,
     onDelete,
     config,
@@ -504,12 +511,8 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
 
     const queryClient = useQueryClient();
 
-    // Fetch SubItems
-    const { data: subItems, isLoading } = useQuery({
-        queryKey: ['qm-subitems', formId, category.categoryId],
-        queryFn: () => getSubItems(formId, category.categoryId, config),
-        enabled: expanded, // Only fetch when expanded
-    });
+    // Use subItems from the form response (passed via props)
+    const subItems = categorySubItems;
 
     useEffect(() => {
         if (allSubExpanded !== undefined) {
@@ -554,7 +557,7 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
         onSuccess: () => {
             setOpenSubItemDialog(false);
             setEditingSubItem(null);
-            queryClient.invalidateQueries({ queryKey: ['qm-subitems', formId, category.categoryId] });
+            queryClient.invalidateQueries({ queryKey: ['qm-evaluation-form', formId] });
         },
     });
 
@@ -563,7 +566,7 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
             await deleteSubItem(formId, category.categoryId, subItemId, config);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['qm-subitems', formId, category.categoryId] });
+            queryClient.invalidateQueries({ queryKey: ['qm-evaluation-form', formId] });
         },
     });
 
@@ -650,11 +653,8 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                         </Button>
                     </Stack>
 
-                    {isLoading ? (
-                        <LinearProgress />
-                    ) : (
-                        <List dense>
-                            {subItems?.sort((a, b) => a.displayOrder - b.displayOrder).map((subItem) => (
+                    <List dense>
+                        {subItems?.sort((a, b) => a.displayOrder - b.displayOrder).map((subItem) => (
                                 <React.Fragment key={subItem.subItemId}>
                                     <ListItem
                                         secondaryAction={
@@ -746,7 +746,6 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                             ))}
                             {subItems?.length === 0 && <Typography variant="body2" color="text.secondary">No subitems.</Typography>}
                         </List>
-                    )}
                 </CardContent>
             </Collapse>
 
@@ -794,19 +793,15 @@ const QMEvaluationFormDetail: React.FC = () => {
         feedbackMessageTemplate: '',
     });
 
-    // Fetch Form
+    // Fetch Form (includes categories and subItems)
     const { data: form, isLoading: isFormLoading } = useQuery({
         queryKey: ['qm-evaluation-form', formId],
         queryFn: () => getQmEvaluationForm(formId!, config),
         enabled: !!formId,
     });
 
-    // Fetch Categories
-    const { data: categories } = useQuery({
-        queryKey: ['qm-categories', formId],
-        queryFn: () => getCategories(formId!, config),
-        enabled: !!formId,
-    });
+    // Derive categories from the form response
+    const categories = form?.categories;
 
     // DnD Sensors
     const sensors = useSensors(
@@ -835,7 +830,7 @@ const QMEvaluationFormDetail: React.FC = () => {
                     updateCategoryOrder(formId!, u.categoryId, { displayOrder: u.displayOrder }, config)
 
                 ));
-                queryClient.invalidateQueries({ queryKey: ['qm-categories', formId] });
+                queryClient.invalidateQueries({ queryKey: ['qm-evaluation-form', formId] });
             } catch (err) {
                 console.error("Failed to reorder:", err);
                 alert("Failed to save reorder.");
@@ -876,7 +871,7 @@ const QMEvaluationFormDetail: React.FC = () => {
         onSuccess: () => {
             setOpenCategoryDialog(false);
             setEditingCategory(null);
-            queryClient.invalidateQueries({ queryKey: ['qm-categories', formId] });
+            queryClient.invalidateQueries({ queryKey: ['qm-evaluation-form', formId] });
         }
     });
 
@@ -885,7 +880,7 @@ const QMEvaluationFormDetail: React.FC = () => {
             await deleteCategory(formId!, categoryId, config);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['qm-categories', formId] });
+            queryClient.invalidateQueries({ queryKey: ['qm-evaluation-form', formId] });
         }
     });
 
@@ -896,9 +891,7 @@ const QMEvaluationFormDetail: React.FC = () => {
         },
         onSuccess: () => {
             setOpenBulkUpdateDialog(false);
-            queryClient.invalidateQueries({ queryKey: ['qm-categories', formId] });
-            // Also invalidate subitems queries since they might be updated
-            queryClient.invalidateQueries({ queryKey: ['qm-subitems', formId] });
+            queryClient.invalidateQueries({ queryKey: ['qm-evaluation-form', formId] });
             alert('Categories bulk updated successfully.');
         },
         onError: (error) => {
@@ -1031,6 +1024,7 @@ const QMEvaluationFormDetail: React.FC = () => {
                                     key={category.categoryId}
                                     formId={formId!}
                                     category={category}
+                                    categorySubItems={category.subItems}
                                     onEdit={handleOpenCategoryDialog}
                                     onDelete={(id) => { if (window.confirm('Delete category?')) deleteCategoryMutation.mutate(id); }}
                                     config={config}

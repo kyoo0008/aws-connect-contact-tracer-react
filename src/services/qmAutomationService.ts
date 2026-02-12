@@ -305,10 +305,10 @@ export interface QMAutomationSearchFilters {
   contactId?: string;
   qaAgentUserName?: string;
   limit?: number;
-  page?: number;
-  pageSize?: number;
-  orderBy?: string;
-  order?: 'asc' | 'desc';
+  // page?: number;
+  // pageSize?: number;
+  // orderBy?: string;
+  // order?: 'asc' | 'desc';
 }
 
 /**
@@ -338,10 +338,10 @@ export async function getQMAutomationListSearch(
     if (filters.qaAgentUserName) params.append('qaAgentUserName', filters.qaAgentUserName);
     if (filters.contactId) params.append('contactId', filters.contactId);
     if (filters.limit) params.append('limit', filters.limit.toString());
-    if (filters.page) params.append('page', filters.page.toString());
-    if (filters.pageSize) params.append('pageSize', filters.pageSize.toString());
-    if (filters.orderBy) params.append('orderBy', filters.orderBy);
-    if (filters.order) params.append('order', filters.order);
+    // if (filters.page) params.append('page', filters.page.toString());
+    // if (filters.pageSize) params.append('pageSize', filters.pageSize.toString());
+    // if (filters.orderBy) params.append('orderBy', filters.orderBy);
+    // if (filters.order) params.append('order', filters.order);
 
     const queryString = params.toString();
     const url = queryString

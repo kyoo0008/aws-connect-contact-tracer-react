@@ -187,16 +187,15 @@ const QMAutomationList: React.FC = () => {
 
   // Sorting state
   type Order = 'asc' | 'desc';
-  type OrderBy = 'connectedToAgentTimestamp' | 'updatedAt' | null;
+  type OrderBy = 'connectedToAgentTimestamp' | 'completedAt' | null;
   const [order, setOrder] = useState<Order>('desc');
-  const [orderBy, setOrderBy] = useState<OrderBy>('updatedAt');
+  const [orderBy, setOrderBy] = useState<OrderBy>('completedAt');
 
   const handleRequestSort = (property: Exclude<OrderBy, null>) => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(property);
     setPage(0);
-    setSearchTrigger(prev => prev + 1);
   };
 
   // Handle search action
@@ -219,9 +218,9 @@ const QMAutomationList: React.FC = () => {
     }
   };
 
-  // Fetch QM Automation list
+  // Fetch QM Automation list (all items matching search filters)
   const {
-    data: qmList,
+    data: qmListRaw,
     isLoading,
     error,
     refetch,
@@ -229,11 +228,8 @@ const QMAutomationList: React.FC = () => {
     queryKey: [
       'qm-automation-list',
       searchTrigger,
-      page,
-      rowsPerPage,
     ],
     queryFn: async () => {
-      // Search with filters
       if (!startDate || !endDate) return { items: [], pagination: { totalCount: 0, totalPages: 0, page: 1, pageSize: rowsPerPage }, filters: {} };
       const filters: QMAutomationSearchFilters = {
         startDate: startDate.format('YYYYMMDD'),
@@ -250,15 +246,52 @@ const QMAutomationList: React.FC = () => {
       if (searchFilters.qmEvaluationStatus) filters.qmEvaluationStatus = searchFilters.qmEvaluationStatus;
       if (searchFilters.qaAgentUserName) filters.qaAgentUserName = searchFilters.qaAgentUserName;
 
-      filters.page = page + 1; // Material UI is 0-indexed, backend is 1-indexed
-      filters.pageSize = rowsPerPage;
-      filters.orderBy = orderBy || undefined;
-      filters.order = order;
-
       return getQMAutomationListSearch(config, filters);
     },
     enabled: isConfigured,
   });
+
+  // Client-side sorting and pagination
+  const qmList = React.useMemo(() => {
+    if (!qmListRaw) return undefined;
+
+    let sortedItems = [...qmListRaw.items];
+
+    // Helper to get sort value for a given column
+    const getSortValue = (item: QMAutomationListItem, col: Exclude<OrderBy, null>): string => {
+      if (col === 'completedAt') return item.completedAt || item.createdAt || '';
+      return item[col] ?? '';
+    };
+
+    // Composite sorting: primary by orderBy, secondary by the other column (desc)
+    if (orderBy) {
+      const secondaryCol: Exclude<OrderBy, null> = orderBy === 'connectedToAgentTimestamp' ? 'completedAt' : 'connectedToAgentTimestamp';
+      sortedItems.sort((a, b) => {
+        const aVal = getSortValue(a, orderBy);
+        const bVal = getSortValue(b, orderBy);
+        if (aVal < bVal) return order === 'asc' ? -1 : 1;
+        if (aVal > bVal) return order === 'asc' ? 1 : -1;
+        // Secondary sort (always desc) when primary values are equal
+        const aVal2 = getSortValue(a, secondaryCol);
+        const bVal2 = getSortValue(b, secondaryCol);
+        if (aVal2 < bVal2) return 1;
+        if (aVal2 > bVal2) return -1;
+        return 0;
+      });
+    }
+
+    const totalCount = sortedItems.length;
+
+    // Client-side pagination
+    const start = page * rowsPerPage;
+    const paginatedItems = sortedItems.slice(start, start + rowsPerPage);
+
+    return {
+      items: paginatedItems,
+      totalCount,
+      filters: qmListRaw.filters,
+    };
+  }, [qmListRaw, orderBy, order, page, rowsPerPage]);
 
   // Mutation for creating new QM request
   const createQMMutation = useMutation({
@@ -626,9 +659,9 @@ const QMAutomationList: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <TableSortLabel
-                      active={orderBy === 'updatedAt'}
-                      direction={orderBy === 'updatedAt' ? order : 'asc'}
-                      onClick={() => handleRequestSort('updatedAt')}
+                      active={orderBy === 'completedAt'}
+                      direction={orderBy === 'completedAt' ? order : 'asc'}
+                      onClick={() => handleRequestSort('completedAt')}
                     >
                       최근 평가 수정 일시
                     </TableSortLabel>
@@ -721,7 +754,7 @@ const QMAutomationList: React.FC = () => {
           <TablePagination
             rowsPerPageOptions={[5, 10, 15, 25, 50]}
             component="div"
-            count={qmList.pagination.totalCount}
+            count={qmList.totalCount}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}

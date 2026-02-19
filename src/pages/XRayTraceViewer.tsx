@@ -678,6 +678,7 @@ const XRayTraceViewerContent: React.FC = () => {
   const [searchParams] = useSearchParams();
   const xrayTraceId = searchParams.get('traceId');
   const contactId = searchParams.get('contactId');
+  const requestId = searchParams.get('requestId');
 
   const { config, isConfigured } = useConfig();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -711,7 +712,10 @@ const XRayTraceViewerContent: React.FC = () => {
   }, []);
 
   const handleBack = () => {
-    if (contactId) {
+    if (requestId) {
+      const params = new URLSearchParams({ requestId });
+      navigate(`/qm-flow-xray?${params.toString()}`);
+    } else if (contactId) {
       navigate(`/contact-flow/${contactId}`);
     } else {
       navigate(-1);
@@ -756,6 +760,7 @@ const XRayTraceViewerContent: React.FC = () => {
             </Typography>
             <Chip label={xrayTraceId} size="small" color="primary" sx={{ fontFamily: 'monospace' }} />
             {contactId && <Chip label={`Contact: ${contactId}`} size="small" variant="outlined" />}
+            {requestId && <Chip label={`Request: ${requestId}`} size="small" variant="outlined" />}
           </Box>
           <Stack direction="row" spacing={1}>
             <Tooltip title="Refresh">

@@ -55,6 +55,8 @@ import {
   getQMEvaluationStatusLabel,
   getQMEvaluationStatusColor,
 } from '@/services/qmAutomationService';
+import { getQmEvaluationForms } from '@/services/qmEvaluationFormService';
+import { QmEvaluationForm } from '@/types/qmEvaluationForm.types';
 import {
   QMAutomationListItem,
   QMAutomationRequestBody,
@@ -140,12 +142,24 @@ const QMAutomationList: React.FC = () => {
     thinkingBudget: 24576,
     useTools: true,
     useDefaultToolDefinitions: true,
-    useAudioAnalysis: false,
+    useAudioAnalysis: true,
     useContextCaching: false,
+    useEvaluationFormPrompt: false,
+    evaluationFormId: '',
     temperature: 0,
     maxOutputTokens: 65535,
   });
   const [toolDefinitionsJson, setToolDefinitionsJson] = useState(DEFAULT_TOOL_DEFINITIONS_JSON);
+
+  // Fetch Evaluation Forms for select box
+  const {
+    data: evaluationForms = [],
+    isLoading: isLoadingForms,
+  } = useQuery<QmEvaluationForm[]>({
+    queryKey: ['qm-evaluation-forms'],
+    queryFn: () => getQmEvaluationForms(config),
+    enabled: isConfigured && requestOptions.useEvaluationFormPrompt,
+  });
 
   // Search Date Range State (Default: Last 30 days)
   const [startDate, setStartDate] = useState<Dayjs | null>(dayjs().subtract(30, 'day'));
@@ -947,6 +961,42 @@ const QMAutomationList: React.FC = () => {
               }
               label="오디오 분석 사용"
             />
+
+            <Box>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={requestOptions.useEvaluationFormPrompt}
+                    onChange={(e) =>
+                      setRequestOptions({ ...requestOptions, useEvaluationFormPrompt: e.target.checked })
+                    }
+                  />
+                }
+                label="Evaluation Form 프롬프트 사용"
+              />
+              {requestOptions.useEvaluationFormPrompt && (
+                <FormControl fullWidth sx={{ mt: 1 }}>
+                  <InputLabel>Evaluation Form</InputLabel>
+                  <Select
+                    value={requestOptions.evaluationFormId}
+                    label="Evaluation Form"
+                    onChange={(e) =>
+                      setRequestOptions({ ...requestOptions, evaluationFormId: e.target.value })
+                    }
+                    disabled={isLoadingForms}
+                  >
+                    {isLoadingForms && (
+                      <MenuItem value="" disabled>불러오는 중...</MenuItem>
+                    )}
+                    {evaluationForms.map((form) => (
+                      <MenuItem key={form.formId} value={form.formId}>
+                        {form.formName}{form.description ? ` - ${form.description}` : ''} ({form.status})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+            </Box>
 
             <FormControlLabel
               control={

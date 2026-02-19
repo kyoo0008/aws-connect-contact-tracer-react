@@ -167,6 +167,7 @@ export interface AWSConfig {
     expiration?: string;
   };
   profile?: string; // AWS SSO profile name (for backend API)
+  qmFlowLogFilterKeywords?: string[]; // QM Flow X-Ray에서 필터링할 로그 키워드 목록
 }
 
 export interface FlowStatistics {

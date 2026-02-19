@@ -202,20 +202,51 @@ app.get('/api/aws/profiles', async (req, res) => {
     // SSO session 존재 여부 확인
     const hasSsoSession = Object.keys(config).some(key => key.startsWith('sso-session '));
 
+    // SSO 캐시 파일에서 유효한 access token이 있는지 확인 (credential fetch 없이)
+    const checkSsoLoginStatus = (profileConfig) => {
+      try {
+        const ssoCachePath = path.join(os.homedir(), '.aws', 'sso', 'cache');
+        if (!fs.existsSync(ssoCachePath)) return false;
+
+        const ssoStartUrl = profileConfig.sso_start_url;
+        // sso_session을 사용하는 경우 sso-session 섹션에서 start_url 가져오기
+        let startUrl = ssoStartUrl;
+        if (!startUrl && profileConfig.sso_session) {
+          const sessionKey = `sso-session ${profileConfig.sso_session}`;
+          if (config[sessionKey]) {
+            startUrl = config[sessionKey].sso_start_url;
+          }
+        }
+
+        if (!startUrl) return false;
+
+        const cacheFiles = fs.readdirSync(ssoCachePath).filter(f => f.endsWith('.json'));
+        for (const file of cacheFiles) {
+          try {
+            const cacheContent = JSON.parse(fs.readFileSync(path.join(ssoCachePath, file), 'utf-8'));
+            if (cacheContent.startUrl === startUrl && cacheContent.accessToken) {
+              const expiresAt = new Date(cacheContent.expiresAt);
+              if (expiresAt > new Date()) {
+                return true;
+              }
+            }
+          } catch {
+            // skip invalid cache file
+          }
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    };
+
     for (const [key, value] of Object.entries(config)) {
       // SSO 프로필 필터링: sso_start_url이 직접 있거나, sso-session이 config에 존재하는 경우
       if (key.startsWith('profile ') && (value.sso_start_url || hasSsoSession)) {
         const profileName = key.replace('profile ', '');
 
-        // SSO 캐시에서 로그인 상태 확인
-        let isLoggedIn = false;
-        try {
-          const credentialProvider = fromSSO({ profile: profileName });
-          await credentialProvider();
-          isLoggedIn = true;
-        } catch {
-          isLoggedIn = false;
-        }
+        // SSO 캐시 파일로 로그인 상태 확인 (credential fetch 없이 빠르게 확인)
+        const isLoggedIn = checkSsoLoginStatus(value);
 
         profiles.push({
           name: profileName,
@@ -1729,6 +1760,91 @@ app.post('/api/agent/v1/qm-automation/qa-bulk-feedback', async (req, res) => {
   }
 });
 
+/**
+ * 평가 상태 일괄 초기화 (Reset Evaluation State)
+ * categories 배열의 각 항목을 seq=0만 남기고 GEMINI_EVAL_COMPLETED로 초기화
+ *
+ * POST /api/agent/v1/qm-automation/reset-evaluation-state
+ * Body: { requestId, categories: string[], userId, userName? }
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ *
+ * Response: { requestId, qmEvaluationStatus, qaFeedbackYN, agentConfirmYN, results: [...] }
+ */
+app.post('/api/agent/v1/qm-automation/reset-evaluation-state', async (req, res) => {
+  try {
+    const requestBody = req.body;
+    const { requestId, categories, userId } = requestBody;
+
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+    if (!categories || !Array.isArray(categories) || categories.length === 0) {
+      return res.status(400).json({ error: 'categories (non-empty array) is required' });
+    }
+    if (!userId || userId.trim() === '') {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req);
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    const payload = {
+      httpMethod: 'POST',
+      path: '/api/agent/v1/qm-automation/reset-evaluation-state',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(responseData.data || responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Request failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(result.data || result);
+    }
+  } catch (error) {
+    console.error('Error invoking Reset Evaluation State Lambda:', error);
+    res.status(500).json({ error: 'Failed to reset evaluation state', message: error.message });
+  }
+});
+
 // ========================================
 // QM Evaluation Form APIs
 // ========================================
@@ -1991,6 +2107,7 @@ app.listen(PORT, () => {
 - POST /api/agent/v1/qm-automation/objection                    - 상담사 이의제기 (GEMINI_EVAL_COMPLETED → AGENT_OBJECTION_REQUESTED)
 - POST /api/agent/v1/qm-automation/qa-feedback                  - QA 피드백 (accept: ACCEPTED, reject: REJECTED)
 - POST /api/agent/v1/qm-automation/bulk-action                  - 벌크 상담사/QA 액션 (확인/이의제기 or 승인/거절 일괄 처리)
+- POST /api/agent/v1/qm-automation/reset-evaluation-state       - 평가 상태 초기화 (→ GEMINI_EVAL_COMPLETED)
 
 [Health]
 - GET  /health                   - Health check

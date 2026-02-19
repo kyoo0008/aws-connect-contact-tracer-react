@@ -153,6 +153,13 @@ const EvaluationStateModal: React.FC<EvaluationStateModalProps> = ({
     }
   };
 
+  const getEvaluationStatusColor = (status: string): 'success' | 'error' | 'warning' | 'default' => {
+    if (status === 'PASS') return 'success';
+    if (status === 'FAIL') return 'error';
+    if (status === 'WARNING') return 'warning';
+    return 'default';
+  };
+
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
@@ -190,7 +197,7 @@ const EvaluationStateModal: React.FC<EvaluationStateModalProps> = ({
                   <Chip
                     label={evaluationStatus}
                     size="small"
-                    color={evaluationStatus === 'PASS' ? 'success' : evaluationStatus === 'FAIL' ? 'error' : 'default'}
+                    color={getEvaluationStatusColor(evaluationStatus)}
                   />
                 </>
               )}

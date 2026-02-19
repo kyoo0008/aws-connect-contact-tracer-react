@@ -26,6 +26,11 @@ import {
   ListItemText,
   ListItemIcon,
   Slider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -54,6 +59,8 @@ import {
   Pause as PauseIcon,
   Stop as StopIcon,
   VolumeUp as VolumeUpIcon,
+  BugReport as XRayIcon,
+  RestartAlt as ResetIcon,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -66,6 +73,7 @@ import {
   submitQAFeedback,
   submitBulkAgentAction,
   submitBulkQAFeedback,
+  resetEvaluationState,
   EvaluationCategory,
   getQMEvaluationStatusLabel,
   getQMEvaluationStatusColor,
@@ -273,7 +281,7 @@ const QMAutomationDetail: React.FC = () => {
     if (seconds === null) return;
 
     audio.currentTime = Math.max(0, seconds - 2);
-    audio.play().catch(() => {});
+    audio.play().catch(() => { });
   }, []);
 
   const handleTogglePlay = useCallback(() => {
@@ -282,7 +290,7 @@ const QMAutomationDetail: React.FC = () => {
     if (isPlaying) {
       audio.pause();
     } else {
-      audio.play().catch(() => {});
+      audio.play().catch(() => { });
     }
   }, [isPlaying]);
 
@@ -419,6 +427,29 @@ const QMAutomationDetail: React.FC = () => {
                   <IconButton onClick={() => refetch()}>
                     <RefreshIcon />
                   </IconButton>
+                </Tooltip>
+                <Tooltip title="QM Flow X-Ray Trace 보기">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<XRayIcon />}
+                    onClick={() => {
+                      const params = new URLSearchParams({ requestId: requestId! });
+                      if (qmDetail?.createdAt) params.set('createdAt', qmDetail.createdAt);
+                      if (qmDetail?.completedAt) params.set('completedAt', qmDetail.completedAt);
+                      navigate(`/qm-flow-xray?${params.toString()}`);
+                    }}
+                    sx={{
+                      color: '#4CAF50',
+                      borderColor: '#4CAF50',
+                      '&:hover': {
+                        borderColor: '#2E7D32',
+                        backgroundColor: 'rgba(76, 175, 80, 0.08)',
+                      },
+                    }}
+                  >
+                    Flow X-Ray Trace
+                  </Button>
                 </Tooltip>
                 <Tooltip title="Gemini Playground에서 열기">
                   <Button
@@ -799,7 +830,7 @@ const QMAutomationDetail: React.FC = () => {
                         <Grid item xs={6} sm={3}>
                           <Typography variant="caption" color="text.secondary">입력 토큰</Typography>
                           <Typography variant="body2">
-                            {qmDetail.input?.inputTokens?.toLocaleString() || '-'}
+                            {qmDetail.result?.inputTokens?.toLocaleString() || '-'}
                           </Typography>
                         </Grid>
                         <Grid item xs={6} sm={3}>
@@ -811,7 +842,7 @@ const QMAutomationDetail: React.FC = () => {
                         <Grid item xs={6} sm={3}>
                           <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
                           <Typography variant="body2">
-                            {((qmDetail.result.totalTokens || 0) - ((qmDetail.input?.inputTokens || 0) + (qmDetail.result.outputTokens || 0))).toLocaleString()}
+                            {((qmDetail.result.totalTokens || 0) - ((qmDetail.result?.inputTokens || 0) + (qmDetail.result.outputTokens || 0))).toLocaleString()}
                           </Typography>
                         </Grid>
                       </Grid>
@@ -2359,6 +2390,12 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkModalAction, setBulkModalAction] = useState<BulkModalAction>('bulk-confirm');
 
+  // 일괄 리셋 다이얼로그 상태 관리
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetResults, setResetResults] = useState<{ category: string; label: string; success: boolean; error?: string }[]>([]);
+
   // 모달 열기
   const handleOpenModal = (
     action: ModalAction,
@@ -2379,6 +2416,52 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
   const handleOpenBulkModal = (action: BulkModalAction) => {
     setBulkModalAction(action);
     setBulkModalOpen(true);
+  };
+
+  // 일괄 리셋 다이얼로그 열기
+  const handleOpenResetDialog = () => {
+    setResetError(null);
+    setResetResults([]);
+    setResetDialogOpen(true);
+  };
+
+  // 일괄 리셋 실행 - categories 배열을 단일 요청으로 전달
+  const handleResetConfirm = async () => {
+    const targets = categoryInfoList.filter((cat) => {
+      const currentState = cat.states && cat.states.length > 0
+        ? cat.states.reduce((latest, current) => current.seq > latest.seq ? current : latest, cat.states[0])
+        : undefined;
+      return currentState && currentState.status !== 'GEMINI_EVAL_COMPLETED';
+    });
+
+    const labelMap = new Map(targets.map((cat) => [cat.key, cat.label]));
+    const categories = targets.map((cat) => cat.key as EvaluationCategory);
+
+    setResetLoading(true);
+    setResetError(null);
+    setResetResults([]);
+
+    try {
+      const response = await resetEvaluationState(
+        { requestId, categories, userId: defaultUserId || '', userName: defaultUserName },
+        config
+      );
+      const results = response.results.map((r) => ({
+        category: r.category,
+        label: labelMap.get(r.category) || r.category,
+        success: r.success,
+        error: r.error,
+      }));
+      setResetResults(results);
+      onStateChange();
+      if (results.every((r) => r.success)) {
+        setResetDialogOpen(false);
+      }
+    } catch (err) {
+      setResetError((err as Error).message);
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   // 모달 제출 처리
@@ -2493,15 +2576,15 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
   };
 
   // 총점 계산
-  const totalScore = React.useMemo(() => {
-    const scores = sectionKeys
-      .map(key => getSectionScore(key))
-      .filter((s): s is string => !!s)
-      .map(s => parseInt(s));
-    if (scores.length === 0) return null;
-    return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-  }, [sectionKeys, summary]);
-  // const totalScore = Number(summary[`finalScore`])
+  // const totalScore = React.useMemo(() => {
+  //   const scores = sectionKeys
+  //     .map(key => getSectionScore(key))
+  //     .filter((s): s is string => !!s)
+  //     .map(s => parseInt(s));
+  //   if (scores.length === 0) return null;
+  //   return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  // }, [sectionKeys, summary]);
+  const totalScore = Number(summary[`finalScore`])
 
   // 벌크 모달용 카테고리 정보 생성
   const categoryInfoList: CategoryInfo[] = React.useMemo(() => {
@@ -2527,6 +2610,7 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
     let confirmCount = 0;
     let objectionCount = 0;
     let qaFeedbackCount = 0;
+    let resetCount = 0;
 
     categoryInfoList.forEach((cat) => {
       const currentState = cat.states && cat.states.length > 0
@@ -2536,16 +2620,20 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
       if (currentState && !TERMINAL_STATUSES.has(currentState.status)) {
         if (currentState.status === 'GEMINI_EVAL_COMPLETED') {
           confirmCount++;
-          if (currentState.evaluationStatus === 'FAIL') {
+          if (currentState.evaluationStatus === 'FAIL' || currentState.evaluationStatus === 'WARNING') {
             objectionCount++;
           }
         } else if (currentState.status === 'AGENT_OBJECTION_REQUESTED') {
           qaFeedbackCount++;
         }
       }
+      // GEMINI_EVAL_COMPLETED가 아닌 경우 항상 초기화 가능 (종료 상태 포함)
+      if (currentState && currentState.status !== 'GEMINI_EVAL_COMPLETED') {
+        resetCount++;
+      }
     });
 
-    return { confirmCount, objectionCount, qaFeedbackCount };
+    return { confirmCount, objectionCount, qaFeedbackCount, resetCount };
   }, [categoryInfoList]);
 
   return (
@@ -2560,9 +2648,19 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
             const result = getSectionResult(sectionKey);
             const score = getSectionScore(sectionKey);
             return (
-              <Grid item xs={6} sm={3} key={sectionKey}>
+              <Grid
+                item
+                xs={6}
+                sm={3}
+                key={sectionKey}
+                onClick={() => {
+                  const el = document.getElementById(`section-${sectionKey}`);
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                sx={{ cursor: 'pointer', borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}
+              >
                 <Stack alignItems="center" spacing={1}>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'underline', textUnderlineOffset: 2 }}>
                     {getLabel(sectionKey)}
                   </Typography>
                   <Stack direction="row" spacing={0.5} alignItems="center">
@@ -2588,12 +2686,23 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
             </Typography>
           </Box>
         )}
+        {summary['scoreComment'] && (
+          <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
+            <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+              종합 의견
+            </Typography>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+              {summary['scoreComment']}
+            </Typography>
+          </Box>
+        )}
       </Paper>
 
       {/* 벌크 액션 버튼 섹션 */}
       {(bulkActionAvailability.confirmCount > 0 ||
         bulkActionAvailability.objectionCount > 0 ||
-        bulkActionAvailability.qaFeedbackCount > 0) && (
+        bulkActionAvailability.qaFeedbackCount > 0 ||
+        bulkActionAvailability.resetCount > 0) && (
           <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
             <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
               <Typography variant="subtitle2" fontWeight={600}>
@@ -2650,6 +2759,21 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                   </Button>
                 </>
               )}
+
+              {bulkActionAvailability.resetCount > 0 && (
+                <>
+                  <Divider orientation="vertical" flexItem />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    startIcon={<ResetIcon />}
+                    onClick={handleOpenResetDialog}
+                  >
+                    일괄 초기화 ({bulkActionAvailability.resetCount})
+                  </Button>
+                </>
+              )}
             </Stack>
           </Paper>
         )}
@@ -2682,11 +2806,11 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
         const isTerminalState = currentState && TERMINAL_STATUSES.has(currentState.status);
         const isGeminiCompleted = currentState?.status === 'GEMINI_EVAL_COMPLETED';
         const isObjectionRequested = currentState?.status === 'AGENT_OBJECTION_REQUESTED';
-        const isFail = currentState?.evaluationStatus === 'FAIL';
+        const isFail = currentState?.evaluationStatus === 'FAIL' || currentState?.evaluationStatus === 'WARNING';
         const categoryLabel = categoryLabelMap?.get(sectionKey) || getLabel(sectionKey);
 
         return (
-          <Accordion key={sectionKey} defaultExpanded>
+          <Accordion key={sectionKey} id={`section-${sectionKey}`} defaultExpanded>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Stack direction="row" alignItems="center" spacing={2} sx={{ flexWrap: 'wrap' }}>
                 <Typography variant="subtitle1" fontWeight={600}>
@@ -2804,6 +2928,7 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                         현재 상태에서는 변경할 수 없습니다.
                       </Typography>
                     )}
+
                   </Stack>
                 </Box>
               )}
@@ -2865,6 +2990,75 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
         defaultUserId={defaultUserId}
         defaultUserName={defaultUserName}
       />
+
+      {/* 일괄 평가 상태 초기화 다이얼로그 */}
+      <Dialog
+        open={resetDialogOpen}
+        onClose={() => !resetLoading && setResetDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ResetIcon color="error" />
+          평가 상태 일괄 초기화
+        </DialogTitle>
+        <DialogContent>
+          {resetResults.length === 0 ? (
+            <DialogContentText>
+              아래 카테고리들의 평가 상태를 초기화합니다.
+              <br />
+              초기 항목(seq=0)만 남기고 상태가 <strong>GEMINI_EVAL_COMPLETED</strong>로 되돌아갑니다.
+              <br /><br />
+              <strong>초기화 대상 ({bulkActionAvailability.resetCount}개):</strong>
+              <Box component="ul" sx={{ mt: 1, pl: 2 }}>
+                {categoryInfoList
+                  .filter((cat) => {
+                    const currentState = cat.states && cat.states.length > 0
+                      ? cat.states.reduce((latest, current) => current.seq > latest.seq ? current : latest, cat.states[0])
+                      : undefined;
+                    return currentState && currentState.status !== 'GEMINI_EVAL_COMPLETED';
+                  })
+                  .map((cat) => (
+                    <li key={cat.key}>{cat.label}</li>
+                  ))}
+              </Box>
+              이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?
+            </DialogContentText>
+          ) : (
+            <Stack spacing={1} sx={{ mt: 1 }}>
+              {resetResults.map((r) => (
+                <Alert key={r.category} severity={r.success ? 'success' : 'error'}>
+                  <strong>{r.label}</strong>{r.success ? ' — 초기화 완료' : ` — 실패: ${r.error}`}
+                </Alert>
+              ))}
+            </Stack>
+          )}
+          {resetError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {resetError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setResetDialogOpen(false)}
+            disabled={resetLoading}
+          >
+            {resetResults.length > 0 ? '닫기' : '취소'}
+          </Button>
+          {resetResults.length === 0 && (
+            <Button
+              onClick={handleResetConfirm}
+              color="error"
+              variant="contained"
+              disabled={resetLoading}
+              startIcon={resetLoading ? <CircularProgress size={16} /> : <ResetIcon />}
+            >
+              일괄 초기화
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 };

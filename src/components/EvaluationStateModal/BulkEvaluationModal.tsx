@@ -171,7 +171,7 @@ const BulkEvaluationModal: React.FC<BulkEvaluationModalProps> = ({
 
       const isGeminiCompleted = currentState?.status === 'GEMINI_EVAL_COMPLETED';
       const isObjectionRequested = currentState?.status === 'AGENT_OBJECTION_REQUESTED';
-      const isFail = currentState?.evaluationStatus === 'FAIL';
+      const isFail = currentState?.evaluationStatus === 'FAIL' || currentState?.evaluationStatus === 'WARNING';
 
       switch (action) {
         case 'bulk-confirm':

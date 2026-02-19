@@ -843,6 +843,74 @@ export async function submitQAFeedback(
 }
 
 // ============================================
+// 평가 상태 초기화 API
+// ============================================
+
+/**
+ * 평가 상태 일괄 초기화 요청
+ */
+export interface ResetEvaluationStateRequest {
+  requestId: string;
+  categories: EvaluationCategory[];
+  userId: string;
+  userName?: string;
+}
+
+/**
+ * 평가 상태 일괄 초기화 결과 항목
+ */
+export interface ResetEvaluationStateResultItem {
+  category: string;
+  success: boolean;
+  qmEvaluationStatus?: string;
+  error?: string;
+}
+
+/**
+ * 평가 상태 일괄 초기화 응답
+ */
+export interface ResetEvaluationStateResponse {
+  requestId: string;
+  qmEvaluationStatus: string;
+  qaFeedbackYN: 'Y' | 'N';
+  agentConfirmYN: 'Y' | 'N';
+  results: ResetEvaluationStateResultItem[];
+}
+
+/**
+ * 평가 상태 일괄 초기화 API
+ * POST /api/agent/v1/qm-automation/reset-evaluation-state
+ * Body: { requestId, categories: string[], userId, userName? }
+ */
+export async function resetEvaluationState(
+  request: ResetEvaluationStateRequest,
+  config: AWSConfig
+): Promise<ResetEvaluationStateResponse> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation/reset-evaluation-state`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-aws-region': config.region,
+      'x-environment': config.environment,
+      ...(config.credentials && {
+        'x-aws-credentials': JSON.stringify(config.credentials),
+      }),
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `평가 상태 초기화 실패: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+// ============================================
 // 벌크 액션 API
 // ============================================
 

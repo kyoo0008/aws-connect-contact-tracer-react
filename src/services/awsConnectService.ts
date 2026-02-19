@@ -325,9 +325,9 @@ export class AWSConnectService {
   }
 
   /**
-   * Lambda CloudWatch Log 그룹 목록
+   * Contact 관련 Lambda CloudWatch Log 그룹 목록
    */
-  private readonly LAMBDA_LOG_GROUPS = [
+  private readonly CONTACT_LAMBDA_LOG_GROUPS = [
     "/aws/lmd/aicc-connect-flow-base/flow-agent-workspace-handler",
     "/aws/lmd/aicc-connect-flow-base/flow-alms-if",
     "/aws/lmd/aicc-connect-flow-base/flow-chat-app",
@@ -345,32 +345,44 @@ export class AWSConnectService {
     "/aws/lmd/aicc-chat-app/sns-chat-if",
   ];
 
+  private readonly QM_LAMBDA_LOG_GROUPS = [
+    "/aws/lmd/aicc-agent-app/alb-agent-qm-automation",
+    "/aws/lmd/aicc-agent-app/gemini-handler"
+  ];
+
   /**
    * 모든 Lambda 함수의 로그를 병렬로 조회
-   * Contact ID와 관련된 로그만 필터링
+   * Contact ID 또는 Request ID와 관련된 로그만 필터링
+   * @param searchKey - contactId 또는 requestId
+   * @param startTime - 시작 시간
+   * @param endTime - 종료 시간
+   * @param useQmLogGroups - true이면 QM_LAMBDA_LOG_GROUPS 사용, false이면 CONTACT_LAMBDA_LOG_GROUPS 사용
    */
   async getAllLambdaLogs(
-    contactId: string,
+    searchKey: string,
     startTime: Date,
-    endTime: Date
+    endTime: Date,
+    useQmLogGroups: boolean = false
   ): Promise<Record<string, LambdaLog[]>> {
     const startFetchTime = Date.now();
     const lambdaLogs: Record<string, LambdaLog[]> = {};
+    const logGroups = useQmLogGroups ? this.QM_LAMBDA_LOG_GROUPS : this.CONTACT_LAMBDA_LOG_GROUPS;
+    const logType = useQmLogGroups ? 'QM' : 'Contact';
 
-    console.log(`[getAllLambdaLogs] Starting Lambda log fetch for contact ${contactId}`);
+    console.log(`[getAllLambdaLogs] Starting ${logType} Lambda log fetch for key ${searchKey}`);
     console.log(`[getAllLambdaLogs] Time range: ${startTime.toISOString()} ~ ${endTime.toISOString()}`);
-    console.log(`[getAllLambdaLogs] Querying ${this.LAMBDA_LOG_GROUPS.length} log groups in parallel...`);
+    console.log(`[getAllLambdaLogs] Querying ${logGroups.length} log groups in parallel...`);
 
     // 병렬로 모든 Lambda 로그 조회
-    const logPromises = this.LAMBDA_LOG_GROUPS.map(async (logGroupName, index) => {
+    const logPromises = logGroups.map(async (logGroupName, index) => {
       const query = `
         fields @timestamp, @message, @logStream, @xrayTraceId
-        | filter @message like /${contactId}/
+        | filter @message like /${searchKey}/
         | sort @timestamp asc
       `;
 
       try {
-        console.log(`[getAllLambdaLogs] [${index + 1}/${this.LAMBDA_LOG_GROUPS.length}] Querying ${logGroupName}...`);
+        console.log(`[getAllLambdaLogs] [${index + 1}/${logGroups.length}] Querying ${logGroupName}...`);
         const rawResults = await this.queryCloudWatchLogs(
           logGroupName,
           query,
@@ -395,14 +407,14 @@ export class AWSConnectService {
         // 함수 이름 추출 (log group name의 마지막 부분)
         const functionName = logGroupName.split('/').pop() || logGroupName;
 
-        console.log(`[getAllLambdaLogs] [${index + 1}/${this.LAMBDA_LOG_GROUPS.length}] ${logGroupName} → ${logs.length} logs`);
+        console.log(`[getAllLambdaLogs] [${index + 1}/${logGroups.length}] ${logGroupName} → ${logs.length} logs`);
 
         return {
           functionName,
           logs,
         };
       } catch (error) {
-        console.error(`[getAllLambdaLogs] [${index + 1}/${this.LAMBDA_LOG_GROUPS.length}] Error fetching logs from ${logGroupName}:`, error);
+        console.error(`[getAllLambdaLogs] [${index + 1}/${logGroups.length}] Error fetching logs from ${logGroupName}:`, error);
         return {
           functionName: logGroupName.split('/').pop() || logGroupName,
           logs: [],

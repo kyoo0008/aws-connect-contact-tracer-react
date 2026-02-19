@@ -120,6 +120,8 @@ export interface QMAutomationRequestBody {
   audioPresignedUrl?: string;
   audioOriginalKey?: string;
   useContextCaching?: boolean;
+  useEvaluationFormPrompt?: boolean;
+  evaluationFormId?: string;
 }
 
 export interface QMAutomationResponse {
@@ -246,7 +248,7 @@ export interface EvaluationState {
   seq: number;
   status: EvaluationStatusType;
   statusReason: string;
-  evaluationStatus?: 'PASS' | 'FAIL' | 'N/A'; // 해당 상태에서의 평가 결과
+  evaluationStatus?: 'PASS' | 'FAIL' | 'WARNING' | 'N/A'; // 해당 상태에서의 평가 결과
   updatedAt?: string;  // 상태 변경 시간 (ISO timestamp)
   updatedBy?: string;  // 상태 변경자 (userName)
 }

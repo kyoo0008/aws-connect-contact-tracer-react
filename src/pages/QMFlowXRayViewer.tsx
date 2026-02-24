@@ -5,7 +5,7 @@
  * requestId를 key로 QM_LAMBDA_LOG_GROUPS에서 로그를 조회합니다.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Container,
@@ -29,6 +29,7 @@ import {
   ListItemIcon,
   ListItemButton,
   Drawer,
+  InputBase,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -40,6 +41,9 @@ import {
   Functions as FunctionIcon,
   Close as CloseIcon,
   FilterList as FilterIcon,
+  Search as SearchIcon,
+  KeyboardArrowUp as ArrowUpIcon,
+  KeyboardArrowDown as ArrowDownIcon,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { getAWSConnectService } from '@/services/awsConnectService';
@@ -56,6 +60,11 @@ const QMFlowXRayViewerContent: React.FC = () => {
   const { config, isConfigured } = useConfig();
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocusIndex, setSearchFocusIndex] = useState(0);
+  const logItemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Fetch QM Lambda logs
   const { data: lambdaLogsData, isLoading: isLoadingLogs, error: logsError, refetch: refetchLogs } = useQuery({
@@ -141,6 +150,51 @@ const QMFlowXRayViewerContent: React.FC = () => {
     if (!filteredLogsData) return 0;
     return Object.values(filteredLogsData).reduce((sum, logs) => sum + logs.length, 0);
   }, [filteredLogsData]);
+
+  // Flattened sorted log list (used for rendering + search)
+  const flatLogs = React.useMemo(() => {
+    if (!filteredLogsData) return [];
+    return Object.entries(filteredLogsData)
+      .flatMap(([functionName, logs]) =>
+        logs.map((log: LambdaLog) => ({ functionName, log }))
+      )
+      .sort((a, b) => {
+        const aTime = typeof a.log.timestamp === 'string' ? a.log.timestamp : '';
+        const bTime = typeof b.log.timestamp === 'string' ? b.log.timestamp : '';
+        return aTime.localeCompare(bTime);
+      });
+  }, [filteredLogsData]);
+
+  // Search matched indices
+  const searchMatchedIndices = React.useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return flatLogs.reduce<number[]>((acc, { log }, idx) => {
+      const msg = typeof log.message === 'string' ? log.message : JSON.stringify(log.message || '');
+      if (msg.toLowerCase().includes(q)) acc.push(idx);
+      return acc;
+    }, []);
+  }, [flatLogs, searchQuery]);
+
+  const handleSearchNav = useCallback((dir: 'up' | 'down') => {
+    if (searchMatchedIndices.length === 0) return;
+    setSearchFocusIndex(prev => {
+      const next = dir === 'down'
+        ? (prev + 1) % searchMatchedIndices.length
+        : (prev - 1 + searchMatchedIndices.length) % searchMatchedIndices.length;
+      const logIdx = searchMatchedIndices[next];
+      logItemRefs.current[logIdx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return next;
+    });
+  }, [searchMatchedIndices]);
+
+  // Scroll to first match when query changes
+  React.useEffect(() => {
+    setSearchFocusIndex(0);
+    if (searchMatchedIndices.length > 0) {
+      logItemRefs.current[searchMatchedIndices[0]]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [searchMatchedIndices]);
 
   // Error/warn counts
   const logStats = React.useMemo(() => {
@@ -368,70 +422,120 @@ const QMFlowXRayViewerContent: React.FC = () => {
             {/* All Lambda Logs */}
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  전체 Lambda 로그
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="h6" sx={{ flex: 1 }}>
+                    전체 Lambda 로그
+                  </Typography>
+                  {/* Search bar */}
+                  <Paper
+                    variant="outlined"
+                    sx={{ display: 'flex', alignItems: 'center', px: 1, py: 0.25, gap: 0.5, minWidth: 260 }}
+                  >
+                    <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <InputBase
+                      placeholder="메시지 검색..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSearchNav(e.shiftKey ? 'up' : 'down');
+                      }}
+                      size="small"
+                      sx={{ fontSize: '0.85rem', flex: 1 }}
+                    />
+                    {searchQuery && (
+                      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', mx: 0.5 }}>
+                        {searchMatchedIndices.length > 0
+                          ? `${searchFocusIndex + 1}/${searchMatchedIndices.length}`
+                          : '0/0'}
+                      </Typography>
+                    )}
+                    <Tooltip title="이전 (Shift+Enter)">
+                      <span>
+                        <IconButton size="small" onClick={() => handleSearchNav('up')} disabled={searchMatchedIndices.length === 0}>
+                          <ArrowUpIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="다음 (Enter)">
+                      <span>
+                        <IconButton size="small" onClick={() => handleSearchNav('down')} disabled={searchMatchedIndices.length === 0}>
+                          <ArrowDownIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                    {searchQuery && (
+                      <IconButton size="small" onClick={() => setSearchQuery('')}>
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Paper>
+                </Box>
                 <Divider sx={{ mb: 2 }} />
                 <List dense sx={{ maxHeight: 600, overflow: 'auto' }}>
-                  {Object.entries(filteredLogsData).flatMap(([functionName, logs]) =>
-                    logs.map((log: LambdaLog, index: number) => {
-                      const level = log.level?.toUpperCase() || 'INFO';
-                      const isError = level === 'ERROR';
-                      const isWarn = level === 'WARN' || level === 'WARNING';
+                  {flatLogs.map(({ functionName, log }, index) => {
+                    const level = log.level?.toUpperCase() || 'INFO';
+                    const isError = level === 'ERROR';
+                    const isWarn = level === 'WARN' || level === 'WARNING';
+                    const isSearchMatch = searchMatchedIndices.includes(index);
+                    const isFocused = searchMatchedIndices[searchFocusIndex] === index;
 
-                      return (
-                        <ListItemButton
-                          key={`${functionName}-${index}`}
-                          onClick={() => {
-                            setSelectedLog(log);
-                            setDrawerOpen(true);
-                          }}
-                          sx={{
-                            borderRadius: 1,
-                            mb: 0.5,
-                            backgroundColor: isError ? 'rgba(244, 67, 54, 0.04)' : isWarn ? 'rgba(255, 152, 0, 0.04)' : 'transparent',
-                          }}
-                        >
-                          <ListItemIcon>
-                            {isError ? <ErrorIcon color="error" fontSize="small" /> :
-                              isWarn ? <WarningIcon color="warning" fontSize="small" /> :
-                                <InfoIcon color="info" fontSize="small" />}
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={
-                              <Stack direction="row" spacing={1} alignItems="center">
-                                <Chip label={functionName} size="small" variant="outlined" />
-                                <Chip label={level} size="small" color={isError ? 'error' : isWarn ? 'warning' : 'info'} />
-                                <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                                  {log.timestamp}
-                                </Typography>
-                              </Stack>
-                            }
-                            secondary={
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  fontFamily: 'monospace',
-                                  fontSize: '0.75rem',
-                                  mt: 0.5,
-                                  maxWidth: '100%',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {typeof log.message === 'string' ? log.message.substring(0, 200) : JSON.stringify(log.message).substring(0, 200)}
+                    return (
+                      <ListItemButton
+                        key={index}
+                        ref={(el) => { logItemRefs.current[index] = el; }}
+                        onClick={() => {
+                          setSelectedLog(log);
+                          setDrawerOpen(true);
+                        }}
+                        sx={{
+                          borderRadius: 1,
+                          mb: 0.5,
+                          backgroundColor: isFocused
+                            ? 'rgba(255, 193, 7, 0.25)'
+                            : isSearchMatch
+                            ? 'rgba(255, 193, 7, 0.1)'
+                            : isError
+                            ? 'rgba(244, 67, 54, 0.04)'
+                            : isWarn
+                            ? 'rgba(255, 152, 0, 0.04)'
+                            : 'transparent',
+                          outline: isFocused ? '2px solid rgba(255, 193, 7, 0.6)' : 'none',
+                        }}
+                      >
+                        <ListItemIcon>
+                          {isError ? <ErrorIcon color="error" fontSize="small" /> :
+                            isWarn ? <WarningIcon color="warning" fontSize="small" /> :
+                              <InfoIcon color="info" fontSize="small" />}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <Chip label={functionName} size="small" variant="outlined" />
+                              <Chip label={level} size="small" color={isError ? 'error' : isWarn ? 'warning' : 'info'} />
+                              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                                {log.timestamp}
                               </Typography>
-                            }
-                          />
-                        </ListItemButton>
-                      );
-                    })
-                  ).sort((a, b) => {
-                    // Sort by timestamp
-                    const aTime = a.key?.toString() || '';
-                    const bTime = b.key?.toString() || '';
-                    return aTime.localeCompare(bTime);
+                            </Stack>
+                          }
+                          secondary={
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontFamily: 'monospace',
+                                fontSize: '0.75rem',
+                                mt: 0.5,
+                                maxWidth: '100%',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {typeof log.message === 'string' ? log.message.substring(0, 200) : JSON.stringify(log.message).substring(0, 200)}
+                            </Typography>
+                          }
+                        />
+                      </ListItemButton>
+                    );
                   })}
                 </List>
               </CardContent>
@@ -530,7 +634,9 @@ const QMFlowXRayViewerContent: React.FC = () => {
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="subtitle1" gutterBottom>Message</Typography>
                   <pre style={{ fontSize: '0.8rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
-                    {typeof selectedLog.message === 'string' ? selectedLog.message : JSON.stringify(selectedLog.message, null, 2)}
+                    {typeof selectedLog.message === 'string'
+                      ? (() => { try { return JSON.stringify(JSON.parse(selectedLog.message), null, 2); } catch { return selectedLog.message; } })()
+                      : JSON.stringify(selectedLog.message, null, 2)}
                   </pre>
                 </Paper>
               )}

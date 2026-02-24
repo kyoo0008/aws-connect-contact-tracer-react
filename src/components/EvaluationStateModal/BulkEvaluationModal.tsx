@@ -235,20 +235,20 @@ const BulkEvaluationModal: React.FC<BulkEvaluationModalProps> = ({
       return;
     }
 
-    if (config.requireReason) {
-      if (useCommonReason && !commonReason.trim()) {
-        setError('공통 사유를 입력해주세요.');
-        return;
-      }
-      if (!useCommonReason) {
-        for (const cat of selectedCategories) {
-          if (!reasons[cat]?.trim()) {
-            setError(`${getLabel(cat)} 카테고리의 사유를 입력해주세요.`);
-            return;
-          }
-        }
-      }
-    }
+    // if (config.requireReason) {
+    //   if (useCommonReason && !commonReason.trim()) {
+    //     setError('공통 사유를 입력해주세요.');
+    //     return;
+    //   }
+    //   if (!useCommonReason) {
+    //     for (const cat of selectedCategories) {
+    //       if (!reasons[cat]?.trim()) {
+    //         setError(`${getLabel(cat)} 카테고리의 사유를 입력해주세요.`);
+    //         return;
+    //       }
+    //     }
+    //   }
+    // }
 
     setIsSubmitting(true);
     setError(null);
@@ -432,7 +432,7 @@ const BulkEvaluationModal: React.FC<BulkEvaluationModalProps> = ({
                             label="공통 사유"
                             value={commonReason}
                             onChange={(e) => setCommonReason(e.target.value)}
-                            required
+                            // required
                             multiline
                             rows={3}
                             fullWidth
@@ -450,7 +450,7 @@ const BulkEvaluationModal: React.FC<BulkEvaluationModalProps> = ({
                                   label={`${cat?.label || catKey} 사유`}
                                   value={reasons[catKey] || ''}
                                   onChange={(e) => handleReasonChange(catKey, e.target.value)}
-                                  required
+                                  // required
                                   multiline
                                   rows={2}
                                   fullWidth

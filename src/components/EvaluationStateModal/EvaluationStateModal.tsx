@@ -211,7 +211,7 @@ const EvaluationStateModal: React.FC<EvaluationStateModalProps> = ({
               label="사유"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              required
+              // required
               multiline
               rows={4}
               fullWidth

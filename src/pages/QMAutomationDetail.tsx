@@ -845,6 +845,55 @@ const QMAutomationDetail: React.FC = () => {
                             {((qmDetail.result.totalTokens || 0) - ((qmDetail.result?.inputTokens || 0) + (qmDetail.result.outputTokens || 0))).toLocaleString()}
                           </Typography>
                         </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">사고 사용 여부</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.useThinking ? '사용' : '미사용'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">사고 예산</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.thinkingBudget?.toLocaleString() || '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">최대 토큰 허용량</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.maxOutputTokens?.toLocaleString() || '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">Tool 사용 여부</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.useTools ? '사용' : '미사용'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">오디오 분석 사용 여부</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.useAudioAnalysis ? '사용' : '미사용'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">온도 (Temperature)</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.temperature ?? '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">캐싱 사용 여부</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.useContextCaching ? '사용' : '미사용'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">평가폼 사용 여부</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.useEvaluationFormPrompt ? '사용' : '미사용'}
+                          </Typography>
+                        </Grid>
+
                       </Grid>
                     </Paper>
                   )}

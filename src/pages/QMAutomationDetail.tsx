@@ -893,6 +893,31 @@ const QMAutomationDetail: React.FC = () => {
                             {qmDetail.input?.useEvaluationFormPrompt ? '사용' : '미사용'}
                           </Typography>
                         </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Typography variant="caption" color="text.secondary">상담사 간 통화 분석 제외</Typography>
+                          <Typography variant="body2">
+                            {qmDetail.input?.useTransferSanitizing ? '사용' : '미사용'}
+                          </Typography>
+                        </Grid>
+                        {qmDetail.input?.useTransferSanitizing && qmDetail.input?.transferSanitizingRanges && qmDetail.input.transferSanitizingRanges.length > 0 && (
+                          <Grid item xs={12}>
+                            <Typography variant="caption" color="text.secondary">묵음 처리 구간</Typography>
+                            <Typography variant="body2" component="div">
+                              {[...qmDetail.input.transferSanitizingRanges].sort((a, b) => a.beginOffsetMillis - b.beginOffsetMillis).map((range, idx) => {
+                                const beginMin = Math.floor(range.beginOffsetMillis / 60000);
+                                const beginSec = Math.floor((range.beginOffsetMillis % 60000) / 1000);
+                                const endMin = Math.floor(range.endOffsetMillis / 60000);
+                                const endSec = Math.floor((range.endOffsetMillis % 60000) / 1000);
+                                return (
+                                  <span key={idx} style={{ marginRight: 12 }}>
+                                    {`${beginMin.toString().padStart(2, '0')}:${beginSec.toString().padStart(2, '0')} ~ ${endMin.toString().padStart(2, '0')}:${endSec.toString().padStart(2, '0')}`}
+                                    {idx < qmDetail.input!.transferSanitizingRanges!.length - 1 ? ' / ' : ''}
+                                  </span>
+                                );
+                              })}
+                            </Typography>
+                          </Grid>
+                        )}
 
                       </Grid>
                     </Paper>

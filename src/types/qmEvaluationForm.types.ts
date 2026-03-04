@@ -28,7 +28,6 @@ export interface EvaluationSubItem {
     subItemName: string;
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
-    outputJsonSchema?: Record<string, unknown>;
     resultJsonFormat?: string;
     instruction?: string;
 }
@@ -80,7 +79,6 @@ export interface CreateSubItemRequest {
     subItemName: string;
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
-    outputJsonSchema?: Record<string, unknown>;
     resultJsonFormat?: string;
     instruction?: string;
 }
@@ -89,7 +87,6 @@ export interface UpdateSubItemRequest {
     subItemName?: string;
     displayOrder?: number;
     evaluationCriteria?: EvaluationCriterion[];
-    outputJsonSchema?: Record<string, unknown>;
     resultJsonFormat?: string;
     instruction?: string;
 }
@@ -111,7 +108,6 @@ export interface BulkSubItem {
     subItemName: string;
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
-    outputJsonSchema?: Record<string, unknown>;
     resultJsonFormat?: string;
     instruction?: string;
 }

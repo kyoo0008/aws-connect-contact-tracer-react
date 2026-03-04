@@ -119,7 +119,6 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                     subItemName: si.subItemName,
                     displayOrder: si.displayOrder,
                     evaluationCriteria: si.evaluationCriteria || [],
-                    outputJsonSchema: si.outputJsonSchema || {},
                     resultJsonFormat: si.resultJsonFormat || '',
                     instruction: si.instruction || '',
                 })),
@@ -151,7 +150,6 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                                         details: '상세 내용',
                                     },
                                 ],
-                                outputJsonSchema: {},
                                 resultJsonFormat: '포맷',
                                 instruction: '지시사항',
                             },
@@ -655,97 +653,97 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
 
                     <List dense>
                         {subItems?.sort((a, b) => a.displayOrder - b.displayOrder).map((subItem) => (
-                                <React.Fragment key={subItem.subItemId}>
-                                    <ListItem
-                                        secondaryAction={
-                                            <>
-                                                <IconButton edge="end" aria-label="edit" onClick={() => { setEditingSubItem(subItem); setOpenSubItemDialog(true); }}>
-                                                    <EditIcon />
-                                                </IconButton>
-                                                <IconButton edge="end" aria-label="delete" onClick={() => {
-                                                    if (window.confirm('Delete this subitem?')) deleteSubItemMutation.mutate(subItem.subItemId);
-                                                }}>
-                                                    <DeleteIcon />
-                                                </IconButton>
-                                            </>
+                            <React.Fragment key={subItem.subItemId}>
+                                <ListItem
+                                    secondaryAction={
+                                        <>
+                                            <IconButton edge="end" aria-label="edit" onClick={() => { setEditingSubItem(subItem); setOpenSubItemDialog(true); }}>
+                                                <EditIcon />
+                                            </IconButton>
+                                            <IconButton edge="end" aria-label="delete" onClick={() => {
+                                                if (window.confirm('Delete this subitem?')) deleteSubItemMutation.mutate(subItem.subItemId);
+                                            }}>
+                                                <DeleteIcon />
+                                            </IconButton>
+                                        </>
+                                    }
+                                >
+                                    <IconButton size="small" onClick={() => toggleSubItem(subItem.subItemId)} sx={{ mr: 1 }}>
+                                        {expandedSubItemIds[subItem.subItemId] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                    </IconButton>
+                                    <ListItemText
+                                        primary={
+                                            <Typography variant="subtitle2" fontWeight="bold">
+                                                {subItem.displayOrder}. {subItem.subItemId} ( {subItem.subItemName} )
+                                            </Typography>
                                         }
-                                    >
-                                        <IconButton size="small" onClick={() => toggleSubItem(subItem.subItemId)} sx={{ mr: 1 }}>
-                                            {expandedSubItemIds[subItem.subItemId] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                                        </IconButton>
-                                        <ListItemText
-                                            primary={
-                                                <Typography variant="subtitle2" fontWeight="bold">
-                                                    {subItem.displayOrder}. {subItem.subItemId} ( {subItem.subItemName} )
-                                                </Typography>
-                                            }
-                                        />
-                                    </ListItem>
+                                    />
+                                </ListItem>
 
-                                    <Collapse in={expandedSubItemIds[subItem.subItemId] || false}>
-                                        {/* Instruction Display */}
-                                        {subItem.instruction && (
-                                            <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
-                                                <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', whiteSpace: 'pre-wrap', display: 'block' }}>
-                                                    Guide: {subItem.instruction}
-                                                </Typography>
-                                            </Box>
-                                        )}
+                                <Collapse in={expandedSubItemIds[subItem.subItemId] || false}>
+                                    {/* Instruction Display */}
+                                    {subItem.instruction && (
+                                        <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
+                                            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', whiteSpace: 'pre-wrap', display: 'block' }}>
+                                                Guide: {subItem.instruction}
+                                            </Typography>
+                                        </Box>
+                                    )}
 
-                                        {/* Result JSON Format Display */}
-                                        {subItem.resultJsonFormat && (
-                                            <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
-                                                <Typography variant="caption" color="primary" fontWeight={600} display="block">
-                                                    AI 추출 포맷 (JSON):
-                                                </Typography>
-                                                <Paper
-                                                    variant="outlined"
-                                                    sx={{
-                                                        p: 1,
-                                                        bgcolor: 'grey.100',
-                                                        fontFamily: 'monospace',
-                                                        fontSize: '0.75rem',
-                                                        whiteSpace: 'pre-wrap',
-                                                        borderStyle: 'dashed'
-                                                    }}
-                                                >
-                                                    {subItem.resultJsonFormat}
-                                                </Paper>
-                                            </Box>
-                                        )}
+                                    {/* Result JSON Format Display */}
+                                    {subItem.resultJsonFormat && (
+                                        <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
+                                            <Typography variant="caption" color="primary" fontWeight={600} display="block">
+                                                AI 추출 포맷 (JSON):
+                                            </Typography>
+                                            <Paper
+                                                variant="outlined"
+                                                sx={{
+                                                    p: 1,
+                                                    bgcolor: 'grey.100',
+                                                    fontFamily: 'monospace',
+                                                    fontSize: '0.75rem',
+                                                    whiteSpace: 'pre-wrap',
+                                                    borderStyle: 'dashed'
+                                                }}
+                                            >
+                                                {subItem.resultJsonFormat}
+                                            </Paper>
+                                        </Box>
+                                    )}
 
-                                        {/* Evaluation Criteria Details */}
-                                        {subItem.evaluationCriteria && subItem.evaluationCriteria.length > 0 && (
-                                            <Box sx={{ pl: 4, pr: 8, pb: 2 }}>
-                                                <Grid container spacing={1}>
-                                                    {subItem.evaluationCriteria.map((crit) => (
-                                                        <Grid item xs={12} key={crit.criteriaId}>
-                                                            <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
-                                                                <Stack direction="row" spacing={1} alignItems="flex-start">
-                                                                    <Chip label={crit.criteriaId} size="small" sx={{ height: 20, fontSize: '0.7rem', minWidth: 40 }} />
-                                                                    <Box>
-                                                                        <Typography variant="body2" fontWeight={500} sx={{ whiteSpace: 'pre-wrap' }}>
-                                                                            {crit.description}
+                                    {/* Evaluation Criteria Details */}
+                                    {subItem.evaluationCriteria && subItem.evaluationCriteria.length > 0 && (
+                                        <Box sx={{ pl: 4, pr: 8, pb: 2 }}>
+                                            <Grid container spacing={1}>
+                                                {subItem.evaluationCriteria.map((crit) => (
+                                                    <Grid item xs={12} key={crit.criteriaId}>
+                                                        <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
+                                                            <Stack direction="row" spacing={1} alignItems="flex-start">
+                                                                <Chip label={crit.criteriaId} size="small" sx={{ height: 20, fontSize: '0.7rem', minWidth: 40 }} />
+                                                                <Box>
+                                                                    <Typography variant="body2" fontWeight={500} sx={{ whiteSpace: 'pre-wrap' }}>
+                                                                        {crit.description}
+                                                                    </Typography>
+                                                                    {crit.details && (
+                                                                        <Typography variant="caption" color="text.secondary" display="block" sx={{ whiteSpace: 'pre-wrap' }}>
+                                                                            {crit.details}
                                                                         </Typography>
-                                                                        {crit.details && (
-                                                                            <Typography variant="caption" color="text.secondary" display="block" sx={{ whiteSpace: 'pre-wrap' }}>
-                                                                                {crit.details}
-                                                                            </Typography>
-                                                                        )}
-                                                                    </Box>
-                                                                </Stack>
-                                                            </Paper>
-                                                        </Grid>
-                                                    ))}
-                                                </Grid>
-                                            </Box>
-                                        )}
-                                    </Collapse>
-                                    <Divider />
-                                </React.Fragment>
-                            ))}
-                            {subItems?.length === 0 && <Typography variant="body2" color="text.secondary">No subitems.</Typography>}
-                        </List>
+                                                                    )}
+                                                                </Box>
+                                                            </Stack>
+                                                        </Paper>
+                                                    </Grid>
+                                                ))}
+                                            </Grid>
+                                        </Box>
+                                    )}
+                                </Collapse>
+                                <Divider />
+                            </React.Fragment>
+                        ))}
+                        {subItems?.length === 0 && <Typography variant="body2" color="text.secondary">No subitems.</Typography>}
+                    </List>
                 </CardContent>
             </Collapse>
 

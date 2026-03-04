@@ -146,6 +146,7 @@ const QMAutomationList: React.FC = () => {
     useContextCaching: false,
     useEvaluationFormPrompt: false,
     evaluationFormId: '',
+    useTransferSanitizing: false,
     temperature: 0,
     maxOutputTokens: 65535,
   });
@@ -997,6 +998,18 @@ const QMAutomationList: React.FC = () => {
                 </FormControl>
               )}
             </Box>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={requestOptions.useTransferSanitizing}
+                  onChange={(e) =>
+                    setRequestOptions({ ...requestOptions, useTransferSanitizing: e.target.checked })
+                  }
+                />
+              }
+              label="상담사 간 통화 내용 분석 제외"
+            />
 
             <FormControlLabel
               control={

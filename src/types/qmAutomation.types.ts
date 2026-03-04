@@ -122,6 +122,7 @@ export interface QMAutomationRequestBody {
   useContextCaching?: boolean;
   useEvaluationFormPrompt?: boolean;
   evaluationFormId?: string;
+  useTransferSanitizing?: boolean;
 }
 
 export interface QMAutomationResponse {
@@ -150,6 +151,11 @@ export interface QMAutomationInput {
   useContextCaching?: boolean;
   useEvaluationFormPrompt?: boolean;
   evaluationFormId?: string;
+  useTransferSanitizing?: boolean;
+  transferSanitizingRanges?: Array<{
+    beginOffsetMillis: number;
+    endOffsetMillis: number;
+  }>;
   inputTokens?: number;
   toolResult?: {
     functionCalls?: FunctionCall[];

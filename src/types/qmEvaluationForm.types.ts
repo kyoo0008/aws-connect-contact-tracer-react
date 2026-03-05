@@ -19,6 +19,9 @@ export interface EvaluationCategory {
     enabled: boolean;
     weight: number;
     instructions?: string[];
+    passCondition?: string;
+    warningCondition?: string;
+    failCondition?: string;
     feedbackMessageTemplate?: string;
     subItems?: EvaluationSubItem[];
 }
@@ -28,6 +31,8 @@ export interface EvaluationSubItem {
     subItemName: string;
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
+    reasonType?: 'string' | 'array';
+    reasonFormat?: string;
     resultJsonFormat?: string;
     instruction?: string;
 }
@@ -35,7 +40,8 @@ export interface EvaluationSubItem {
 export interface EvaluationCriterion {
     criteriaId: string;
     description: string;
-    details: string;
+    passCondition: string;
+    failCondition: string;
 }
 
 // DTOs for Create/Update
@@ -62,6 +68,9 @@ export interface CreateCategoryRequest {
     enabled?: boolean;
     weight?: number;
     instructions?: string[];
+    passCondition?: string;
+    warningCondition?: string;
+    failCondition?: string;
     feedbackMessageTemplate?: string;
 }
 
@@ -71,6 +80,9 @@ export interface UpdateCategoryRequest {
     enabled?: boolean;
     weight?: number;
     instructions?: string[];
+    passCondition?: string;
+    warningCondition?: string;
+    failCondition?: string;
     feedbackMessageTemplate?: string;
 }
 
@@ -79,6 +91,8 @@ export interface CreateSubItemRequest {
     subItemName: string;
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
+    reasonType?: 'string' | 'array';
+    reasonFormat?: string;
     resultJsonFormat?: string;
     instruction?: string;
 }
@@ -87,6 +101,8 @@ export interface UpdateSubItemRequest {
     subItemName?: string;
     displayOrder?: number;
     evaluationCriteria?: EvaluationCriterion[];
+    reasonType?: 'string' | 'array';
+    reasonFormat?: string;
     resultJsonFormat?: string;
     instruction?: string;
 }
@@ -99,6 +115,9 @@ export interface BulkCategoryItem {
     enabled: boolean;
     weight: number;
     instructions?: string[];
+    passCondition?: string;
+    warningCondition?: string;
+    failCondition?: string;
     feedbackMessageTemplate?: string;
     subItems?: BulkSubItem[];
 }
@@ -108,6 +127,8 @@ export interface BulkSubItem {
     subItemName: string;
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
+    reasonType?: 'string' | 'array';
+    reasonFormat?: string;
     resultJsonFormat?: string;
     instruction?: string;
 }

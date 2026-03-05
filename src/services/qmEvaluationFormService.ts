@@ -552,6 +552,42 @@ export async function deleteSubItem(
 }
 
 /**
+ * Get Prompt Preview for a QM Evaluation Form
+ */
+export async function getQmEvaluationFormPromptPreview(
+    formId: string,
+    config: AWSConfig
+): Promise<{ formId: string; prompt: string }> {
+    const apiBaseUrl = getApiBaseUrl(config.environment);
+
+    try {
+        const response = await fetch(
+            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/prompt-preview`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-aws-region': config.region,
+                    'x-environment': config.environment,
+                    ...(config.credentials && {
+                        'x-aws-credentials': JSON.stringify(config.credentials),
+                    }),
+                },
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch prompt preview: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching prompt preview for form ${formId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Bulk Update Categories (with SubItems)
  */
 export async function bulkUpdateCategories(

@@ -30,6 +30,9 @@ import {
     FormControlLabel,
     Chip,
     Stack,
+    Radio,
+    RadioGroup,
+    FormLabel,
 } from '@mui/material';
 import {
     ArrowBack as BackIcon,
@@ -42,6 +45,7 @@ import {
     DragIndicator as DragIcon,
     Upload as UploadIcon,
     Download as DownloadIcon,
+    Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import {
     DndContext,
@@ -73,6 +77,7 @@ import {
     deleteSubItem,
     updateCategoryOrder,
     bulkUpdateCategories,
+    getQmEvaluationFormPromptPreview,
 } from '@/services/qmEvaluationFormService';
 import {
     EvaluationCategory,
@@ -113,12 +118,17 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                 enabled: cat.enabled,
                 weight: cat.weight,
                 instructions: cat.instructions || [],
+                passCondition: cat.passCondition || '',
+                warningCondition: cat.warningCondition || '',
+                failCondition: cat.failCondition || '',
                 feedbackMessageTemplate: cat.feedbackMessageTemplate || '',
                 subItems: (cat.subItems || []).map(si => ({
                     subItemId: si.subItemId,
                     subItemName: si.subItemName,
                     displayOrder: si.displayOrder,
                     evaluationCriteria: si.evaluationCriteria || [],
+                    reasonType: si.reasonType || 'string',
+                    reasonFormat: si.reasonFormat || '',
                     resultJsonFormat: si.resultJsonFormat || '',
                     instruction: si.instruction || '',
                 })),
@@ -147,7 +157,8 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                                     {
                                         criteriaId: '1.1.1',
                                         description: '표준 인사말 준수',
-                                        details: '상세 내용',
+                                        passCondition: 'PASS 조건',
+                                        failCondition: 'FAIL 조건',
                                     },
                                 ],
                                 resultJsonFormat: '포맷',
@@ -287,19 +298,89 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
     isLoading,
     defaultDisplayOrder = 1,
 }) => {
-    const [formData, setFormData] = useState<CreateSubItemRequest>({
-        subItemId: '',
-        subItemName: '',
-        displayOrder: initialData?.displayOrder || defaultDisplayOrder,
-        resultJsonFormat: initialData?.resultJsonFormat || '',
-        instruction: initialData?.instruction || '',
-        ...initialData,
-        evaluationCriteria: (initialData?.evaluationCriteria || []).map((crit, i) => ({
-            ...crit,
-            criteriaId: `${i + 1}`,
-        })),
+    const [formData, setFormData] = useState<CreateSubItemRequest>(() => {
+        let inferredReasonType: 'string' | 'array' = initialData?.reasonType || 'string';
+
+        if (initialData?.resultJsonFormat) {
+            try {
+                const parsed = JSON.parse(initialData.resultJsonFormat);
+                if (parsed.events && Array.isArray(parsed.events)) {
+                    inferredReasonType = 'array';
+                } else if (parsed.reason && typeof parsed.reason === 'string') {
+                    inferredReasonType = 'string';
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
+
+        return {
+            subItemId: initialData?.subItemId || '',
+            subItemName: initialData?.subItemName || '',
+            displayOrder: initialData?.displayOrder || defaultDisplayOrder,
+            resultJsonFormat: initialData?.resultJsonFormat || '',
+            instruction: initialData?.instruction || '',
+            reasonType: inferredReasonType,
+            reasonFormat: initialData?.reasonFormat || '',
+            evaluationCriteria: (initialData?.evaluationCriteria || []).map((crit, i) => ({
+                ...crit,
+                criteriaId: `${i + 1}`,
+            })),
+        };
     });
     const [jsonError, setJsonError] = useState<string | null>(null);
+    const [reasonFormatError, setReasonFormatError] = useState<string | null>(null);
+    const [reasonKV, setReasonKV] = useState<{ key: string; value: string }[]>([]);
+
+    useEffect(() => {
+        if (open) {
+            let formatSource = initialData?.reasonFormat;
+
+            // If reasonFormat is missing but reasonType is array (or inferred as array),
+            // try to extract from resultJsonFormat.reason[0]
+            if (!formatSource && initialData?.resultJsonFormat) {
+                try {
+                    const parsed = JSON.parse(initialData.resultJsonFormat);
+                    if (Array.isArray(parsed.events) && parsed.events.length > 0) {
+                        formatSource = JSON.stringify(parsed.events[0]);
+                    }
+                } catch (e) { /* ignore */ }
+            }
+
+            if (formatSource) {
+                try {
+                    const parsed = JSON.parse(formatSource);
+                    if (typeof parsed === 'object' && parsed !== null) {
+                        const kv = Object.entries(parsed).map(([key, value]) => ({
+                            key,
+                            value: String(value)
+                        }));
+                        setReasonKV(kv.length > 0 ? kv : [{ key: '', value: '' }]);
+                    } else {
+                        setReasonKV([{ key: '', value: '' }]);
+                    }
+                } catch (e) {
+                    setReasonKV([{ key: '', value: '' }]);
+                }
+            } else {
+                setReasonKV([{ key: '', value: '' }]);
+            }
+        }
+    }, [open, initialData]);
+
+    const handleAddKV = () => {
+        setReasonKV([...reasonKV, { key: '', value: '' }]);
+    };
+
+    const handleKVChange = (index: number, field: 'key' | 'value', value: string) => {
+        const newKV = [...reasonKV];
+        newKV[index] = { ...newKV[index], [field]: value };
+        setReasonKV(newKV);
+    };
+
+    const handleDeleteKV = (index: number) => {
+        setReasonKV(reasonKV.filter((_, i) => i !== index));
+    };
 
     // Criteria state management
     const handleAddCriteria = () => {
@@ -307,8 +388,7 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
             ...prev,
             evaluationCriteria: [
                 ...prev.evaluationCriteria,
-                // Sequential Criteria ID: length + 1
-                { criteriaId: `${prev.evaluationCriteria.length + 1}`, description: '', details: '' },
+                { criteriaId: `${prev.evaluationCriteria.length + 1}`, description: '', passCondition: '', failCondition: '' },
             ],
         }));
     };
@@ -324,6 +404,26 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
             .filter((_, i) => i !== index)
             .map((crit, i) => ({ ...crit, criteriaId: `${i + 1}` }));
         setFormData((prev) => ({ ...prev, evaluationCriteria: newCriteria }));
+    };
+
+    // Auto-generate resultJsonFormat based on reasonType
+    const generateResultJsonFormat = () => {
+        const base: Record<string, any> = {
+            status: 'PASS | FAIL',
+        };
+        if (formData.reasonType === 'string') {
+            base.reason = '산출 근거 (string)';
+        } else {
+            // array type - use reasonKV
+            const formatObj: Record<string, string> = {};
+            reasonKV.forEach(kv => {
+                if (kv.key.trim()) {
+                    formatObj[kv.key] = kv.value;
+                }
+            });
+            base.events = [Object.keys(formatObj).length > 0 ? formatObj : { key: 'value' }];
+        }
+        return JSON.stringify(base, null, 2);
     };
 
     return (
@@ -358,79 +458,158 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                         onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) })}
                     />
                     <TextField
-                        label="Instruction (가이드)"
+                        label="Instructions (가이드)"
                         fullWidth
                         multiline
                         rows={3}
                         value={formData.instruction}
                         onChange={(e) => setFormData({ ...formData, instruction: e.target.value })}
-                        helperText="AI를 위한 추가 가이드라인입니다."
-                    />
-                    <TextField
-                        label="Result JSON Format"
-                        fullWidth
-                        multiline
-                        required
-                        rows={3}
-                        value={formData.resultJsonFormat}
-                        onChange={(e) => {
-                            setFormData({ ...formData, resultJsonFormat: e.target.value });
-                            setJsonError(null);
-                        }}
-                        error={!!jsonError}
-                        helperText={jsonError || "AI 응답에서 추출할 JSON 포맷 샘플입니다."}
+                        helperText="AI를 위한 평가 가이드라인입니다."
                     />
 
+                    {/* 평가 기준 (Evaluation Criteria) */}
                     <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2 }}>
-                        평가 기준 (Criteria)
+                        평가 기준 (evaluationCriteria)
                     </Typography>
 
                     {formData.evaluationCriteria.map((criterion, index) => (
                         <Paper key={index} variant="outlined" sx={{ p: 2 }}>
-                            <Grid container spacing={2} alignItems="flex-start">
-                                <Grid item xs={12} sm={2}>
-                                    <TextField
-                                        label="ID"
-                                        size="small"
-                                        fullWidth
-                                        disabled
-                                        value={criterion.criteriaId}
-                                        onChange={(e) => handleCriteriaChange(index, 'criteriaId', e.target.value)}
-                                        placeholder="1"
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <TextField
-                                        label="설명"
-                                        size="small"
-                                        fullWidth
-                                        multiline
-                                        value={criterion.description}
-                                        onChange={(e) => handleCriteriaChange(index, 'description', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={5}>
-                                    <TextField
-                                        label="세부 내용"
-                                        size="small"
-                                        fullWidth
-                                        multiline
-                                        value={criterion.details}
-                                        onChange={(e) => handleCriteriaChange(index, 'details', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={1}>
-                                    <IconButton color="error" onClick={() => handleDeleteCriteria(index)}>
-                                        <DeleteIcon />
+                            <Stack spacing={2}>
+                                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                    <Chip label={`#${criterion.criteriaId}`} size="small" color="primary" />
+                                    <IconButton color="error" size="small" onClick={() => handleDeleteCriteria(index)}>
+                                        <DeleteIcon fontSize="small" />
                                     </IconButton>
-                                </Grid>
-                            </Grid>
+                                </Stack>
+                                <TextField
+                                    label="설명 (description)"
+                                    size="small"
+                                    fullWidth
+                                    multiline
+                                    value={criterion.description}
+                                    onChange={(e) => handleCriteriaChange(index, 'description', e.target.value)}
+
+                                />
+                                <Chip label="PASS 조건" size="small" color="success" sx={{ mb: 0.5 }} />
+                                <TextField
+
+                                    size="small"
+                                    fullWidth
+                                    multiline
+                                    rows={2}
+                                    value={criterion.passCondition}
+                                    onChange={(e) => handleCriteriaChange(index, 'passCondition', e.target.value)}
+
+                                />
+                                <Chip label="FAIL 조건" size="small" color="error" sx={{ mb: 0.5 }} />
+                                <TextField
+
+                                    size="small"
+                                    fullWidth
+                                    multiline
+                                    rows={2}
+                                    value={criterion.failCondition}
+                                    onChange={(e) => handleCriteriaChange(index, 'failCondition', e.target.value)}
+
+                                />
+                            </Stack>
                         </Paper>
                     ))}
 
                     <Button startIcon={<AddIcon />} onClick={handleAddCriteria} variant="outlined">
                         평가 기준 추가
                     </Button>
+
+                    {/* Result JSON Format */}
+                    <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2 }}>
+                        Result JSON Format
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                        status는 PASS / FAIL 중 하나가 들어갑니다. 산출 근거(reason)의 타입을 선택하세요.
+                    </Typography>
+
+                    <FormControl>
+                        <FormLabel>산출 근거 (reason) 타입</FormLabel>
+                        <RadioGroup
+                            row
+                            value={formData.reasonType || 'string'}
+                            onChange={(e) => {
+                                setFormData({ ...formData, reasonType: e.target.value as 'string' | 'array' });
+                                setReasonFormatError(null);
+                            }}
+                        >
+                            <FormControlLabel value="string" control={<Radio />} label="String (텍스트)" />
+                            <FormControlLabel value="array" control={<Radio />} label="Array (이벤트 배열)" />
+                        </RadioGroup>
+                    </FormControl>
+
+                    {formData.reasonType === 'array' && (
+                        <Stack spacing={1} sx={{ mt: 1 }}>
+                            <Typography variant="body2" fontWeight={600}>
+                                배열 항목 포맷 (Key/Value)
+                            </Typography>
+                            {reasonKV.map((kv, index) => (
+                                <Stack key={index} direction="row" spacing={1} alignItems="center">
+                                    <TextField
+                                        label="Key"
+                                        size="small"
+                                        value={kv.key}
+                                        onChange={(e) => handleKVChange(index, 'key', e.target.value)}
+                                        sx={{ flex: 1 }}
+                                        placeholder="event"
+                                    />
+                                    <TextField
+                                        label="Value (Placeholder)"
+                                        size="small"
+                                        value={kv.value}
+                                        onChange={(e) => handleKVChange(index, 'value', e.target.value)}
+                                        sx={{ flex: 2 }}
+                                        placeholder="인사 멘트"
+                                    />
+                                    <IconButton size="small" color="error" onClick={() => handleDeleteKV(index)}>
+                                        <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                </Stack>
+                            ))}
+                            <Button startIcon={<AddIcon />} size="small" onClick={handleAddKV} sx={{ alignSelf: 'flex-start' }}>
+                                항목 추가
+                            </Button>
+                        </Stack>
+                    )}
+
+                    {/* Auto-generated Result JSON Format preview */}
+                    <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
+                        <Typography variant="caption" color="primary" fontWeight={600} display="block" gutterBottom>
+                            Result JSON Format (미리보기)
+                        </Typography>
+                        <Typography
+                            variant="body2"
+                            sx={{ fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap' }}
+                        >
+                            {generateResultJsonFormat()}
+                        </Typography>
+                    </Paper>
+
+                    <TextField
+                        label="Result JSON Format (직접 입력 / 수정)"
+                        fullWidth
+                        multiline
+                        rows={4}
+                        value={formData.resultJsonFormat}
+                        onChange={(e) => {
+                            setFormData({ ...formData, resultJsonFormat: e.target.value });
+                            setJsonError(null);
+                        }}
+                        error={!!jsonError}
+                        helperText={jsonError || "위 미리보기를 참고하거나 직접 JSON 포맷을 입력하세요. 비워두면 자동 생성됩니다."}
+                        sx={{
+                            '& .MuiInputBase-input': {
+                                fontFamily: 'monospace',
+                                fontSize: '0.85rem',
+                            },
+                        }}
+                    />
+
                 </Stack>
             </DialogContent>
             <DialogActions>
@@ -439,20 +618,33 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                     variant="contained"
                     onClick={() => {
                         let finalData = { ...formData };
-                        if (!formData.resultJsonFormat?.trim()) {
-                            setJsonError('AI 추출 포맷(JSON)은 필수 입력 항목입니다.');
-                            return;
+
+                        // If reasonType is array, convert KV to JSON string
+                        if (formData.reasonType === 'array') {
+                            const formatObj: Record<string, string> = {};
+                            reasonKV.forEach(kv => {
+                                if (kv.key.trim()) {
+                                    formatObj[kv.key] = kv.value;
+                                }
+                            });
+                            finalData.reasonFormat = JSON.stringify(formatObj);
                         }
-                        try {
-                            const parsed = JSON.parse(formData.resultJsonFormat);
-                            finalData.resultJsonFormat = JSON.stringify(parsed, null, 2);
-                        } catch (e) {
-                            setJsonError('유효하지 않은 JSON 형식입니다.');
-                            return;
+
+                        // Auto-generate resultJsonFormat if empty
+                        if (!formData.resultJsonFormat?.trim()) {
+                            finalData.resultJsonFormat = generateResultJsonFormat();
+                        } else {
+                            try {
+                                const parsed = JSON.parse(formData.resultJsonFormat);
+                                finalData.resultJsonFormat = JSON.stringify(parsed, null, 2);
+                            } catch (e) {
+                                setJsonError('유효하지 않은 JSON 형식입니다.');
+                                return;
+                            }
                         }
                         onSubmit(finalData);
                     }}
-                    disabled={!formData.subItemName || !formData.subItemId || !formData.resultJsonFormat?.trim() || isLoading}
+                    disabled={!formData.subItemName || !formData.subItemId || isLoading}
                 >
                     {isLoading ? '저장 중...' : '저장'}
                 </Button>
@@ -602,25 +794,49 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
             />
             <Collapse in={expanded} timeout="auto" unmountOnExit>
                 <CardContent>
+                    {/* 판정 기준 */}
                     <Box mb={2}>
-                        <Typography variant="subtitle2" gutterBottom>Instructions</Typography>
-                        {(category.instructions && category.instructions.length > 0) ? (
-                            <List dense sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
-                                {category.instructions.map((inst, idx) => (
-                                    <ListItem key={idx}>
-                                        <ListItemText primary={inst} primaryTypographyProps={{ sx: { whiteSpace: 'pre-wrap' } }} />
-                                    </ListItem>
-                                ))}
-                            </List>
-                        ) : (
-                            <Typography variant="body2" color="text.secondary">No instructions.</Typography>
-                        )}
+                        <Typography variant="subtitle2" gutterBottom>판정 기준</Typography>
+                        <Stack spacing={1}>
+                            {category.passCondition && (
+                                <Box>
+                                    <Chip label="PASS 조건" size="small" color="success" sx={{ mb: 0.5 }} />
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{category.passCondition}</Typography>
+                                </Box>
+                            )}
+                            {category.warningCondition && (
+                                <Box>
+                                    <Chip label="WARNING 조건" size="small" color="warning" sx={{ mb: 0.5 }} />
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{category.warningCondition}</Typography>
+                                </Box>
+                            )}
+                            {category.failCondition && (
+                                <Box>
+                                    <Chip label="FAIL 조건" size="small" color="error" sx={{ mb: 0.5 }} />
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{category.failCondition}</Typography>
+                                </Box>
+                            )}
+
+
+                            {(category.instructions && category.instructions.length > 0) ? (
+                                <List dense sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
+                                    {category.instructions.map((inst, idx) => (
+                                        <ListItem key={idx}>
+                                            <ListItemText primary={inst} primaryTypographyProps={{ sx: { whiteSpace: 'pre-wrap' } }} />
+                                        </ListItem>
+                                    ))}
+                                </List>
+                            ) : (
+                                <Typography variant="body2" color="text.secondary">판정 기준이 설정되지 않았습니다.</Typography>
+                            )}
+
+
+                        </Stack>
                     </Box>
 
                     <Box mb={2}>
-                        <Typography variant="subtitle2" gutterBottom>Feedback Message</Typography>
+                        <Typography variant="subtitle2" gutterBottom>상담원 피드백 문구</Typography>
                         {category.feedbackMessageTemplate ? (
-                            // <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>{category.feedbackMessageTemplate}</Typography>
                             <Paper
                                 variant="outlined"
                                 sx={{
@@ -635,7 +851,7 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                 {category.feedbackMessageTemplate}
                             </Paper>
                         ) : (
-                            <Typography variant="body2" color="text.secondary">No feedback message.</Typography>
+                            <Typography variant="body2" color="text.secondary">피드백 문구가 설정되지 않았습니다.</Typography>
                         )}
                     </Box>
 
@@ -684,18 +900,59 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                     {/* Instruction Display */}
                                     {subItem.instruction && (
                                         <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
-                                            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', whiteSpace: 'pre-wrap', display: 'block' }}>
-                                                Guide: {subItem.instruction}
+                                            <Typography variant="caption" fontWeight={600} display="block">Instructions (가이드):</Typography>
+                                            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', display: 'block' }}>
+                                                {subItem.instruction}
                                             </Typography>
                                         </Box>
                                     )}
 
-                                    {/* Result JSON Format Display */}
-                                    {subItem.resultJsonFormat && (
+                                    {/* 평가 기준 (evaluationCriteria) */}
+                                    {subItem.evaluationCriteria && subItem.evaluationCriteria.length > 0 && (
                                         <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
-                                            <Typography variant="caption" color="primary" fontWeight={600} display="block">
-                                                AI 추출 포맷 (JSON):
-                                            </Typography>
+                                            <Typography variant="caption" fontWeight={600} display="block" gutterBottom>평가 기준:</Typography>
+                                            <Stack spacing={1}>
+                                                {subItem.evaluationCriteria.map((crit) => (
+                                                    <Paper key={crit.criteriaId} variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
+                                                        <Stack spacing={0.5}>
+                                                            <Stack direction="row" spacing={1} alignItems="center">
+                                                                <Chip label={`#${crit.criteriaId}`} size="small" sx={{ height: 20, fontSize: '0.7rem' }} />
+                                                                <Typography variant="body2" fontWeight={500}>{crit.description}</Typography>
+                                                            </Stack>
+                                                            {crit.passCondition && (
+                                                                <Box>
+                                                                    <Chip label="PASS" size="small" color="success" sx={{ height: 18, fontSize: '0.7rem', mb: 0.5 }} />
+                                                                    <Typography variant="caption" sx={{ whiteSpace: 'pre-wrap', display: 'block' }}>{crit.passCondition}</Typography>
+                                                                </Box>
+                                                            )}
+                                                            {crit.failCondition && (
+                                                                <Box>
+                                                                    <Chip label="FAIL" size="small" color="error" sx={{ height: 18, fontSize: '0.7rem', mb: 0.5 }} />
+                                                                    <Typography variant="caption" sx={{ whiteSpace: 'pre-wrap', display: 'block' }}>{crit.failCondition}</Typography>
+                                                                </Box>
+                                                            )}
+                                                        </Stack>
+                                                    </Paper>
+                                                ))}
+                                            </Stack>
+                                        </Box>
+                                    )}
+
+                                    {/* Result JSON Format Display */}
+                                    <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
+                                        <Typography variant="caption" color="primary" fontWeight={600} display="block">
+                                            Result JSON Format:
+                                        </Typography>
+                                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                                            <Chip
+                                                label={`reason: ${subItem.reasonType === 'array' ? 'Array' : 'String'}`}
+                                                size="small"
+                                                variant="outlined"
+                                                color={subItem.reasonType === 'array' ? 'secondary' : 'default'}
+                                                sx={{ height: 20, fontSize: '0.7rem' }}
+                                            />
+                                        </Stack>
+                                        {subItem.resultJsonFormat && (
                                             <Paper
                                                 variant="outlined"
                                                 sx={{
@@ -709,35 +966,27 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                             >
                                                 {subItem.resultJsonFormat}
                                             </Paper>
-                                        </Box>
-                                    )}
+                                        )}
+                                        {subItem.reasonType === 'array' && subItem.reasonFormat && (
+                                            <Box sx={{ mt: 0.5 }}>
+                                                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">배열 항목 포맷:</Typography>
+                                                <Paper
+                                                    variant="outlined"
+                                                    sx={{
+                                                        p: 0.5,
+                                                        bgcolor: '#f3e5f5',
+                                                        fontFamily: 'monospace',
+                                                        fontSize: '0.7rem',
+                                                        whiteSpace: 'pre-wrap',
+                                                        borderStyle: 'dotted'
+                                                    }}
+                                                >
+                                                    {subItem.reasonFormat}
+                                                </Paper>
+                                            </Box>
+                                        )}
+                                    </Box>
 
-                                    {/* Evaluation Criteria Details */}
-                                    {subItem.evaluationCriteria && subItem.evaluationCriteria.length > 0 && (
-                                        <Box sx={{ pl: 4, pr: 8, pb: 2 }}>
-                                            <Grid container spacing={1}>
-                                                {subItem.evaluationCriteria.map((crit) => (
-                                                    <Grid item xs={12} key={crit.criteriaId}>
-                                                        <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
-                                                            <Stack direction="row" spacing={1} alignItems="flex-start">
-                                                                <Chip label={crit.criteriaId} size="small" sx={{ height: 20, fontSize: '0.7rem', minWidth: 40 }} />
-                                                                <Box>
-                                                                    <Typography variant="body2" fontWeight={500} sx={{ whiteSpace: 'pre-wrap' }}>
-                                                                        {crit.description}
-                                                                    </Typography>
-                                                                    {crit.details && (
-                                                                        <Typography variant="caption" color="text.secondary" display="block" sx={{ whiteSpace: 'pre-wrap' }}>
-                                                                            {crit.details}
-                                                                        </Typography>
-                                                                    )}
-                                                                </Box>
-                                                            </Stack>
-                                                        </Paper>
-                                                    </Grid>
-                                                ))}
-                                            </Grid>
-                                        </Box>
-                                    )}
                                 </Collapse>
                                 <Divider />
                             </React.Fragment>
@@ -788,6 +1037,9 @@ const QMEvaluationFormDetail: React.FC = () => {
         enabled: true,
         weight: 0,
         instructions: [],
+        passCondition: '',
+        warningCondition: '',
+        failCondition: '',
         feedbackMessageTemplate: '',
     });
 
@@ -907,6 +1159,9 @@ const QMEvaluationFormDetail: React.FC = () => {
                 enabled: category.enabled,
                 weight: category.weight,
                 instructions: category.instructions || [],
+                passCondition: category.passCondition || '',
+                warningCondition: category.warningCondition || '',
+                failCondition: category.failCondition || '',
                 feedbackMessageTemplate: category.feedbackMessageTemplate,
             });
         } else {
@@ -918,6 +1173,9 @@ const QMEvaluationFormDetail: React.FC = () => {
                 enabled: true,
                 weight: 10,
                 instructions: [],
+                passCondition: '',
+                warningCondition: '',
+                failCondition: '',
                 feedbackMessageTemplate: '',
             });
         }
@@ -927,6 +1185,24 @@ const QMEvaluationFormDetail: React.FC = () => {
     // Bulk Expansion States
     const [bulkExpandCategories, setBulkExpandCategories] = useState<boolean | undefined>(undefined);
     const [bulkExpandSubItems, setBulkExpandSubItems] = useState<boolean | undefined>(undefined);
+
+    // Prompt Preview
+    const [openPromptPreview, setOpenPromptPreview] = useState(false);
+    const [promptPreviewText, setPromptPreviewText] = useState('');
+    const [promptPreviewLoading, setPromptPreviewLoading] = useState(false);
+
+    const handleOpenPromptPreview = async () => {
+        setOpenPromptPreview(true);
+        setPromptPreviewLoading(true);
+        try {
+            const result = await getQmEvaluationFormPromptPreview(formId!, config);
+            setPromptPreviewText(result.prompt);
+        } catch (error) {
+            setPromptPreviewText(`오류가 발생했습니다: ${(error as Error).message}`);
+        } finally {
+            setPromptPreviewLoading(false);
+        }
+    };
 
     if (isFormLoading) return <Box p={4}><CircularProgress /></Box>;
     if (!form) return <Box p={4}>Form not found</Box>;
@@ -982,6 +1258,12 @@ const QMEvaluationFormDetail: React.FC = () => {
                                 disabled={!formName.trim() || !version.trim() || updateFormMutation.isPending}
                             >
                                 Save Changes
+                            </Button>
+                            <Button
+                                variant="outlined" startIcon={<VisibilityIcon />}
+                                onClick={handleOpenPromptPreview}
+                            >
+                                프롬프트 미리보기
                             </Button>
                         </Stack>
                     </Paper>
@@ -1107,10 +1389,43 @@ const QMEvaluationFormDetail: React.FC = () => {
                             Add Instruction
                         </Button>
 
+                        {/* 판정 기준 (Judgment Criteria) */}
+                        <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2 }}>판정 기준</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            각 조건은 개별 키값(passCondition, warningCondition, failCondition)으로 저장됩니다.
+                        </Typography>
+                        <Chip label="PASS 조건" size="small" color="success" sx={{ mb: 0.5 }} />
                         <TextField
-                            label="Feedback Message Template" fullWidth multiline rows={3}
+                            fullWidth
+                            multiline
+                            rows={2}
+                            value={categoryFormData.passCondition || ''}
+                            onChange={(e) => setCategoryFormData({ ...categoryFormData, passCondition: e.target.value })}
+                        />
+                        <Chip label="WARNING 조건" size="small" color="warning" sx={{ mb: 0.5 }} />
+                        <TextField
+                            fullWidth
+                            multiline
+                            rows={2}
+                            value={categoryFormData.warningCondition || ''}
+                            onChange={(e) => setCategoryFormData({ ...categoryFormData, warningCondition: e.target.value })}
+                        />
+
+                        <Chip label="FAIL 조건" size="small" color="error" sx={{ mb: 0.5 }} />
+                        <TextField
+                            fullWidth
+                            multiline
+                            rows={2}
+                            value={categoryFormData.failCondition || ''}
+                            onChange={(e) => setCategoryFormData({ ...categoryFormData, failCondition: e.target.value })}
+                        />
+
+                        {/* Feedback Message Template */}
+                        <TextField
+                            label="상담원 피드백 문구 (Feedback Message Template)" fullWidth multiline rows={3}
                             value={categoryFormData.feedbackMessageTemplate}
                             onChange={(e) => setCategoryFormData({ ...categoryFormData, feedbackMessageTemplate: e.target.value })}
+                            helperText="상담원에게 전달될 피드백 메시지 템플릿입니다."
                         />
                     </Stack>
                 </DialogContent>
@@ -1118,7 +1433,9 @@ const QMEvaluationFormDetail: React.FC = () => {
                     <Button onClick={() => setOpenCategoryDialog(false)}>Cancel</Button>
                     <Button
                         variant="contained"
-                        onClick={() => categoryMutation.mutate({ data: categoryFormData, categoryId: editingCategory?.categoryId })}
+                        onClick={() => {
+                            categoryMutation.mutate({ data: categoryFormData, categoryId: editingCategory?.categoryId });
+                        }}
                         disabled={!categoryFormData.categoryName || !categoryFormData.categoryId || categoryMutation.isPending}
                     >
                         Save
@@ -1134,6 +1451,38 @@ const QMEvaluationFormDetail: React.FC = () => {
                 isLoading={bulkUpdateMutation.isPending}
                 currentCategories={categories}
             />
+
+            {/* Prompt Preview Dialog */}
+            <Dialog open={openPromptPreview} onClose={() => setOpenPromptPreview(false)} maxWidth="md" fullWidth>
+                <DialogTitle>프롬프트 미리보기</DialogTitle>
+                <DialogContent>
+                    {promptPreviewLoading ? (
+                        <Box display="flex" justifyContent="center" p={4}>
+                            <CircularProgress />
+                        </Box>
+                    ) : (
+                        <Paper
+                            variant="outlined"
+                            sx={{
+                                p: 2,
+                                mt: 1,
+                                bgcolor: 'grey.50',
+                                fontFamily: 'monospace',
+                                fontSize: '0.8rem',
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                                maxHeight: '60vh',
+                                overflowY: 'auto',
+                            }}
+                        >
+                            {promptPreviewText}
+                        </Paper>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenPromptPreview(false)}>닫기</Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };

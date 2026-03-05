@@ -1867,6 +1867,7 @@ app.post('/api/agent/v1/qm-automation/reset-evaluation-state', async (req, res) 
  * - GET  /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems - List subitems
  * - POST /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems - Create/Update subitem
  * - DELETE /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems/{subItemId} - Delete subitem
+ * - GET  /api/agent/v1/qm-evaluation-form/{formId}/prompt-preview                               - Get prompt preview
  */
 app.all('/api/agent/v1/qm-evaluation-form*', async (req, res) => {
   try {

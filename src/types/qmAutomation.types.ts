@@ -156,6 +156,19 @@ export interface QMAutomationInput {
     beginOffsetMillis: number;
     endOffsetMillis: number;
   }>;
+  transcript?: string;
+  nonTalkTimeInstances?: Array<{
+    durationTime: string;
+    beginOffsetTime: string;
+    endOffsetTime: string;
+    previousCustomerContent: string;
+    nextCustomerContent: string;
+    previousAgentContent: string;
+    nextAgentContent: string;
+    BeginOffsetMillis: number;
+    EndOffsetMillis: number;
+    DurationMillis: number;
+  }>;
   inputTokens?: number;
   toolResult?: {
     functionCalls?: FunctionCall[];
@@ -265,6 +278,9 @@ export interface EvaluationEvent {
   timestampStart?: string;
   timestampEnd?: string;
   type?: string;
+  participant?: string;
+  transcript?: string;
+  reason?: string;
   detectedSentence?: string;
   correction?: string;
   analysis?: string;

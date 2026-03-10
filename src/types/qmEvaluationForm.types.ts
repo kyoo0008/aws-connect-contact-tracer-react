@@ -31,8 +31,6 @@ export interface EvaluationSubItem {
     subItemName: string;
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
-    reasonType?: 'string' | 'array';
-    reasonFormat?: string;
     resultJsonFormat?: string;
     instruction?: string;
 }
@@ -40,6 +38,7 @@ export interface EvaluationSubItem {
 export interface EvaluationCriterion {
     criteriaId: string;
     description: string;
+    details?: string;
     passCondition: string;
     failCondition: string;
 }
@@ -91,8 +90,6 @@ export interface CreateSubItemRequest {
     subItemName: string;
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
-    reasonType?: 'string' | 'array';
-    reasonFormat?: string;
     resultJsonFormat?: string;
     instruction?: string;
 }
@@ -101,8 +98,6 @@ export interface UpdateSubItemRequest {
     subItemName?: string;
     displayOrder?: number;
     evaluationCriteria?: EvaluationCriterion[];
-    reasonType?: 'string' | 'array';
-    reasonFormat?: string;
     resultJsonFormat?: string;
     instruction?: string;
 }
@@ -127,8 +122,6 @@ export interface BulkSubItem {
     subItemName: string;
     displayOrder: number;
     evaluationCriteria: EvaluationCriterion[];
-    reasonType?: 'string' | 'array';
-    reasonFormat?: string;
     resultJsonFormat?: string;
     instruction?: string;
 }

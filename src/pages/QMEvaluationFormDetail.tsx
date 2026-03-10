@@ -30,9 +30,6 @@ import {
     FormControlLabel,
     Chip,
     Stack,
-    Radio,
-    RadioGroup,
-    FormLabel,
 } from '@mui/material';
 import {
     ArrowBack as BackIcon,
@@ -127,8 +124,6 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                     subItemName: si.subItemName,
                     displayOrder: si.displayOrder,
                     evaluationCriteria: si.evaluationCriteria || [],
-                    reasonType: si.reasonType || 'string',
-                    reasonFormat: si.reasonFormat || '',
                     resultJsonFormat: si.resultJsonFormat || '',
                     instruction: si.instruction || '',
                 })),
@@ -298,132 +293,92 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
     isLoading,
     defaultDisplayOrder = 1,
 }) => {
+    const generateDefaultResultJsonFormat = (criteria: EvaluationCriterion[]) => {
+        const typeValue = criteria.length > 0
+            ? criteria.map(c => c.description).filter(Boolean).join(' | ')
+            : '평가 기준';
+        return JSON.stringify({
+            status: 'PASS | FAIL',
+            events: [
+                {
+                    type: typeValue,
+                    timestamp: '발화된 시점(mm:ss)',
+                    participant: '발화 주체(AGENT | CUSTOMER)',
+                    transcript: '발화 내용',
+                    reason: '이유',
+                },
+            ],
+        }, null, 2);
+    };
+
     const [formData, setFormData] = useState<CreateSubItemRequest>(() => {
-        let inferredReasonType: 'string' | 'array' = initialData?.reasonType || 'string';
-
-        if (initialData?.resultJsonFormat) {
-            try {
-                const parsed = JSON.parse(initialData.resultJsonFormat);
-                if (parsed.events && Array.isArray(parsed.events)) {
-                    inferredReasonType = 'array';
-                } else if (parsed.reason && typeof parsed.reason === 'string') {
-                    inferredReasonType = 'string';
-                }
-            } catch (e) {
-                // Ignore parse errors
-            }
-        }
-
+        const criteria = (initialData?.evaluationCriteria || []).map((crit, i) => ({
+            ...crit,
+            criteriaId: `${i + 1}`,
+        }));
         return {
             subItemId: initialData?.subItemId || '',
             subItemName: initialData?.subItemName || '',
             displayOrder: initialData?.displayOrder || defaultDisplayOrder,
-            resultJsonFormat: initialData?.resultJsonFormat || '',
+            resultJsonFormat: initialData?.resultJsonFormat || generateDefaultResultJsonFormat(criteria),
             instruction: initialData?.instruction || '',
-            reasonType: inferredReasonType,
-            reasonFormat: initialData?.reasonFormat || '',
-            evaluationCriteria: (initialData?.evaluationCriteria || []).map((crit, i) => ({
-                ...crit,
-                criteriaId: `${i + 1}`,
-            })),
+            evaluationCriteria: criteria,
         };
     });
     const [jsonError, setJsonError] = useState<string | null>(null);
-    const [reasonFormatError, setReasonFormatError] = useState<string | null>(null);
-    const [reasonKV, setReasonKV] = useState<{ key: string; value: string }[]>([]);
 
-    useEffect(() => {
-        if (open) {
-            let formatSource = initialData?.reasonFormat;
-
-            // If reasonFormat is missing but reasonType is array (or inferred as array),
-            // try to extract from resultJsonFormat.reason[0]
-            if (!formatSource && initialData?.resultJsonFormat) {
-                try {
-                    const parsed = JSON.parse(initialData.resultJsonFormat);
-                    if (Array.isArray(parsed.events) && parsed.events.length > 0) {
-                        formatSource = JSON.stringify(parsed.events[0]);
-                    }
-                } catch (e) { /* ignore */ }
+    const syncResultJsonFormatType = (criteria: EvaluationCriterion[], currentFormat: string) => {
+        try {
+            const parsed = JSON.parse(currentFormat);
+            if (parsed.events && Array.isArray(parsed.events) && parsed.events.length > 0) {
+                const typeValue = criteria.length > 0
+                    ? criteria.map(c => c.description).filter(Boolean).join(' | ')
+                    : '평가 기준';
+                parsed.events[0].type = typeValue;
+                return JSON.stringify(parsed, null, 2);
             }
-
-            if (formatSource) {
-                try {
-                    const parsed = JSON.parse(formatSource);
-                    if (typeof parsed === 'object' && parsed !== null) {
-                        const kv = Object.entries(parsed).map(([key, value]) => ({
-                            key,
-                            value: String(value)
-                        }));
-                        setReasonKV(kv.length > 0 ? kv : [{ key: '', value: '' }]);
-                    } else {
-                        setReasonKV([{ key: '', value: '' }]);
-                    }
-                } catch (e) {
-                    setReasonKV([{ key: '', value: '' }]);
-                }
-            } else {
-                setReasonKV([{ key: '', value: '' }]);
-            }
+        } catch {
+            // ignore parse errors, return unchanged
         }
-    }, [open, initialData]);
-
-    const handleAddKV = () => {
-        setReasonKV([...reasonKV, { key: '', value: '' }]);
-    };
-
-    const handleKVChange = (index: number, field: 'key' | 'value', value: string) => {
-        const newKV = [...reasonKV];
-        newKV[index] = { ...newKV[index], [field]: value };
-        setReasonKV(newKV);
-    };
-
-    const handleDeleteKV = (index: number) => {
-        setReasonKV(reasonKV.filter((_, i) => i !== index));
+        return currentFormat;
     };
 
     // Criteria state management
     const handleAddCriteria = () => {
-        setFormData((prev) => ({
-            ...prev,
-            evaluationCriteria: [
+        setFormData((prev) => {
+            const newCriteria = [
                 ...prev.evaluationCriteria,
                 { criteriaId: `${prev.evaluationCriteria.length + 1}`, description: '', passCondition: '', failCondition: '' },
-            ],
-        }));
+            ];
+            return {
+                ...prev,
+                evaluationCriteria: newCriteria,
+                resultJsonFormat: syncResultJsonFormatType(newCriteria, prev.resultJsonFormat || ''),
+            };
+        });
     };
 
     const handleCriteriaChange = (index: number, field: keyof EvaluationCriterion, value: string) => {
         const newCriteria = [...formData.evaluationCriteria];
         newCriteria[index] = { ...newCriteria[index], [field]: value };
-        setFormData((prev) => ({ ...prev, evaluationCriteria: newCriteria }));
+        setFormData((prev) => ({
+            ...prev,
+            evaluationCriteria: newCriteria,
+            resultJsonFormat: field === 'description'
+                ? syncResultJsonFormatType(newCriteria, prev.resultJsonFormat || '')
+                : prev.resultJsonFormat,
+        }));
     };
 
     const handleDeleteCriteria = (index: number) => {
         const newCriteria = formData.evaluationCriteria
             .filter((_, i) => i !== index)
             .map((crit, i) => ({ ...crit, criteriaId: `${i + 1}` }));
-        setFormData((prev) => ({ ...prev, evaluationCriteria: newCriteria }));
-    };
-
-    // Auto-generate resultJsonFormat based on reasonType
-    const generateResultJsonFormat = () => {
-        const base: Record<string, any> = {
-            status: 'PASS | FAIL',
-        };
-        if (formData.reasonType === 'string') {
-            base.reason = '산출 근거 (string)';
-        } else {
-            // array type - use reasonKV
-            const formatObj: Record<string, string> = {};
-            reasonKV.forEach(kv => {
-                if (kv.key.trim()) {
-                    formatObj[kv.key] = kv.value;
-                }
-            });
-            base.events = [Object.keys(formatObj).length > 0 ? formatObj : { key: 'value' }];
-        }
-        return JSON.stringify(base, null, 2);
+        setFormData((prev) => ({
+            ...prev,
+            evaluationCriteria: newCriteria,
+            resultJsonFormat: syncResultJsonFormatType(newCriteria, prev.resultJsonFormat || ''),
+        }));
     };
 
     return (
@@ -488,7 +443,16 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                                     multiline
                                     value={criterion.description}
                                     onChange={(e) => handleCriteriaChange(index, 'description', e.target.value)}
-
+                                />
+                                <TextField
+                                    label="상세 설명 (details)"
+                                    size="small"
+                                    fullWidth
+                                    multiline
+                                    rows={3}
+                                    value={criterion.details || ''}
+                                    onChange={(e) => handleCriteriaChange(index, 'details', e.target.value)}
+                                    helperText="평가 기준에 대한 상세 설명 및 예외 사항 등을 입력하세요."
                                 />
                                 <Chip label="PASS 조건" size="small" color="success" sx={{ mb: 0.5 }} />
                                 <TextField
@@ -525,73 +489,11 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                         Result JSON Format
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                        status는 PASS / FAIL 중 하나가 들어갑니다. 산출 근거(reason)의 타입을 선택하세요.
+                        status는 PASS / FAIL 중 하나가 들어갑니다.
                     </Typography>
 
-                    <FormControl>
-                        <FormLabel>산출 근거 (reason) 타입</FormLabel>
-                        <RadioGroup
-                            row
-                            value={formData.reasonType || 'string'}
-                            onChange={(e) => {
-                                setFormData({ ...formData, reasonType: e.target.value as 'string' | 'array' });
-                                setReasonFormatError(null);
-                            }}
-                        >
-                            <FormControlLabel value="string" control={<Radio />} label="String (텍스트)" />
-                            <FormControlLabel value="array" control={<Radio />} label="Array (이벤트 배열)" />
-                        </RadioGroup>
-                    </FormControl>
-
-                    {formData.reasonType === 'array' && (
-                        <Stack spacing={1} sx={{ mt: 1 }}>
-                            <Typography variant="body2" fontWeight={600}>
-                                배열 항목 포맷 (Key/Value)
-                            </Typography>
-                            {reasonKV.map((kv, index) => (
-                                <Stack key={index} direction="row" spacing={1} alignItems="center">
-                                    <TextField
-                                        label="Key"
-                                        size="small"
-                                        value={kv.key}
-                                        onChange={(e) => handleKVChange(index, 'key', e.target.value)}
-                                        sx={{ flex: 1 }}
-                                        placeholder="event"
-                                    />
-                                    <TextField
-                                        label="Value (Placeholder)"
-                                        size="small"
-                                        value={kv.value}
-                                        onChange={(e) => handleKVChange(index, 'value', e.target.value)}
-                                        sx={{ flex: 2 }}
-                                        placeholder="인사 멘트"
-                                    />
-                                    <IconButton size="small" color="error" onClick={() => handleDeleteKV(index)}>
-                                        <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                </Stack>
-                            ))}
-                            <Button startIcon={<AddIcon />} size="small" onClick={handleAddKV} sx={{ alignSelf: 'flex-start' }}>
-                                항목 추가
-                            </Button>
-                        </Stack>
-                    )}
-
-                    {/* Auto-generated Result JSON Format preview */}
-                    <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-                        <Typography variant="caption" color="primary" fontWeight={600} display="block" gutterBottom>
-                            Result JSON Format (미리보기)
-                        </Typography>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap' }}
-                        >
-                            {generateResultJsonFormat()}
-                        </Typography>
-                    </Paper>
-
                     <TextField
-                        label="Result JSON Format (직접 입력 / 수정)"
+                        label="Result JSON Format"
                         fullWidth
                         multiline
                         rows={4}
@@ -601,7 +503,7 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                             setJsonError(null);
                         }}
                         error={!!jsonError}
-                        helperText={jsonError || "위 미리보기를 참고하거나 직접 JSON 포맷을 입력하세요. 비워두면 자동 생성됩니다."}
+                        helperText={jsonError || "JSON 포맷을 직접 입력하세요."}
                         sx={{
                             '& .MuiInputBase-input': {
                                 fontFamily: 'monospace',
@@ -619,21 +521,7 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                     onClick={() => {
                         let finalData = { ...formData };
 
-                        // If reasonType is array, convert KV to JSON string
-                        if (formData.reasonType === 'array') {
-                            const formatObj: Record<string, string> = {};
-                            reasonKV.forEach(kv => {
-                                if (kv.key.trim()) {
-                                    formatObj[kv.key] = kv.value;
-                                }
-                            });
-                            finalData.reasonFormat = JSON.stringify(formatObj);
-                        }
-
-                        // Auto-generate resultJsonFormat if empty
-                        if (!formData.resultJsonFormat?.trim()) {
-                            finalData.resultJsonFormat = generateResultJsonFormat();
-                        } else {
+                        if (formData.resultJsonFormat?.trim()) {
                             try {
                                 const parsed = JSON.parse(formData.resultJsonFormat);
                                 finalData.resultJsonFormat = JSON.stringify(parsed, null, 2);
@@ -919,6 +807,11 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                                                 <Chip label={`#${crit.criteriaId}`} size="small" sx={{ height: 20, fontSize: '0.7rem' }} />
                                                                 <Typography variant="body2" fontWeight={500}>{crit.description}</Typography>
                                                             </Stack>
+                                                            {crit.details && (
+                                                                <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', display: 'block', pl: 0.5 }}>
+                                                                    {crit.details}
+                                                                </Typography>
+                                                            )}
                                                             {crit.passCondition && (
                                                                 <Box>
                                                                     <Chip label="PASS" size="small" color="success" sx={{ height: 18, fontSize: '0.7rem', mb: 0.5 }} />
@@ -943,15 +836,6 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                         <Typography variant="caption" color="primary" fontWeight={600} display="block">
                                             Result JSON Format:
                                         </Typography>
-                                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                                            <Chip
-                                                label={`reason: ${subItem.reasonType === 'array' ? 'Array' : 'String'}`}
-                                                size="small"
-                                                variant="outlined"
-                                                color={subItem.reasonType === 'array' ? 'secondary' : 'default'}
-                                                sx={{ height: 20, fontSize: '0.7rem' }}
-                                            />
-                                        </Stack>
                                         {subItem.resultJsonFormat && (
                                             <Paper
                                                 variant="outlined"
@@ -966,24 +850,6 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                             >
                                                 {subItem.resultJsonFormat}
                                             </Paper>
-                                        )}
-                                        {subItem.reasonType === 'array' && subItem.reasonFormat && (
-                                            <Box sx={{ mt: 0.5 }}>
-                                                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">배열 항목 포맷:</Typography>
-                                                <Paper
-                                                    variant="outlined"
-                                                    sx={{
-                                                        p: 0.5,
-                                                        bgcolor: '#f3e5f5',
-                                                        fontFamily: 'monospace',
-                                                        fontSize: '0.7rem',
-                                                        whiteSpace: 'pre-wrap',
-                                                        borderStyle: 'dotted'
-                                                    }}
-                                                >
-                                                    {subItem.reasonFormat}
-                                                </Paper>
-                                            </Box>
                                         )}
                                     </Box>
 

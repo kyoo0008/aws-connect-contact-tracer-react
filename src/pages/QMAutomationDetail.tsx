@@ -150,6 +150,8 @@ const QMAutomationDetail: React.FC = () => {
   const navigate = useNavigate();
   const { config, isConfigured } = useConfig();
   const [tabValue, setTabValue] = useState(0);
+  const [transcriptModalOpen, setTranscriptModalOpen] = useState(false);
+  const [nonTalkModalOpen, setNonTalkModalOpen] = useState(false);
 
   // Fetch QM Automation detail
   const {
@@ -864,12 +866,6 @@ const QMAutomationDetail: React.FC = () => {
                           </Typography>
                         </Grid>
                         <Grid item xs={6} sm={3}>
-                          <Typography variant="caption" color="text.secondary">Tool 사용 여부</Typography>
-                          <Typography variant="body2">
-                            {qmDetail.input?.useTools ? '사용' : '미사용'}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={6} sm={3}>
                           <Typography variant="caption" color="text.secondary">오디오 분석 사용 여부</Typography>
                           <Typography variant="body2">
                             {qmDetail.input?.useAudioAnalysis ? '사용' : '미사용'}
@@ -919,9 +915,91 @@ const QMAutomationDetail: React.FC = () => {
                           </Grid>
                         )}
 
+                        {qmDetail.input?.transcript && (
+                          <Grid item xs={6} sm={3}>
+                            <Typography variant="caption" color="text.secondary">상담내용</Typography>
+                            <Box>
+                              <Button size="small" variant="outlined" onClick={() => setTranscriptModalOpen(true)}>
+                                보기
+                              </Button>
+                            </Box>
+                          </Grid>
+                        )}
+                        {qmDetail.input?.nonTalkTimeInstances && qmDetail.input.nonTalkTimeInstances.length > 0 && (
+                          <Grid item xs={6} sm={3}>
+                            <Typography variant="caption" color="text.secondary">대기 구간</Typography>
+                            <Box>
+                              <Button size="small" variant="outlined" onClick={() => setNonTalkModalOpen(true)}>
+                                {qmDetail.input.nonTalkTimeInstances.length}건 보기
+                              </Button>
+                            </Box>
+                          </Grid>
+                        )}
                       </Grid>
                     </Paper>
                   )}
+
+                  {/* Transcript Modal */}
+                  <Dialog open={transcriptModalOpen} onClose={() => setTranscriptModalOpen(false)} maxWidth="md" fullWidth>
+                    <DialogTitle>상담내용 (Transcript)</DialogTitle>
+                    <DialogContent>
+                      <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50', maxHeight: '60vh', overflow: 'auto' }}>
+                        <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          {(() => {
+                            try {
+                              return JSON.stringify(JSON.parse(qmDetail?.input?.transcript || ''), null, 2);
+                            } catch {
+                              return qmDetail?.input?.transcript || '';
+                            }
+                          })()}
+                        </pre>
+                      </Paper>
+                    </DialogContent>
+                    <DialogActions>
+                      <Button onClick={() => setTranscriptModalOpen(false)}>닫기</Button>
+                    </DialogActions>
+                  </Dialog>
+
+                  {/* NonTalkTime Modal */}
+                  <Dialog open={nonTalkModalOpen} onClose={() => setNonTalkModalOpen(false)} maxWidth="md" fullWidth>
+                    <DialogTitle>대기 구간 ({qmDetail?.input?.nonTalkTimeInstances?.length}건)</DialogTitle>
+                    <DialogContent>
+                      <Stack spacing={2} sx={{ mt: 1 }}>
+                        {qmDetail?.input?.nonTalkTimeInstances?.map((item, idx) => (
+                          <Paper key={idx} variant="outlined" sx={{ p: 2 }}>
+                            <Stack spacing={1}>
+                              <Stack direction="row" spacing={1} alignItems="center">
+                                <Chip label={`#${idx + 1}`} size="small" color="primary" />
+                                <Chip label={`${item.beginOffsetTime} ~ ${item.endOffsetTime}`} size="small" variant="outlined" />
+                                <Chip label={`${item.durationTime}`} size="small" color="warning" />
+                              </Stack>
+                              <Grid container spacing={1}>
+                                <Grid item xs={6}>
+                                  <Typography variant="caption" color="text.secondary" display="block">대기 시작 전 상담사 발화</Typography>
+                                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>"{item.previousAgentContent}"</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                  <Typography variant="caption" color="text.secondary" display="block">대기 종료 후 상담사 발화</Typography>
+                                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>"{item.nextAgentContent}"</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                  <Typography variant="caption" color="text.secondary" display="block">대기 시작 전 고객 발화</Typography>
+                                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>"{item.previousCustomerContent}"</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                  <Typography variant="caption" color="text.secondary" display="block">대기 종료 후 고객 발화</Typography>
+                                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>"{item.nextCustomerContent}"</Typography>
+                                </Grid>
+                              </Grid>
+                            </Stack>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </DialogContent>
+                    <DialogActions>
+                      <Button onClick={() => setNonTalkModalOpen(false)}>닫기</Button>
+                    </DialogActions>
+                  </Dialog>
 
                   {/* Thinking Process Section */}
                   {qmDetail.result?.thinkingText && (
@@ -1598,7 +1676,7 @@ const isStatusItem = (value: unknown): value is { status: string; reason: string
   );
 };
 
-const isEventList = (value: unknown): value is { events: EvaluationEvent[] } => {
+const isEventList = (value: unknown): value is { status?: string; events: EvaluationEvent[] } => {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -1800,6 +1878,23 @@ const EventItemView: React.FC<{ event: EvaluationEvent; onPlayAt?: (time: string
         }
         secondary={
           <>
+            {/* participant (발화 주체) */}
+            {event.participant && (
+              <Chip
+                component="span"
+                size="small"
+                label={event.participant}
+                color={event.participant === 'AGENT' ? 'primary' : 'secondary'}
+                variant="outlined"
+                sx={{ mb: 0.5, mr: 0.5 }}
+              />
+            )}
+            {/* transcript (발화 내용) */}
+            {event.transcript && (
+              <Typography component="span" variant="body2" sx={{ display: 'block', mb: 0.5, fontStyle: 'italic' }}>
+                "{event.transcript}"
+              </Typography>
+            )}
             {/* 습관적 표현 (badHabits) */}
             {habitContent && (
               <Typography component="span" variant="body2" color="warning.main" sx={{ display: 'block', mb: 0.5, fontWeight: 500 }}>
@@ -2291,7 +2386,7 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown; label?: strin
     );
   }
 
-  // events 배열만 있는 경우
+  // events 배열만 있는 경우 (새 포맷: { status, events } 또는 기존 { events })
   if (isEventList(value)) {
     const events = value.events;
     return (
@@ -2300,11 +2395,15 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown; label?: strin
           <Typography variant="subtitle2" fontWeight={600}>
             {label}
           </Typography>
-          <Chip
-            size="small"
-            label={events.length > 0 ? `${events.length}건 감지` : '감지 없음'}
-            color={events.length > 0 ? 'warning' : 'success'}
-          />
+          {value.status && <StatusChip status={value.status} />}
+          {events.length > 0 && (
+            <Chip
+              size="small"
+              label={`${events.length}건`}
+              color="default"
+              variant="outlined"
+            />
+          )}
         </Stack>
         {events.length > 0 ? (
           <List dense disablePadding>

@@ -865,17 +865,53 @@ const QMAutomationList: React.FC = () => {
                 label="기본 QM 프롬프트 사용"
               />
               {!requestOptions.useDefaultPrompt && (
-                <TextField
-                  label="Prompt"
-                  multiline
-                  rows={4}
-                  fullWidth
-                  sx={{ mt: 1 }}
-                  value={requestOptions.prompt}
-                  onChange={(e) =>
-                    setRequestOptions({ ...requestOptions, prompt: e.target.value })
-                  }
-                />
+                <Box sx={{ pl: 2, mt: 1, borderLeft: '2px solid #eee' }}>
+                  <TextField
+                    label="Prompt"
+                    multiline
+                    rows={4}
+                    fullWidth
+                    value={requestOptions.prompt}
+                    onChange={(e) =>
+                      setRequestOptions({ ...requestOptions, prompt: e.target.value })
+                    }
+                  />
+                  <Box sx={{ mt: 1 }}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={requestOptions.useEvaluationFormPrompt}
+                          onChange={(e) =>
+                            setRequestOptions({ ...requestOptions, useEvaluationFormPrompt: e.target.checked })
+                          }
+                        />
+                      }
+                      label="Evaluation Form 프롬프트 사용"
+                    />
+                    {requestOptions.useEvaluationFormPrompt && (
+                      <FormControl fullWidth sx={{ mt: 1 }}>
+                        <InputLabel>Evaluation Form</InputLabel>
+                        <Select
+                          value={requestOptions.evaluationFormId}
+                          label="Evaluation Form"
+                          onChange={(e) =>
+                            setRequestOptions({ ...requestOptions, evaluationFormId: e.target.value })
+                          }
+                          disabled={isLoadingForms}
+                        >
+                          {isLoadingForms && (
+                            <MenuItem value="" disabled>불러오는 중...</MenuItem>
+                          )}
+                          {evaluationForms.map((form) => (
+                            <MenuItem key={form.formId} value={form.formId}>
+                              {form.formName}{form.description ? ` - ${form.description}` : ''} ({form.status})
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    )}
+                  </Box>
+                </Box>
               )}
             </Box>
 
@@ -962,42 +998,6 @@ const QMAutomationList: React.FC = () => {
               }
               label="오디오 분석 사용"
             />
-
-            <Box>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={requestOptions.useEvaluationFormPrompt}
-                    onChange={(e) =>
-                      setRequestOptions({ ...requestOptions, useEvaluationFormPrompt: e.target.checked })
-                    }
-                  />
-                }
-                label="Evaluation Form 프롬프트 사용"
-              />
-              {requestOptions.useEvaluationFormPrompt && (
-                <FormControl fullWidth sx={{ mt: 1 }}>
-                  <InputLabel>Evaluation Form</InputLabel>
-                  <Select
-                    value={requestOptions.evaluationFormId}
-                    label="Evaluation Form"
-                    onChange={(e) =>
-                      setRequestOptions({ ...requestOptions, evaluationFormId: e.target.value })
-                    }
-                    disabled={isLoadingForms}
-                  >
-                    {isLoadingForms && (
-                      <MenuItem value="" disabled>불러오는 중...</MenuItem>
-                    )}
-                    {evaluationForms.map((form) => (
-                      <MenuItem key={form.formId} value={form.formId}>
-                        {form.formName}{form.description ? ` - ${form.description}` : ''} ({form.status})
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-            </Box>
 
             <FormControlLabel
               control={

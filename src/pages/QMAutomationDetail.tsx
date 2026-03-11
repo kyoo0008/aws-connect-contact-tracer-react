@@ -842,23 +842,27 @@ const QMAutomationDetail: React.FC = () => {
                           </Typography>
                         </Grid>
                         <Grid item xs={6} sm={3}>
-                          <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
-                          <Typography variant="body2">
-                            {((qmDetail.result.totalTokens || 0) - ((qmDetail.result?.inputTokens || 0) + (qmDetail.result.outputTokens || 0))).toLocaleString()}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={6} sm={3}>
                           <Typography variant="caption" color="text.secondary">사고 사용 여부</Typography>
                           <Typography variant="body2">
                             {qmDetail.input?.useThinking ? '사용' : '미사용'}
                           </Typography>
                         </Grid>
-                        <Grid item xs={6} sm={3}>
-                          <Typography variant="caption" color="text.secondary">사고 예산</Typography>
-                          <Typography variant="body2">
-                            {qmDetail.input?.thinkingBudget?.toLocaleString() || '-'}
-                          </Typography>
-                        </Grid>
+                        {qmDetail.input?.useThinking && (
+                          <>
+                            <Grid item xs={6} sm={3}>
+                              <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
+                              <Typography variant="body2">
+                                {((qmDetail.result.totalTokens || 0) - ((qmDetail.result?.inputTokens || 0) + (qmDetail.result.outputTokens || 0))).toLocaleString()}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <Typography variant="caption" color="text.secondary">사고 예산</Typography>
+                              <Typography variant="body2">
+                                {qmDetail.input?.thinkingBudget?.toLocaleString() || '-'}
+                              </Typography>
+                            </Grid>
+                          </>
+                        )}
                         <Grid item xs={6} sm={3}>
                           <Typography variant="caption" color="text.secondary">최대 토큰 허용량</Typography>
                           <Typography variant="body2">
@@ -1385,7 +1389,7 @@ const LABEL_MAP: Record<string, string> = {
   voiceProduction: '음성 표현',
   accuracy: '정확성',
   efficiency: '효율성',
-  proactivity: '적극성',
+  proactivitiness: '적극성',
   proactiveness: '적극성',
   waitManagement: '대기 관리',
   // 인사 소항목
@@ -1751,6 +1755,25 @@ const isInefficiencyDetection = (value: unknown): value is {
   // summary 내부의 고유 키 확인
   const summary = v.summary as Record<string, unknown>;
   return 'repetitionCount' in summary || 'misunderstandingCount' in summary;
+};
+
+// 소항목 criteria 구조 (새 포맷: { status, criteria1, criteria2, ... })
+interface CriteriaItem {
+  type: string;
+  events: Array<{ timestamp?: string; participant?: string; transcript?: string; reason?: string; [key: string]: unknown }>;
+}
+
+const isCriteriaSubItem = (value: unknown): value is { status: string; [key: string]: CriteriaItem | string } => {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (!('status' in v) || typeof v.status !== 'string') return false;
+  // criteria1, criteria2, ... 키가 하나 이상 있고 각각 { type, events } 구조여야 함
+  const criteriaKeys = Object.keys(v).filter(k => /^criteria\d+$/.test(k));
+  if (criteriaKeys.length === 0) return false;
+  return criteriaKeys.every(k => {
+    const c = v[k];
+    return typeof c === 'object' && c !== null && 'type' in (c as Record<string, unknown>) && 'events' in (c as Record<string, unknown>);
+  });
 };
 
 // 프로세스 준수 (processCompliance)
@@ -2177,6 +2200,71 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown; label?: strin
             정확성 문제가 감지되지 않았습니다.
           </Typography>
         )}
+      </Box>
+    );
+  }
+
+  // criteria 구조 소항목 (새 포맷: { status, criteria1, criteria2, ... })
+  if (isCriteriaSubItem(value)) {
+    const criteriaKeys = Object.keys(value).filter(k => /^criteria\d+$/.test(k)).sort();
+    return (
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {label}
+          </Typography>
+          <StatusChip status={value.status} />
+        </Stack>
+        <Stack spacing={1.5}>
+          {criteriaKeys.map((ck) => {
+            const criteria = value[ck] as CriteriaItem;
+            const events = criteria.events || [];
+            return (
+              <Paper key={ck} variant="outlined" sx={{ p: 1.5, bgcolor: 'background.paper' }}>
+                <Typography variant="body2" fontWeight={500} sx={{ mb: events.length > 0 ? 1 : 0 }}>
+                  {criteria.type}
+                </Typography>
+                {events.length > 0 ? (
+                  <Stack spacing={1}>
+                    {events.map((ev, idx) => (
+                      <Box key={idx} sx={{ pl: 1, borderLeft: '2px solid', borderColor: 'primary.light' }}>
+                        {(ev.timestamp || ev.participant) && (
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                            {ev.timestamp && (
+                              <>
+                                <Typography variant="caption" fontWeight={600} color="text.secondary">
+                                  {ev.timestamp}
+                                </Typography>
+                                <PlayAtButton time={ev.timestamp} onPlayAt={onPlayAt} />
+                              </>
+                            )}
+                            {ev.participant && (
+                              <Chip size="small" label={ev.participant} variant="outlined" sx={{ height: 18, fontSize: '0.7rem' }} />
+                            )}
+                          </Stack>
+                        )}
+                        {ev.transcript && (
+                          <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 0.5 }}>
+                            "{ev.transcript}"
+                          </Typography>
+                        )}
+                        {ev.reason && (
+                          <Typography variant="caption" color="text.secondary">
+                            {ev.reason}
+                          </Typography>
+                        )}
+                      </Box>
+                    ))}
+                  </Stack>
+                ) : (
+                  <Typography variant="caption" color="text.secondary">
+                    해당 없음
+                  </Typography>
+                )}
+              </Paper>
+            );
+          })}
+        </Stack>
       </Box>
     );
   }

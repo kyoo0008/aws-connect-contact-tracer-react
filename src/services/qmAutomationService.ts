@@ -692,7 +692,7 @@ export type EvaluationCategory =
   | 'efficiency'
   | 'greeting'
   | 'languageUse'
-  | 'proactivity'
+  | 'proactivitiness'
   | 'speed'
   | 'voiceProduction'
   | 'waitManagement';

@@ -294,20 +294,26 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
     defaultDisplayOrder = 1,
 }) => {
     const generateDefaultResultJsonFormat = (criteria: EvaluationCriterion[]) => {
-        const typeValue = criteria.length > 0
-            ? criteria.map(c => c.description).filter(Boolean).join(' | ')
-            : '평가 기준';
+        const descriptions = criteria.length > 0
+            ? criteria.map(c => c.description).filter(Boolean)
+            : ['평가 기준'];
+        const criteriaEntries = descriptions.reduce((acc, desc, i) => {
+            acc[`criteria${i + 1}`] = {
+                type: desc,
+                events: [
+                    {
+                        timestamp: '발화된 시점(mm:ss)',
+                        participant: '발화 주체(AGENT | CUSTOMER)',
+                        transcript: '발화 내용',
+                        reason: '이유',
+                    },
+                ],
+            };
+            return acc;
+        }, {} as Record<string, object>);
         return JSON.stringify({
             status: 'PASS | FAIL',
-            events: [
-                {
-                    type: typeValue,
-                    timestamp: '발화된 시점(mm:ss)',
-                    participant: '발화 주체(AGENT | CUSTOMER)',
-                    transcript: '발화 내용',
-                    reason: '이유',
-                },
-            ],
+            ...criteriaEntries,
         }, null, 2);
     };
 
@@ -330,13 +336,29 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
     const syncResultJsonFormatType = (criteria: EvaluationCriterion[], currentFormat: string) => {
         try {
             const parsed = JSON.parse(currentFormat);
-            if (parsed.events && Array.isArray(parsed.events) && parsed.events.length > 0) {
-                const typeValue = criteria.length > 0
-                    ? criteria.map(c => c.description).filter(Boolean).join(' | ')
-                    : '평가 기준';
-                parsed.events[0].type = typeValue;
-                return JSON.stringify(parsed, null, 2);
-            }
+            const descriptions = criteria.length > 0
+                ? criteria.map(c => c.description).filter(Boolean)
+                : ['평가 기준'];
+            // Remove old criteria keys
+            Object.keys(parsed).forEach(key => {
+                if (/^criteria\d+$/.test(key)) delete parsed[key];
+            });
+            // Add new criteria keys
+            descriptions.forEach((desc, i) => {
+                const key = `criteria${i + 1}`;
+                parsed[key] = {
+                    type: desc,
+                    events: [
+                        {
+                            timestamp: '발화된 시점(mm:ss)',
+                            participant: '발화 주체(AGENT | CUSTOMER)',
+                            transcript: '발화 내용',
+                            reason: '이유',
+                        },
+                    ],
+                };
+            });
+            return JSON.stringify(parsed, null, 2);
         } catch {
             // ignore parse errors, return unchanged
         }

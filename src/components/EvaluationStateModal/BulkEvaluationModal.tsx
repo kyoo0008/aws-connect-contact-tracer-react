@@ -68,7 +68,7 @@ const LABEL_MAP: Record<string, string> = {
   voiceProduction: '음성 표현',
   accuracy: '정확성',
   efficiency: '효율성',
-  proactivity: '적극성',
+  proactivitiness: '적극성',
   waitManagement: '대기 관리',
 };
 

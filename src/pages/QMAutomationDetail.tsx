@@ -152,6 +152,7 @@ const QMAutomationDetail: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [transcriptModalOpen, setTranscriptModalOpen] = useState(false);
   const [nonTalkModalOpen, setNonTalkModalOpen] = useState(false);
+  const [interruptionsModalOpen, setInterruptionsModalOpen] = useState(false);
 
   // Fetch QM Automation detail
   const {
@@ -811,36 +812,40 @@ const QMAutomationDetail: React.FC = () => {
                   )}
 
                   {/* Evaluation Meta Data */}
-                  {qmDetail.result && (
+                  {qmDetail.input && (
                     <Paper variant="outlined" sx={{ p: 2 }}>
                       <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                         평가 메타데이터
                       </Typography>
                       <Grid container spacing={2}>
-                        <Grid item xs={6} sm={3}>
-                          <Typography variant="caption" color="text.secondary">처리 시간</Typography>
-                          <Typography variant="body2">
-                            {qmDetail.result.processingTime?.toFixed(2) || '-'}s
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={6} sm={3}>
-                          <Typography variant="caption" color="text.secondary">총 토큰</Typography>
-                          <Typography variant="body2">
-                            {qmDetail.result.totalTokens?.toLocaleString() || '-'}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={6} sm={3}>
-                          <Typography variant="caption" color="text.secondary">입력 토큰</Typography>
-                          <Typography variant="body2">
-                            {qmDetail.result?.inputTokens?.toLocaleString() || '-'}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={6} sm={3}>
-                          <Typography variant="caption" color="text.secondary">출력 토큰</Typography>
-                          <Typography variant="body2">
-                            {qmDetail.result.outputTokens?.toLocaleString() || '-'}
-                          </Typography>
-                        </Grid>
+                        {qmDetail.result && (
+                          <>
+                            <Grid item xs={6} sm={3}>
+                              <Typography variant="caption" color="text.secondary">처리 시간</Typography>
+                              <Typography variant="body2">
+                                {qmDetail.result.processingTime?.toFixed(2) || '-'}s
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <Typography variant="caption" color="text.secondary">총 토큰</Typography>
+                              <Typography variant="body2">
+                                {qmDetail.result.totalTokens?.toLocaleString() || '-'}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <Typography variant="caption" color="text.secondary">입력 토큰</Typography>
+                              <Typography variant="body2">
+                                {qmDetail.result?.inputTokens?.toLocaleString() || '-'}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <Typography variant="caption" color="text.secondary">출력 토큰</Typography>
+                              <Typography variant="body2">
+                                {qmDetail.result.outputTokens?.toLocaleString() || '-'}
+                              </Typography>
+                            </Grid>
+                          </>
+                        )}
                         <Grid item xs={6} sm={3}>
                           <Typography variant="caption" color="text.secondary">사고 사용 여부</Typography>
                           <Typography variant="body2">
@@ -849,12 +854,14 @@ const QMAutomationDetail: React.FC = () => {
                         </Grid>
                         {qmDetail.input?.useThinking && (
                           <>
-                            <Grid item xs={6} sm={3}>
-                              <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
-                              <Typography variant="body2">
-                                {((qmDetail.result.totalTokens || 0) - ((qmDetail.result?.inputTokens || 0) + (qmDetail.result.outputTokens || 0))).toLocaleString()}
-                              </Typography>
-                            </Grid>
+                            {qmDetail.result && (
+                              <Grid item xs={6} sm={3}>
+                                <Typography variant="caption" color="text.secondary">Thinking 토큰</Typography>
+                                <Typography variant="body2">
+                                  {((qmDetail.result.totalTokens || 0) - ((qmDetail.result?.inputTokens || 0) + (qmDetail.result.outputTokens || 0))).toLocaleString()}
+                                </Typography>
+                              </Grid>
+                            )}
                             <Grid item xs={6} sm={3}>
                               <Typography variant="caption" color="text.secondary">사고 예산</Typography>
                               <Typography variant="body2">
@@ -931,10 +938,20 @@ const QMAutomationDetail: React.FC = () => {
                         )}
                         {qmDetail.input?.nonTalkTimeInstances && qmDetail.input.nonTalkTimeInstances.length > 0 && (
                           <Grid item xs={6} sm={3}>
-                            <Typography variant="caption" color="text.secondary">대기 구간</Typography>
+                            <Typography variant="caption" color="text.secondary">대기 구간(5000ms 이상)</Typography>
                             <Box>
                               <Button size="small" variant="outlined" onClick={() => setNonTalkModalOpen(true)}>
                                 {qmDetail.input.nonTalkTimeInstances.length}건 보기
+                              </Button>
+                            </Box>
+                          </Grid>
+                        )}
+                        {qmDetail.input?.agentInterruptions && qmDetail.input.agentInterruptions.length > 0 && (
+                          <Grid item xs={6} sm={3}>
+                            <Typography variant="caption" color="text.secondary">상담사 끼어들기 구간</Typography>
+                            <Box>
+                              <Button size="small" variant="outlined" onClick={() => setInterruptionsModalOpen(true)}>
+                                {qmDetail.input.agentInterruptions.length}건 보기
                               </Button>
                             </Box>
                           </Grid>
@@ -1005,6 +1022,39 @@ const QMAutomationDetail: React.FC = () => {
                     </DialogActions>
                   </Dialog>
 
+                  {/* AgentInterruptions Modal */}
+                  <Dialog open={interruptionsModalOpen} onClose={() => setInterruptionsModalOpen(false)} maxWidth="md" fullWidth>
+                    <DialogTitle>끊김 구간 ({qmDetail?.input?.agentInterruptions?.length}건)</DialogTitle>
+                    <DialogContent>
+                      <Stack spacing={2} sx={{ mt: 1 }}>
+                        {qmDetail?.input?.agentInterruptions?.map((item, idx) => (
+                          <Paper key={idx} variant="outlined" sx={{ p: 2 }}>
+                            <Stack spacing={1}>
+                              <Stack direction="row" spacing={1} alignItems="center">
+                                <Chip label={`#${idx + 1}`} size="small" color="primary" />
+                                {item.beginOffsetTime && item.endOffsetTime && (
+                                  <Chip label={`${item.beginOffsetTime} ~ ${item.endOffsetTime}`} size="small" variant="outlined" />
+                                )}
+                                {item.durationTime && (
+                                  <Chip label={item.durationTime} size="small" color="warning" />
+                                )}
+                              </Stack>
+                              {item.content && (
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary" display="block">내용</Typography>
+                                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>"{item.content}"</Typography>
+                                </Box>
+                              )}
+                            </Stack>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </DialogContent>
+                    <DialogActions>
+                      <Button onClick={() => setInterruptionsModalOpen(false)}>닫기</Button>
+                    </DialogActions>
+                  </Dialog>
+
                   {/* Thinking Process Section */}
                   {qmDetail.result?.thinkingText && (
                     <Box sx={{ mb: 3 }}>
@@ -1034,7 +1084,23 @@ const QMAutomationDetail: React.FC = () => {
                     <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                       평가 결과
                     </Typography>
-                    {qmDetail.result?.geminiResponse ? (
+                    {qmDetail.input?.useEvaluationFormPrompt && qmDetail.result?.functionCalls?.length ? (
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 3,
+                          bgcolor: 'grey.50',
+                          maxHeight: '60vh',
+                          overflow: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {JSON.stringify(qmDetail.result.functionCalls, null, 2)}
+                      </Paper>
+                    ) : qmDetail.result?.geminiResponse ? (
                       <Paper
                         variant="outlined"
                         sx={{
@@ -1760,10 +1826,10 @@ const isInefficiencyDetection = (value: unknown): value is {
 // 소항목 criteria 구조 (새 포맷: { status, criteria1, criteria2, ... })
 interface CriteriaItem {
   type: string;
-  events: Array<{ timestamp?: string; participant?: string; transcript?: string; reason?: string; [key: string]: unknown }>;
+  events: Array<{ timestamp?: string; participant?: string; transcript?: string; reason?: string;[key: string]: unknown }>;
 }
 
-const isCriteriaSubItem = (value: unknown): value is { status: string; [key: string]: CriteriaItem | string } => {
+const isCriteriaSubItem = (value: unknown): value is { status: string;[key: string]: CriteriaItem | string } => {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
   if (!('status' in v) || typeof v.status !== 'string') return false;

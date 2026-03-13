@@ -16,6 +16,10 @@ import {
   BulkQAFeedbackRequest,
   QMAutomationSearchResponse,
   AudioPresignedUrlResponse,
+  AgentEvaluationSummaryRequest,
+  AgentEvaluationSummaryData,
+  AgentEvaluationSummaryListData,
+  AgentEvaluationSummaryItem,
 } from '@/types/qmAutomation.types';
 import { AWSConfig } from '@/types/contact.types';
 
@@ -904,6 +908,117 @@ export async function resetEvaluationState(
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
     const errorMessage = errorData.message || errorData.error || `평가 상태 초기화 실패: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+// ============================================
+// Agent Evaluation Summary API
+// ============================================
+
+/**
+ * 상담사 평가 요약 생성 요청 (POST - Lambda 호출하여 분석)
+ * POST /api/agent/v1/qm-automation/agent-evaluation-summary
+ */
+export async function requestAgentEvaluationSummary(
+  request: AgentEvaluationSummaryRequest,
+  config: AWSConfig
+): Promise<{ success: boolean; data: AgentEvaluationSummaryData }> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation/agent-evaluation-summary`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-aws-region': config.region,
+      'x-environment': config.environment,
+      ...(config.credentials && {
+        'x-aws-credentials': JSON.stringify(config.credentials),
+      }),
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `상담사 평가 요약 생성 실패: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+/**
+ * 상담사 평가 요약 목록 조회 (GET)
+ * GET /api/agent/v1/qm-automation/agent-evaluation-summary?agentUserName=...&limit=...
+ */
+export async function getAgentEvaluationSummaryList(
+  agentUserName: string,
+  config: AWSConfig,
+  limit?: number
+): Promise<{ success: boolean; data: AgentEvaluationSummaryListData }> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const params = new URLSearchParams({ agentUserName });
+  if (limit) params.append('limit', limit.toString());
+
+  const response = await fetch(
+    `${apiBaseUrl}/api/agent/v1/qm-automation/agent-evaluation-summary?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-aws-region': config.region,
+        'x-environment': config.environment,
+        ...(config.credentials && {
+          'x-aws-credentials': JSON.stringify(config.credentials),
+        }),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `상담사 평가 요약 목록 조회 실패: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+/**
+ * 상담사 평가 요약 상세 조회 (GET)
+ * GET /api/agent/v1/qm-automation/agent-evaluation-summary/detail?agentUserName=...&createdAt=...
+ */
+export async function getAgentEvaluationSummaryDetail(
+  agentUserName: string,
+  createdAt: string,
+  config: AWSConfig
+): Promise<{ success: boolean; data: AgentEvaluationSummaryItem }> {
+  const apiBaseUrl = getApiBaseUrl(config.environment);
+
+  const params = new URLSearchParams({ agentUserName, createdAt });
+
+  const response = await fetch(
+    `${apiBaseUrl}/api/agent/v1/qm-automation/agent-evaluation-summary/detail?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-aws-region': config.region,
+        'x-environment': config.environment,
+        ...(config.credentials && {
+          'x-aws-credentials': JSON.stringify(config.credentials),
+        }),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+    const errorMessage = errorData.message || errorData.error || `상담사 평가 요약 상세 조회 실패: ${response.status}`;
     throw new Error(errorMessage);
   }
 

@@ -557,7 +557,7 @@ export async function deleteSubItem(
 export async function getQmEvaluationFormPromptPreview(
     formId: string,
     config: AWSConfig
-): Promise<{ formId: string; prompt: string }> {
+): Promise<{ formId: string; prompt: string; functionCalls?: Record<string, unknown> }> {
     const apiBaseUrl = getApiBaseUrl(config.environment);
 
     try {

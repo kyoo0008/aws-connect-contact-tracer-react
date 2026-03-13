@@ -168,6 +168,27 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
         setJsonError(null);
     };
 
+    const generateDefaultJsonFormat = (criteria: EvaluationCriterion[]) => {
+        const descriptions = criteria.length > 0
+            ? criteria.map((c: EvaluationCriterion) => c.description).filter(Boolean)
+            : ['평가 기준'];
+        const criteriaEntries = descriptions.reduce((acc: Record<string, object>, desc: string, i: number) => {
+            acc[`criteria${i + 1}`] = {
+                type: desc,
+                events: [
+                    {
+                        timestamp: `**${desc}** 평가 기준 발화된 시점(mm:ss)`,
+                        participant: `**${desc}** 평가 기준 발화 주체(AGENT | CUSTOMER)`,
+                        transcript: `**${desc}** 평가 기준 발화 내용`,
+                        reason: `**${desc}** 평가 기준 이유`,
+                    },
+                ],
+            };
+            return acc;
+        }, {});
+        return JSON.stringify({ status: 'PASS | FAIL', ...criteriaEntries }, null, 2);
+    };
+
     const handleSubmit = () => {
         try {
             const parsed = JSON.parse(jsonInput);
@@ -180,6 +201,14 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                 if (!cat.categoryId || !cat.categoryName) {
                     setJsonError('Each category must have "categoryId" and "categoryName"');
                     return;
+                }
+                // Fill in default resultJsonFormat for subItems with empty value
+                if (Array.isArray(cat.subItems)) {
+                    for (const si of cat.subItems) {
+                        if (!si.resultJsonFormat?.trim()) {
+                            si.resultJsonFormat = generateDefaultJsonFormat(si.evaluationCriteria || []);
+                        }
+                    }
                 }
             }
             setJsonError(null);
@@ -302,10 +331,10 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                 type: desc,
                 events: [
                     {
-                        timestamp: '발화된 시점(mm:ss)',
-                        participant: '발화 주체(AGENT | CUSTOMER)',
-                        transcript: '발화 내용',
-                        reason: '이유',
+                        timestamp: `**${desc}** 평가 기준 발화된 시점(mm:ss)`,
+                        participant: `**${desc}** 평가 기준 발화 주체(AGENT | CUSTOMER)`,
+                        transcript: `**${desc}** 평가 기준 발화 내용`,
+                        reason: `**${desc}** 평가 기준 이유`,
                     },
                 ],
             };
@@ -350,10 +379,10 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                     type: desc,
                     events: [
                         {
-                            timestamp: '발화된 시점(mm:ss)',
-                            participant: '발화 주체(AGENT | CUSTOMER)',
-                            transcript: '발화 내용',
-                            reason: '이유',
+                            timestamp: `**${desc}** 평가 기준 발화된 시점(mm:ss)`,
+                            participant: `**${desc}** 평가 기준 발화 주체(AGENT | CUSTOMER)`,
+                            transcript: `**${desc}** 평가 기준 발화 내용`,
+                            reason: `**${desc}** 평가 기준 이유`,
                         },
                     ],
                 };
@@ -507,7 +536,7 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                     </Button>
 
                     {/* Result JSON Format */}
-                    <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2 }}>
+                    {/* <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2 }}>
                         Result JSON Format
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
@@ -532,7 +561,7 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                                 fontSize: '0.85rem',
                             },
                         }}
-                    />
+                    /> */}
 
                 </Stack>
             </DialogContent>
@@ -854,7 +883,7 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                     )}
 
                                     {/* Result JSON Format Display */}
-                                    <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
+                                    {/* <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
                                         <Typography variant="caption" color="primary" fontWeight={600} display="block">
                                             Result JSON Format:
                                         </Typography>
@@ -873,7 +902,7 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                                 {subItem.resultJsonFormat}
                                             </Paper>
                                         )}
-                                    </Box>
+                                    </Box> */}
 
                                 </Collapse>
                                 <Divider />
@@ -885,17 +914,19 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
             </Collapse>
 
             {/* SubItem Dialog */}
-            {openSubItemDialog && (
-                <SubItemDialog
-                    open={openSubItemDialog}
-                    onClose={() => setOpenSubItemDialog(false)}
-                    onSubmit={handleSaveSubItem}
-                    initialData={editingSubItem || undefined}
-                    isLoading={subItemMutation.isPending}
-                    defaultDisplayOrder={(subItems?.length || 0) + 1}
-                />
-            )}
-        </Card>
+            {
+                openSubItemDialog && (
+                    <SubItemDialog
+                        open={openSubItemDialog}
+                        onClose={() => setOpenSubItemDialog(false)}
+                        onSubmit={handleSaveSubItem}
+                        initialData={editingSubItem || undefined}
+                        isLoading={subItemMutation.isPending}
+                        defaultDisplayOrder={(subItems?.length || 0) + 1}
+                    />
+                )
+            }
+        </Card >
     );
 };
 
@@ -1077,6 +1108,7 @@ const QMEvaluationFormDetail: React.FC = () => {
     // Prompt Preview
     const [openPromptPreview, setOpenPromptPreview] = useState(false);
     const [promptPreviewText, setPromptPreviewText] = useState('');
+    const [promptPreviewFunctionCalls, setPromptPreviewFunctionCalls] = useState<Record<string, unknown> | null>(null);
     const [promptPreviewLoading, setPromptPreviewLoading] = useState(false);
 
     const handleOpenPromptPreview = async () => {
@@ -1085,8 +1117,10 @@ const QMEvaluationFormDetail: React.FC = () => {
         try {
             const result = await getQmEvaluationFormPromptPreview(formId!, config);
             setPromptPreviewText(result.prompt);
+            setPromptPreviewFunctionCalls(result.functionCalls ?? null);
         } catch (error) {
             setPromptPreviewText(`오류가 발생했습니다: ${(error as Error).message}`);
+            setPromptPreviewFunctionCalls(null);
         } finally {
             setPromptPreviewLoading(false);
         }
@@ -1349,22 +1383,46 @@ const QMEvaluationFormDetail: React.FC = () => {
                             <CircularProgress />
                         </Box>
                     ) : (
-                        <Paper
-                            variant="outlined"
-                            sx={{
-                                p: 2,
-                                mt: 1,
-                                bgcolor: 'grey.50',
-                                fontFamily: 'monospace',
-                                fontSize: '0.8rem',
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-word',
-                                maxHeight: '60vh',
-                                overflowY: 'auto',
-                            }}
-                        >
-                            {promptPreviewText}
-                        </Paper>
+                        <>
+                            <Paper
+                                variant="outlined"
+                                sx={{
+                                    p: 2,
+                                    mt: 1,
+                                    bgcolor: 'grey.50',
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.8rem',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word',
+                                    maxHeight: '60vh',
+                                    overflowY: 'auto',
+                                }}
+                            >
+                                {promptPreviewText}
+                            </Paper>
+                            {promptPreviewFunctionCalls && (
+                                <>
+                                    <Typography variant="subtitle2" sx={{ mt: 2, mb: 0.5, fontWeight: 600 }}>
+                                        Function Calls
+                                    </Typography>
+                                    <Paper
+                                        variant="outlined"
+                                        sx={{
+                                            p: 2,
+                                            bgcolor: 'grey.50',
+                                            fontFamily: 'monospace',
+                                            fontSize: '0.8rem',
+                                            whiteSpace: 'pre-wrap',
+                                            wordBreak: 'break-word',
+                                            maxHeight: '40vh',
+                                            overflowY: 'auto',
+                                        }}
+                                    >
+                                        {JSON.stringify(promptPreviewFunctionCalls, null, 2)}
+                                    </Paper>
+                                </>
+                            )}
+                        </>
                     )}
                 </DialogContent>
                 <DialogActions>

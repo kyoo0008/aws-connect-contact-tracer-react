@@ -19,6 +19,7 @@ import QMAutomationDetail from './pages/QMAutomationDetail';
 import QMEvaluationFormList from './pages/QMEvaluationFormList';
 import QMEvaluationFormDetail from './pages/QMEvaluationFormDetail';
 import QMFlowXRayViewer from './pages/QMFlowXRayViewer';
+import QMAgentSummary from './pages/QMAgentSummary';
 import GeminiPlayground from './pages/GeminiPlayground';
 import Help from './pages/Help';
 
@@ -207,6 +208,7 @@ function App() {
                       <Route path="/contact-flow/:contactId/flow/:flowName/module/:moduleName" element={<ModuleDetailViewer />} />
                       <Route path="/qm-automation" element={<QMAutomationList />} />
                       <Route path="/qm-automation/detail/:requestId" element={<QMAutomationDetail />} />
+                      <Route path="/qm-agent-summary" element={<QMAgentSummary />} />
                       <Route path="/qm-evaluation-form" element={<QMEvaluationFormList />} />
                       <Route path="/qm-evaluation-form/:formId" element={<QMEvaluationFormDetail />} />
                       <Route path="/gemini-playground" element={<GeminiPlayground />} />

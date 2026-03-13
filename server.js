@@ -1620,6 +1620,225 @@ app.post('/api/agent/v1/qm-automation/qa-feedback', async (req, res) => {
 });
 
 /**
+ * 상담사 평가 요약 (Agent Evaluation Summary)
+ * POST /api/agent/v1/qm-automation/agent-evaluation-summary
+ * Body: { agentUserName, limit? }
+ * Headers: x-aws-credentials, x-aws-region, x-environment
+ */
+app.post('/api/agent/v1/qm-automation/agent-evaluation-summary', async (req, res) => {
+  try {
+    const requestBody = req.body;
+    const { agentUserName } = requestBody;
+
+    if (!agentUserName) {
+      return res.status(400).json({ error: 'agentUserName is required' });
+    }
+
+    if (requestBody.limit != null && (requestBody.limit < 1 || requestBody.limit > 100)) {
+      return res.status(400).json({ error: 'limit must be between 1 and 100' });
+    }
+
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req);
+
+    const lambdaClient = new LambdaClient({
+      region,
+      credentials,
+    });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    const payload = {
+      httpMethod: 'POST',
+      path: '/api/agent/v1/qm-automation/agent-evaluation-summary',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Request failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode: statusCode
+        });
+      }
+
+      res.status(statusCode).json(result);
+    }
+  } catch (error) {
+    console.error('Error invoking Agent Evaluation Summary Lambda:', error);
+    res.status(500).json({ error: 'Failed to get agent evaluation summary', message: error.message });
+  }
+});
+
+/**
+ * 상담사 평가 요약 목록 조회 (GET)
+ * GET /api/agent/v1/qm-automation/agent-evaluation-summary
+ * Query: agentUserName (required), limit (optional)
+ */
+app.get('/api/agent/v1/qm-automation/agent-evaluation-summary', async (req, res) => {
+  try {
+    const { agentUserName, limit } = req.query;
+
+    if (!agentUserName) {
+      return res.status(400).json({ error: 'agentUserName is required' });
+    }
+
+    if (limit != null && (Number(limit) < 1 || Number(limit) > 100)) {
+      return res.status(400).json({ error: 'limit must be between 1 and 100' });
+    }
+
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req);
+
+    const lambdaClient = new LambdaClient({ region, credentials });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    const queryStringParameters = { agentUserName };
+    if (limit) queryStringParameters.limit = limit;
+
+    const payload = {
+      httpMethod: 'GET',
+      path: '/api/agent/v1/qm-automation/agent-evaluation-summary',
+      headers: { 'Content-Type': 'application/json' },
+      queryStringParameters,
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode,
+        });
+      }
+      res.status(statusCode).json(responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Request failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode,
+        });
+      }
+      res.status(statusCode).json(result);
+    }
+  } catch (error) {
+    console.error('Error invoking Agent Evaluation Summary List Lambda:', error);
+    res.status(500).json({ error: 'Failed to get agent evaluation summary list', message: error.message });
+  }
+});
+
+/**
+ * 상담사 평가 요약 상세 조회 (GET)
+ * GET /api/agent/v1/qm-automation/agent-evaluation-summary/detail
+ * Query: agentUserName (required), createdAt (required)
+ */
+app.get('/api/agent/v1/qm-automation/agent-evaluation-summary/detail', async (req, res) => {
+  try {
+    const { agentUserName, createdAt } = req.query;
+
+    if (!agentUserName) {
+      return res.status(400).json({ error: 'agentUserName is required' });
+    }
+    if (!createdAt) {
+      return res.status(400).json({ error: 'createdAt is required' });
+    }
+
+    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+    const environment = req.headers['x-environment'] || 'dev';
+    const credentials = await getCredentialsFromRequest(req);
+
+    const lambdaClient = new LambdaClient({ region, credentials });
+
+    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    const payload = {
+      httpMethod: 'GET',
+      path: '/api/agent/v1/qm-automation/agent-evaluation-summary/detail',
+      headers: { 'Content-Type': 'application/json' },
+      queryStringParameters: { agentUserName, createdAt },
+    };
+
+    const command = new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'RequestResponse',
+      Payload: JSON.stringify(payload),
+    });
+
+    const response = await lambdaClient.send(command);
+    const result = JSON.parse(Buffer.from(response.Payload).toString());
+    const statusCode = result.statusCode || 200;
+
+    if (result.body) {
+      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: responseData.error || responseData.message || 'Request failed',
+          message: responseData.error || responseData.message || 'Unknown error',
+          statusCode,
+        });
+      }
+      res.status(statusCode).json(responseData);
+    } else {
+      if (statusCode >= 400) {
+        return res.status(statusCode).json({
+          error: result.error || result.message || 'Request failed',
+          message: result.error || result.message || 'Unknown error',
+          statusCode,
+        });
+      }
+      res.status(statusCode).json(result);
+    }
+  } catch (error) {
+    console.error('Error invoking Agent Evaluation Summary Detail Lambda:', error);
+    res.status(500).json({ error: 'Failed to get agent evaluation summary detail', message: error.message });
+  }
+});
+
+/**
  * 벌크 상담사 액션 API (확인/이의제기 일괄 처리)
  * POST /api/agent/v1/qm-automation/bulk-action
  * Body: { requestId, actions: [{ category, action, reason? }], userId, userName? }
@@ -2109,6 +2328,9 @@ app.listen(PORT, () => {
 - POST /api/agent/v1/qm-automation/qa-feedback                  - QA 피드백 (accept: ACCEPTED, reject: REJECTED)
 - POST /api/agent/v1/qm-automation/bulk-action                  - 벌크 상담사/QA 액션 (확인/이의제기 or 승인/거절 일괄 처리)
 - POST /api/agent/v1/qm-automation/reset-evaluation-state       - 평가 상태 초기화 (→ GEMINI_EVAL_COMPLETED)
+- POST /api/agent/v1/qm-automation/agent-evaluation-summary    - 상담사 평가 요약 생성 (분석 요청)
+- GET  /api/agent/v1/qm-automation/agent-evaluation-summary    - 상담사 평가 요약 목록 조회
+- GET  /api/agent/v1/qm-automation/agent-evaluation-summary/detail - 상담사 평가 요약 상세 조회
 
 [Health]
 - GET  /health                   - Health check

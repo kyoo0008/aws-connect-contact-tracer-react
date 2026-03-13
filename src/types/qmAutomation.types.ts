@@ -169,6 +169,15 @@ export interface QMAutomationInput {
     EndOffsetMillis: number;
     DurationMillis: number;
   }>;
+  /**
+   * 대화 중 끊김(Interruption) 항목
+   */
+  agentInterruptions?: Array<{
+    durationTime?: string;
+    content?: string;
+    beginOffsetTime?: string;
+    endOffsetTime?: string;
+  }>;
   inputTokens?: number;
   toolResult?: {
     functionCalls?: FunctionCall[];
@@ -380,4 +389,50 @@ export interface BulkQAFeedbackRequest {
   actions: BulkQAFeedbackItem[];
   userId: string;
   userName?: string;
+}
+
+// ============================================
+// Agent Evaluation Summary 관련 타입
+// ============================================
+
+export interface AgentEvaluationSummaryRequest {
+  agentUserName: string;
+  limit?: number;
+}
+
+export interface AgentEvaluationSummaryCategoryStats {
+  achievementRate: number;
+  pass: number;
+  warning: number;
+  fail: number;
+  total: number;
+  goodPoints: string;
+  improvementPoints: string;
+}
+
+export interface AgentEvaluationSummaryData {
+  agentUserName: string;
+  evaluationCount: number;
+  averageFinalScore?: number | null;
+  overallComment?: string;
+  message?: string;
+  categories?: Record<string, AgentEvaluationSummaryCategoryStats>;
+}
+
+export interface AgentEvaluationSummaryItem {
+  pk: string;
+  sk: string;
+  agentUserName: string;
+  evaluationCount: number;
+  averageFinalScore: number | null;
+  overallComment: string;
+  categories: Record<string, AgentEvaluationSummaryCategoryStats>;
+  geminiModel: string;
+  createdAt: string;
+}
+
+export interface AgentEvaluationSummaryListData {
+  agentUserName: string;
+  total: number;
+  items: AgentEvaluationSummaryItem[];
 }

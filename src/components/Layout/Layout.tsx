@@ -36,6 +36,7 @@ import {
   ChevronRight as ChevronRightIcon,
   Assignment as FormIcon,
   SmartToy as GeminiIcon,
+  Summarize as SummarizeIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -88,12 +89,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
     { text: 'Contact Flow', icon: <FlowIcon />, path: '/contact-flow' },
     { text: 'QM Evaluation', icon: <LogsIcon />, path: '/qm-automation' },
+    { text: 'Agent Summary', icon: <SummarizeIcon />, path: '/qm-agent-summary' },
     { text: 'QM Forms', icon: <FormIcon />, path: '/qm-evaluation-form' },
     { text: 'Gemini Playground', icon: <GeminiIcon />, path: '/gemini-playground' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
   ].filter(item => {
     if (role === 'QA_DEV') {
-      return ['QM Evaluation', 'Gemini Playground', 'Settings'].includes(item.text);
+      return ['QM Evaluation', 'Agent Summary', 'Gemini Playground', 'Settings'].includes(item.text);
     }
     return true;
   });

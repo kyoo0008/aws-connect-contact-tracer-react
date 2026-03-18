@@ -44,55 +44,174 @@ app.use((req, res, next) => {
 // ========================================
 
 /**
- * credentials 파싱 및 expiration Date 변환
+ * credentials 헤더 파싱 및 expiration Date 변환
  */
 function parseCredentials(credentialsHeader) {
-  if (!credentialsHeader) {
-    return null;
-  }
+  if (!credentialsHeader) return null;
 
   const credentials = JSON.parse(credentialsHeader);
 
-  // Handle both lowercase 'expiration' and uppercase 'Expiration'
   if (credentials.expiration && typeof credentials.expiration === 'string') {
     credentials.expiration = new Date(credentials.expiration);
   } else if (credentials.Expiration && typeof credentials.Expiration === 'string') {
     credentials.expiration = new Date(credentials.Expiration);
-    delete credentials.Expiration; // Remove uppercase version
+    delete credentials.Expiration;
   }
 
   return credentials;
 }
 
-// ========================================
-// API Endpoints
-// ========================================
+/**
+ * request body에서 credentials 파싱 (expiration을 Date로 변환)
+ */
+function parseCredentialsFromBody(rawCredentials) {
+  return {
+    accessKeyId: rawCredentials.accessKeyId,
+    secretAccessKey: rawCredentials.secretAccessKey,
+    sessionToken: rawCredentials.sessionToken,
+    expiration: rawCredentials.expiration
+      ? (rawCredentials.expiration instanceof Date
+        ? rawCredentials.expiration
+        : new Date(rawCredentials.expiration))
+      : undefined
+  };
+}
 
 /**
- * AWS SSO 자격 증명을 가져오는 엔드포인트
- *
- * POST /api/aws/credentials
- * Body: { profile?: string }
- *
- * Response: { accessKeyId, secretAccessKey, sessionToken }
+ * 요청 헤더에서 credentials 가져오기 또는 기본 provider 사용
  */
+async function getCredentialsFromRequest(req) {
+  const credentialsHeader = req.headers['x-aws-credentials'];
+
+  if (credentialsHeader) {
+    return parseCredentials(credentialsHeader);
+  }
+
+  const creds = await defaultProvider()();
+  if (creds.expiration && typeof creds.expiration === 'string') {
+    creds.expiration = new Date(creds.expiration);
+  } else if (creds.Expiration && typeof creds.Expiration === 'string') {
+    creds.expiration = new Date(creds.Expiration);
+    delete creds.Expiration;
+  }
+  return creds;
+}
+
+/**
+ * 요청 헤더에서 region, environment, credentials 공통 추출
+ */
+async function getRequestContext(req) {
+  const region = req.headers['x-aws-region'] || 'ap-northeast-2';
+  const environment = req.headers['x-environment'] || 'dev';
+  const credentials = await getCredentialsFromRequest(req);
+  const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+  return { region, environment, credentials, prefix };
+}
+
+/**
+ * Lambda ALB Proxy 호출 및 응답 처리 공통 함수
+ */
+async function invokeLambdaProxy(lambdaClient, functionName, albPayload) {
+  const command = new InvokeCommand({
+    FunctionName: functionName,
+    InvocationType: 'RequestResponse',
+    Payload: JSON.stringify(albPayload),
+  });
+
+  const response = await lambdaClient.send(command);
+  const result = JSON.parse(Buffer.from(response.Payload).toString());
+
+  if (result.errorMessage) {
+    return { statusCode: 502, data: { error: 'Lambda Execution Failed', message: result.errorMessage } };
+  }
+
+  const statusCode = result.statusCode || 200;
+  let responseData = result.body;
+
+  if (responseData && typeof responseData === 'string') {
+    try { responseData = JSON.parse(responseData); } catch { /* keep as-is */ }
+  }
+
+  if (statusCode >= 400) {
+    const errorBody = typeof responseData === 'object'
+      ? { error: responseData?.error || responseData?.message || 'Request failed', message: responseData?.error || responseData?.message || 'Unknown error', statusCode }
+      : { error: 'Request failed', message: responseData || 'Unknown error', statusCode };
+    return { statusCode, data: errorBody };
+  }
+
+  // 성공: responseData.data가 있으면 그것을, 아니면 responseData 전체 반환
+  const successData = (responseData && typeof responseData === 'object' && responseData.data !== undefined)
+    ? responseData.data
+    : (responseData || result.data || result);
+
+  return { statusCode, data: successData };
+}
+
+/**
+ * CloudWatch Logs Insights 쿼리 실행 및 결과 대기
+ */
+async function runCloudWatchQuery(logsClient, { logGroupName, queryString, startTime, endTime }) {
+  const startQueryCommand = new StartQueryCommand({
+    logGroupName,
+    queryString,
+    startTime: Math.floor(startTime.getTime() / 1000),
+    endTime: Math.floor(endTime.getTime() / 1000),
+  });
+
+  const { queryId } = await logsClient.send(startQueryCommand);
+
+  let status = 'Running';
+  let results;
+
+  while (status === 'Running' || status === 'Scheduled') {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const response = await logsClient.send(new GetQueryResultsCommand({ queryId }));
+    status = response.status;
+    results = response.results;
+  }
+
+  return { status, results };
+}
+
+/**
+ * CloudWatch 결과에서 contactId 추출 및 중복 제거
+ */
+function extractUniqueContacts(results, extractFn) {
+  const seen = new Set();
+  const contacts = [];
+
+  for (const result of (results || [])) {
+    const item = extractFn(result);
+    if (item?.contactId && !seen.has(item.contactId)) {
+      seen.add(item.contactId);
+      contacts.push(item);
+    }
+  }
+
+  return contacts;
+}
+
+/**
+ * AWS config 파일 읽기
+ */
+function readAwsConfig() {
+  const awsConfigPath = path.join(os.homedir(), '.aws', 'config');
+  if (!fs.existsSync(awsConfigPath)) return null;
+  return ini.parse(fs.readFileSync(awsConfigPath, 'utf-8'));
+}
+
+// ========================================
+// AWS Credentials Endpoints
+// ========================================
+
 app.post('/api/aws/credentials', async (req, res) => {
   try {
     const { profile } = req.body;
 
-    let credentialProvider;
+    const credentialProvider = profile
+      ? (console.log(`Fetching credentials for profile: ${profile}`), fromSSO({ profile }))
+      : (console.log('Fetching credentials from default provider chain'), defaultProvider());
 
-    if (profile) {
-      // 특정 프로필 사용
-      console.log(`Fetching credentials for profile: ${profile}`);
-      credentialProvider = fromSSO({ profile });
-    } else {
-      // 기본 credential chain 사용
-      console.log('Fetching credentials from default provider chain');
-      credentialProvider = defaultProvider();
-    }
-
-    // 자격 증명 가져오기
     const credentials = await credentialProvider();
 
     res.json({
@@ -113,40 +232,23 @@ app.post('/api/aws/credentials', async (req, res) => {
   }
 });
 
-/**
- * 자동으로 AWS SSO 자격 증명을 가져오는 엔드포인트
- *
- * GET /api/aws/auto-credentials
- *
- * Response: { credentials, profile, region }
- */
 app.get('/api/aws/auto-credentials', async (req, res) => {
   try {
-    // AWS config 파일에서 기본 프로필 찾기
-    const awsConfigPath = path.join(os.homedir(), '.aws', 'config');
-
-    if (!fs.existsSync(awsConfigPath)) {
+    const config = readAwsConfig();
+    if (!config) {
       return res.status(400).json({ error: 'AWS config file not found' });
     }
 
-    const configContent = fs.readFileSync(awsConfigPath, 'utf-8');
-    const config = ini.parse(configContent);
-
-    // SSO session 존재 여부 확인
     const hasSsoSession = Object.keys(config).some(key => key.startsWith('sso-session '));
 
-    // 기본 프로필 또는 첫 번째 SSO 프로필 찾기
     let selectedProfile = null;
     let selectedRegion = 'ap-northeast-2';
 
     for (const [key, value] of Object.entries(config)) {
-      if (key.startsWith('profile ')) {
-        // sso_start_url이 프로필에 직접 있거나, sso-session이 config에 존재하면 SSO 프로필로 간주
-        if (value.sso_start_url || hasSsoSession) {
-          selectedProfile = key.replace('profile ', '');
-          selectedRegion = value.region || selectedRegion;
-          break;
-        }
+      if (key.startsWith('profile ') && (value.sso_start_url || hasSsoSession)) {
+        selectedProfile = key.replace('profile ', '');
+        selectedRegion = value.region || selectedRegion;
+        break;
       }
     }
 
@@ -154,9 +256,7 @@ app.get('/api/aws/auto-credentials', async (req, res) => {
       return res.status(401).json({ error: 'No SSO profile found. Ensure your ~/.aws/config has [sso-session] or profiles with sso_start_url.' });
     }
 
-    // SSO 자격 증명 가져오기
-    const credentialProvider = fromSSO({ profile: selectedProfile });
-    const credentials = await credentialProvider();
+    const credentials = await fromSSO({ profile: selectedProfile })();
 
     res.json({
       credentials: {
@@ -172,88 +272,53 @@ app.get('/api/aws/auto-credentials', async (req, res) => {
     });
   } catch (error) {
     console.error('Error auto-fetching credentials:', error);
-    res.status(500).json({
-      error: 'Failed to auto-fetch credentials',
-      message: error.message,
-    });
+    res.status(500).json({ error: 'Failed to auto-fetch credentials', message: error.message });
   }
 });
 
-/**
- * 로컬 AWS 설정에서 SSO 프로필 목록을 가져오는 엔드포인트
- *
- * GET /api/aws/profiles
- *
- * Response: { profiles: [{ name, region, sso_start_url, sso_account_id, isLoggedIn }] }
- */
 app.get('/api/aws/profiles', async (req, res) => {
   try {
-    const awsConfigPath = path.join(os.homedir(), '.aws', 'config');
-
-    if (!fs.existsSync(awsConfigPath)) {
+    const config = readAwsConfig();
+    if (!config) {
       return res.json({ profiles: [] });
     }
 
-    const configContent = fs.readFileSync(awsConfigPath, 'utf-8');
-    const config = ini.parse(configContent);
-
-    const profiles = [];
-
-    // SSO session 존재 여부 확인
     const hasSsoSession = Object.keys(config).some(key => key.startsWith('sso-session '));
 
-    // SSO 캐시 파일에서 유효한 access token이 있는지 확인 (credential fetch 없이)
     const checkSsoLoginStatus = (profileConfig) => {
       try {
         const ssoCachePath = path.join(os.homedir(), '.aws', 'sso', 'cache');
         if (!fs.existsSync(ssoCachePath)) return false;
 
-        const ssoStartUrl = profileConfig.sso_start_url;
-        // sso_session을 사용하는 경우 sso-session 섹션에서 start_url 가져오기
-        let startUrl = ssoStartUrl;
+        let startUrl = profileConfig.sso_start_url;
         if (!startUrl && profileConfig.sso_session) {
           const sessionKey = `sso-session ${profileConfig.sso_session}`;
-          if (config[sessionKey]) {
-            startUrl = config[sessionKey].sso_start_url;
-          }
+          if (config[sessionKey]) startUrl = config[sessionKey].sso_start_url;
         }
-
         if (!startUrl) return false;
 
         const cacheFiles = fs.readdirSync(ssoCachePath).filter(f => f.endsWith('.json'));
         for (const file of cacheFiles) {
           try {
             const cacheContent = JSON.parse(fs.readFileSync(path.join(ssoCachePath, file), 'utf-8'));
-            if (cacheContent.startUrl === startUrl && cacheContent.accessToken) {
-              const expiresAt = new Date(cacheContent.expiresAt);
-              if (expiresAt > new Date()) {
-                return true;
-              }
+            if (cacheContent.startUrl === startUrl && cacheContent.accessToken && new Date(cacheContent.expiresAt) > new Date()) {
+              return true;
             }
-          } catch {
-            // skip invalid cache file
-          }
+          } catch { /* skip */ }
         }
         return false;
-      } catch {
-        return false;
-      }
+      } catch { return false; }
     };
 
+    const profiles = [];
     for (const [key, value] of Object.entries(config)) {
-      // SSO 프로필 필터링: sso_start_url이 직접 있거나, sso-session이 config에 존재하는 경우
       if (key.startsWith('profile ') && (value.sso_start_url || hasSsoSession)) {
-        const profileName = key.replace('profile ', '');
-
-        // SSO 캐시 파일로 로그인 상태 확인 (credential fetch 없이 빠르게 확인)
-        const isLoggedIn = checkSsoLoginStatus(value);
-
         profiles.push({
-          name: profileName,
+          name: key.replace('profile ', ''),
           region: value.region || 'ap-northeast-2',
           sso_start_url: value.sso_start_url,
           sso_account_id: value.sso_account_id,
-          isLoggedIn,
+          isLoggedIn: checkSsoLoginStatus(value),
         });
       }
     }
@@ -265,31 +330,19 @@ app.get('/api/aws/profiles', async (req, res) => {
   }
 });
 
-/**
- * AWS 프로필에서 리전 정보를 가져오는 엔드포인트
- *
- * POST /api/aws/region
- * Body: { profile?: string }
- *
- * Response: { region }
- */
 app.post('/api/aws/region', async (req, res) => {
   try {
     const { profile } = req.body;
-    const awsConfigPath = path.join(os.homedir(), '.aws', 'config');
+    const config = readAwsConfig();
 
-    if (!fs.existsSync(awsConfigPath)) {
+    if (!config) {
       return res.status(404).json({ error: 'AWS config file not found' });
     }
 
-    const configContent = fs.readFileSync(awsConfigPath, 'utf-8');
-    const config = ini.parse(configContent);
-
-    let region = 'ap-northeast-2'; // default
-
+    let region = 'ap-northeast-2';
     if (profile) {
       const profileKey = `profile ${profile}`;
-      if (config[profileKey] && config[profileKey].region) {
+      if (config[profileKey]?.region) {
         region = config[profileKey].region;
       }
     }
@@ -301,68 +354,33 @@ app.post('/api/aws/region', async (req, res) => {
   }
 });
 
-/**
- * Customer 검색 (DynamoDB)
- *
- * POST /api/search/customer
- * Body: {
- *   searchValue: string,
- *   searchType: 'phone' | 'profileId' | 'skypass',
- *   credentials: { accessKeyId, secretAccessKey, sessionToken },
- *   region: string,
- *   environment: string
- * }
- */
+// ========================================
+// Search APIs
+// ========================================
+
 app.post('/api/search/customer', async (req, res) => {
   try {
     const { searchValue, searchType, credentials: rawCredentials, region, environment } = req.body;
+    const credentials = parseCredentialsFromBody(rawCredentials);
 
-    // Parse credentials to ensure expiration is a Date object
-    const credentials = {
-      accessKeyId: rawCredentials.accessKeyId,
-      secretAccessKey: rawCredentials.secretAccessKey,
-      sessionToken: rawCredentials.sessionToken,
-      expiration: rawCredentials.expiration
-        ? (rawCredentials.expiration instanceof Date
-          ? rawCredentials.expiration
-          : new Date(rawCredentials.expiration))
-        : undefined
+    const dynamoClient = new DynamoDBClient({ region, credentials });
+
+    const gsiMap = {
+      phone:     { gsi: 'gsi3', keyName: 'gsi3Pk', prefix: 'contact#phoneNumber#' },
+      profileId: { gsi: 'gsi1', keyName: 'gsi1Pk', prefix: 'contact#profileId#' },
+      skypass:   { gsi: 'gsi9', keyName: 'gsi9Pk', prefix: 'contact#skypassNumber#' },
     };
 
-    const dynamoClient = new DynamoDBClient({
-      region,
-      credentials,
-    });
-
-    let gsi, keyName, keyValue;
-
-    switch (searchType) {
-      case 'phone':
-        gsi = 'gsi3';
-        keyName = 'gsi3Pk';
-        keyValue = `contact#phoneNumber#${searchValue}`;
-        break;
-      case 'profileId':
-        gsi = 'gsi1';
-        keyName = 'gsi1Pk';
-        keyValue = `contact#profileId#${searchValue}`;
-        break;
-      case 'skypass':
-        gsi = 'gsi9';
-        keyName = 'gsi9Pk';
-        keyValue = `contact#skypassNumber#${searchValue}`;
-        break;
-      default:
-        return res.status(400).json({ error: 'Invalid search type' });
+    const gsiConfig = gsiMap[searchType];
+    if (!gsiConfig) {
+      return res.status(400).json({ error: 'Invalid search type' });
     }
 
     const command = new QueryCommand({
       TableName: `aicc-${environment}-ddb-agent-contact`,
-      IndexName: `aicc-${environment}-ddb-agent-contact-${gsi}`,
-      KeyConditionExpression: `${keyName} = :value`,
-      ExpressionAttributeValues: {
-        ':value': { S: keyValue },
-      },
+      IndexName: `aicc-${environment}-ddb-agent-contact-${gsiConfig.gsi}`,
+      KeyConditionExpression: `${gsiConfig.keyName} = :value`,
+      ExpressionAttributeValues: { ':value': { S: `${gsiConfig.prefix}${searchValue}` } },
       ScanIndexForward: false,
       Limit: 20,
     });
@@ -384,65 +402,27 @@ app.post('/api/search/customer', async (req, res) => {
   }
 });
 
-/**
- * Agent 검색 (AWS Connect)
- *
- * POST /api/search/agent
- * Body: {
- *   searchValue: string,
- *   searchType: 'uuid' | 'email' | 'name',
- *   credentials: { accessKeyId, secretAccessKey, sessionToken },
- *   region: string,
- *   instanceId: string,
- *   environment: string
- * }
- */
 app.post('/api/search/agent', async (req, res) => {
   try {
     const { searchValue, searchType, credentials: rawCredentials, region, instanceId, environment } = req.body;
+    const credentials = parseCredentialsFromBody(rawCredentials);
 
-    // Parse credentials to ensure expiration is a Date object
-    const credentials = {
-      accessKeyId: rawCredentials.accessKeyId,
-      secretAccessKey: rawCredentials.secretAccessKey,
-      sessionToken: rawCredentials.sessionToken,
-      expiration: rawCredentials.expiration
-        ? (rawCredentials.expiration instanceof Date
-          ? rawCredentials.expiration
-          : new Date(rawCredentials.expiration))
-        : undefined
-    };
-
-    const connectClient = new ConnectClient({
-      region,
-      credentials,
-    });
+    const connectClient = new ConnectClient({ region, credentials });
 
     let agentUsername;
 
     if (searchType === 'uuid') {
-      // UUID로 직접 조회
-      const command = new DescribeUserCommand({
-        InstanceId: instanceId,
-        UserId: searchValue,
-      });
-      const response = await connectClient.send(command);
+      const response = await connectClient.send(new DescribeUserCommand({ InstanceId: instanceId, UserId: searchValue }));
       agentUsername = response.User?.Username;
     } else if (searchType === 'email') {
       agentUsername = searchValue;
     } else if (searchType === 'name') {
-      // 이름으로 검색
-      const command = new SearchUsersCommand({
-        InstanceId: instanceId,
-      });
-      const response = await connectClient.send(command);
-
+      const response = await connectClient.send(new SearchUsersCommand({ InstanceId: instanceId }));
       const user = response.Users?.find(u => {
         const fullName = `${u.IdentityInfo?.LastName}${u.IdentityInfo?.FirstName}`;
         const fullNameEng = `${u.IdentityInfo?.FirstName} ${u.IdentityInfo?.LastName}`;
         return fullName === searchValue || fullNameEng === searchValue;
       });
-
       agentUsername = user?.Username;
     }
 
@@ -450,19 +430,13 @@ app.post('/api/search/agent', async (req, res) => {
       return res.status(404).json({ error: 'Agent not found' });
     }
 
-    // DynamoDB에서 agent의 contact 조회 (credentials already parsed above)
-    const dynamoClient = new DynamoDBClient({
-      region,
-      credentials,
-    });
+    const dynamoClient = new DynamoDBClient({ region, credentials });
 
     const command = new QueryCommand({
       TableName: `aicc-${environment}-ddb-agent-contact`,
       IndexName: `aicc-${environment}-ddb-agent-contact-gsi2`,
       KeyConditionExpression: 'gsi2Pk = :value',
-      ExpressionAttributeValues: {
-        ':value': { S: `contact#agentUserName#${agentUsername}` },
-      },
+      ExpressionAttributeValues: { ':value': { S: `contact#agentUserName#${agentUsername}` } },
       ScanIndexForward: false,
       Limit: 20,
     });
@@ -484,14 +458,6 @@ app.post('/api/search/agent', async (req, res) => {
   }
 });
 
-/**
- * Connect 사용자 검색 (Username으로 User ID 조회)
- *
- * GET /api/agent/v1/connect/search-user?username=xxx
- * Headers: x-aws-credentials, x-aws-region, x-environment
- *
- * Response: { userId: "uuid-v4" }
- */
 app.get('/api/agent/v1/connect/search-user', async (req, res) => {
   try {
     const { username } = req.query;
@@ -500,35 +466,19 @@ app.get('/api/agent/v1/connect/search-user', async (req, res) => {
     const environment = req.headers['x-environment'];
     let instanceId = req.headers['x-instance-id'];
 
-    console.log('[search-user] Request info:', {
-      username,
-      region,
-      environment,
-      instanceId,
-      credentialsPresent: !!credentials,
-      credentialsKeys: credentials ? Object.keys(credentials) : [],
-    });
+    if (!username) return res.status(400).json({ error: 'username is required' });
+    if (!credentials) return res.status(400).json({ error: 'credentials are required' });
 
-    if (!username) {
-      return res.status(400).json({ error: 'username is required' });
-    }
-
-    if (!credentials) {
-      return res.status(400).json({ error: 'credentials are required' });
-    }
-
-    // instanceId가 헤더에 없으면 AWS 환경 설정에서 가져오기 (fallback)
+    // instanceId가 헤더에 없으면 AWS config에서 fallback
     if (!instanceId) {
       try {
-        const awsConfigPath = path.join(os.homedir(), '.aws', 'config');
-        const configContent = fs.readFileSync(awsConfigPath, 'utf-8');
-        const config = ini.parse(configContent);
-
-        // 프로필에서 instanceId 찾기
-        for (const [key, value] of Object.entries(config)) {
-          if (key.includes(environment) && value.connect_instance_id) {
-            instanceId = value.connect_instance_id;
-            break;
+        const config = readAwsConfig();
+        if (config) {
+          for (const [key, value] of Object.entries(config)) {
+            if (key.includes(environment) && value.connect_instance_id) {
+              instanceId = value.connect_instance_id;
+              break;
+            }
           }
         }
       } catch (error) {
@@ -540,48 +490,21 @@ app.get('/api/agent/v1/connect/search-user', async (req, res) => {
       return res.status(400).json({ error: 'instanceId not found. Please provide x-instance-id header or configure it in AWS config file.' });
     }
 
-    // Debug: Log credentials structure (without sensitive values)
-    console.log('[search-user] Credentials structure:', {
-      hasAccessKeyId: !!credentials.accessKeyId,
-      hasSecretAccessKey: !!credentials.secretAccessKey,
-      hasSessionToken: !!credentials.sessionToken,
-      hasExpiration: !!credentials.expiration,
-      expirationIsDate: credentials.expiration instanceof Date,
-    });
+    const connectClient = new ConnectClient({ region, credentials });
 
-    const connectClient = new ConnectClient({
-      region,
-      credentials,
-    });
-
-    // SearchUsers 명령 실행
     const command = new SearchUsersCommand({
       InstanceId: instanceId,
-      SearchFilter: {
-        TagFilter: {
-          OrConditions: [],
-          AndConditions: [],
-          TagCondition: undefined,
-        },
-      },
-      SearchCriteria: {
-        StringCondition: {
-          FieldName: 'Username',
-          Value: username,
-          ComparisonType: 'EXACT',
-        },
-      },
+      SearchFilter: { TagFilter: { OrConditions: [], AndConditions: [], TagCondition: undefined } },
+      SearchCriteria: { StringCondition: { FieldName: 'Username', Value: username, ComparisonType: 'EXACT' } },
       MaxResults: 1,
     });
 
     const response = await connectClient.send(command);
 
-    // 사용자를 찾았으면 첫 번째 사용자의 ID 반환
-    if (response.Users && response.Users.length > 0 && response.Users[0].Id) {
+    if (response.Users?.length > 0 && response.Users[0].Id) {
       return res.json({ userId: response.Users[0].Id });
     }
 
-    // 사용자를 찾지 못함
     return res.status(404).json({ error: 'User not found', username });
   } catch (error) {
     console.error('Error searching Connect user:', error);
@@ -589,98 +512,34 @@ app.get('/api/agent/v1/connect/search-user', async (req, res) => {
   }
 });
 
-/**
- * ContactFlow 이름으로 검색 (CloudWatch Logs)
- *
- * POST /api/search/contact-flow
- * Body: {
- *   flowName: string,
- *   credentials: { accessKeyId, secretAccessKey, sessionToken },
- *   region: string,
- *   instanceAlias: string
- * }
- */
 app.post('/api/search/contact-flow', async (req, res) => {
   try {
     const { flowName, credentials: rawCredentials, region, instanceAlias } = req.body;
-
-    // Parse credentials to ensure expiration is a Date object
-    const credentials = {
-      accessKeyId: rawCredentials.accessKeyId,
-      secretAccessKey: rawCredentials.secretAccessKey,
-      sessionToken: rawCredentials.sessionToken,
-      expiration: rawCredentials.expiration
-        ? (rawCredentials.expiration instanceof Date
-          ? rawCredentials.expiration
-          : new Date(rawCredentials.expiration))
-        : undefined
-    };
-
-    const logsClient = new CloudWatchLogsClient({
-      region,
-      credentials,
-    });
-
-    const query = `fields @timestamp, @message, @logStream, @log
-| filter ContactFlowName like '${flowName}'
-| sort @timestamp desc
-| limit 10000`;
+    const credentials = parseCredentialsFromBody(rawCredentials);
+    const logsClient = new CloudWatchLogsClient({ region, credentials });
 
     const startTime = new Date();
-    startTime.setHours(startTime.getHours() - 144); // 6일 전
-    const endTime = new Date();
+    startTime.setHours(startTime.getHours() - 144);
 
-    const startQueryCommand = new StartQueryCommand({
+    const { status, results } = await runCloudWatchQuery(logsClient, {
       logGroupName: `/aws/connect/${instanceAlias}`,
-      queryString: query,
-      startTime: Math.floor(startTime.getTime() / 1000),
-      endTime: Math.floor(endTime.getTime() / 1000),
+      queryString: `fields @timestamp, @message, @logStream, @log\n| filter ContactFlowName like '${flowName}'\n| sort @timestamp desc\n| limit 10000`,
+      startTime,
+      endTime: new Date(),
     });
-
-    const { queryId } = await logsClient.send(startQueryCommand);
-
-    // 쿼리 결과 대기
-    let status = 'Running';
-    let results;
-
-    while (status === 'Running' || status === 'Scheduled') {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const getResultsCommand = new GetQueryResultsCommand({ queryId });
-      const response = await logsClient.send(getResultsCommand);
-
-      status = response.status;
-      results = response.results;
-    }
 
     if (status !== 'Complete') {
       return res.status(500).json({ error: 'Query failed', status });
     }
 
-    const contacts = results
-      ?.map(result => {
-        const timestamp = result.find(f => f.field === '@timestamp')?.value;
-        const messageStr = result.find(f => f.field === '@message')?.value;
-
-        if (!messageStr) return null;
-
-        try {
-          const message = JSON.parse(messageStr);
-          return {
-            contactId: message.ContactId,
-            timestamp,
-          };
-        } catch {
-          return null;
-        }
-      })
-      .filter(c => c && c.contactId)
-      .reduce((acc, curr) => {
-        if (!acc.find(c => c.contactId === curr.contactId)) {
-          acc.push(curr);
-        }
-        return acc;
-      }, []) || [];
+    const contacts = extractUniqueContacts(results, result => {
+      const timestamp = result.find(f => f.field === '@timestamp')?.value;
+      const messageStr = result.find(f => f.field === '@message')?.value;
+      if (!messageStr) return null;
+      try {
+        return { contactId: JSON.parse(messageStr).ContactId, timestamp };
+      } catch { return null; }
+    });
 
     res.json({ contacts });
   } catch (error) {
@@ -689,98 +548,34 @@ app.post('/api/search/contact-flow', async (req, res) => {
   }
 });
 
-/**
- * DNIS로 검색 (CloudWatch Logs)
- *
- * POST /api/search/dnis
- * Body: {
- *   dnis: string,
- *   credentials: { accessKeyId, secretAccessKey, sessionToken },
- *   region: string,
- *   instanceAlias: string
- * }
- */
 app.post('/api/search/dnis', async (req, res) => {
   try {
     const { dnis, credentials: rawCredentials, region, instanceAlias } = req.body;
-
-    // Parse credentials to ensure expiration is a Date object
-    const credentials = {
-      accessKeyId: rawCredentials.accessKeyId,
-      secretAccessKey: rawCredentials.secretAccessKey,
-      sessionToken: rawCredentials.sessionToken,
-      expiration: rawCredentials.expiration
-        ? (rawCredentials.expiration instanceof Date
-          ? rawCredentials.expiration
-          : new Date(rawCredentials.expiration))
-        : undefined
-    };
-
-    const logsClient = new CloudWatchLogsClient({
-      region,
-      credentials,
-    });
-
-    const query = `fields @timestamp, @message, @logStream, @log
-| filter @message like '${dnis}' and @message like 'SetAttributes'
-| sort @timestamp desc
-| limit 10000`;
+    const credentials = parseCredentialsFromBody(rawCredentials);
+    const logsClient = new CloudWatchLogsClient({ region, credentials });
 
     const startTime = new Date();
-    startTime.setHours(startTime.getHours() - 144); // 6일 전
-    const endTime = new Date();
+    startTime.setHours(startTime.getHours() - 144);
 
-    const startQueryCommand = new StartQueryCommand({
+    const { status, results } = await runCloudWatchQuery(logsClient, {
       logGroupName: `/aws/connect/${instanceAlias}`,
-      queryString: query,
-      startTime: Math.floor(startTime.getTime() / 1000),
-      endTime: Math.floor(endTime.getTime() / 1000),
+      queryString: `fields @timestamp, @message, @logStream, @log\n| filter @message like '${dnis}' and @message like 'SetAttributes'\n| sort @timestamp desc\n| limit 10000`,
+      startTime,
+      endTime: new Date(),
     });
-
-    const { queryId } = await logsClient.send(startQueryCommand);
-
-    // 쿼리 결과 대기
-    let status = 'Running';
-    let results;
-
-    while (status === 'Running' || status === 'Scheduled') {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const getResultsCommand = new GetQueryResultsCommand({ queryId });
-      const response = await logsClient.send(getResultsCommand);
-
-      status = response.status;
-      results = response.results;
-    }
 
     if (status !== 'Complete') {
       return res.status(500).json({ error: 'Query failed', status });
     }
 
-    const contacts = results
-      ?.map(result => {
-        const timestamp = result.find(f => f.field === '@timestamp')?.value;
-        const messageStr = result.find(f => f.field === '@message')?.value;
-
-        if (!messageStr) return null;
-
-        try {
-          const message = JSON.parse(messageStr);
-          return {
-            contactId: message.ContactId,
-            timestamp,
-          };
-        } catch {
-          return null;
-        }
-      })
-      .filter(c => c && c.contactId)
-      .reduce((acc, curr) => {
-        if (!acc.find(c => c.contactId === curr.contactId)) {
-          acc.push(curr);
-        }
-        return acc;
-      }, []) || [];
+    const contacts = extractUniqueContacts(results, result => {
+      const timestamp = result.find(f => f.field === '@timestamp')?.value;
+      const messageStr = result.find(f => f.field === '@message')?.value;
+      if (!messageStr) return null;
+      try {
+        return { contactId: JSON.parse(messageStr).ContactId, timestamp };
+      } catch { return null; }
+    });
 
     res.json({ contacts });
   } catch (error) {
@@ -789,35 +584,11 @@ app.post('/api/search/dnis', async (req, res) => {
   }
 });
 
-/**
- * Lambda Error 검색 (CloudWatch Logs)
- *
- * POST /api/search/lambda-error
- * Body: {
- *   credentials: { accessKeyId, secretAccessKey, sessionToken },
- *   region: string
- * }
- */
 app.post('/api/search/lambda-error', async (req, res) => {
   try {
     const { credentials: rawCredentials, region } = req.body;
-
-    // Parse credentials to ensure expiration is a Date object
-    const credentials = {
-      accessKeyId: rawCredentials.accessKeyId,
-      secretAccessKey: rawCredentials.secretAccessKey,
-      sessionToken: rawCredentials.sessionToken,
-      expiration: rawCredentials.expiration
-        ? (rawCredentials.expiration instanceof Date
-          ? rawCredentials.expiration
-          : new Date(rawCredentials.expiration))
-        : undefined
-    };
-
-    const logsClient = new CloudWatchLogsClient({
-      region,
-      credentials,
-    });
+    const credentials = parseCredentialsFromBody(rawCredentials);
+    const logsClient = new CloudWatchLogsClient({ region, credentials });
 
     const logGroups = [
       '/aws/lmd/aicc-connect-flow-base/flow-agent-workspace-handler',
@@ -837,51 +608,29 @@ app.post('/api/search/lambda-error', async (req, res) => {
       '/aws/lmd/aicc-chat-app/sns-chat-if',
     ];
 
-    const query = `fields @timestamp, @message, @logStream, @log
-| filter @message like '"level":"ERROR"'
-| sort @timestamp desc
-| limit 10000`;
+    const query = `fields @timestamp, @message, @logStream, @log\n| filter @message like '"level":"ERROR"'\n| sort @timestamp desc\n| limit 10000`;
 
     const startTime = new Date();
-    startTime.setHours(startTime.getHours() - 48); // 48시간 전
+    startTime.setHours(startTime.getHours() - 48);
     const endTime = new Date();
 
     const allContacts = [];
 
-    // 각 로그 그룹에서 검색
     for (const logGroup of logGroups) {
       try {
-        const startQueryCommand = new StartQueryCommand({
+        const { status, results } = await runCloudWatchQuery(logsClient, {
           logGroupName: logGroup,
           queryString: query,
-          startTime: Math.floor(startTime.getTime() / 1000),
-          endTime: Math.floor(endTime.getTime() / 1000),
+          startTime,
+          endTime,
         });
-
-        const { queryId } = await logsClient.send(startQueryCommand);
-
-        // 쿼리 결과 대기
-        let status = 'Running';
-        let results;
-
-        while (status === 'Running' || status === 'Scheduled') {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-
-          const getResultsCommand = new GetQueryResultsCommand({ queryId });
-          const response = await logsClient.send(getResultsCommand);
-
-          status = response.status;
-          results = response.results;
-        }
 
         if (status === 'Complete' && results) {
           const contacts = results
             .map(result => {
               const timestamp = result.find(f => f.field === '@timestamp')?.value;
               const messageStr = result.find(f => f.field === '@message')?.value;
-
               if (!messageStr) return null;
-
               try {
                 const message = JSON.parse(messageStr);
                 return {
@@ -889,11 +638,9 @@ app.post('/api/search/lambda-error', async (req, res) => {
                   service: message.service,
                   timestamp,
                 };
-              } catch {
-                return null;
-              }
+              } catch { return null; }
             })
-            .filter(c => c && c.contactId);
+            .filter(c => c?.contactId);
 
           allContacts.push(...contacts);
         }
@@ -903,12 +650,12 @@ app.post('/api/search/lambda-error', async (req, res) => {
     }
 
     // 중복 제거
-    const uniqueContacts = allContacts.reduce((acc, curr) => {
-      if (!acc.find(c => c.contactId === curr.contactId)) {
-        acc.push(curr);
-      }
-      return acc;
-    }, []);
+    const seen = new Set();
+    const uniqueContacts = allContacts.filter(c => {
+      if (seen.has(c.contactId)) return false;
+      seen.add(c.contactId);
+      return true;
+    });
 
     res.json({ contacts: uniqueContacts });
   } catch (error) {
@@ -921,1317 +668,68 @@ app.post('/api/search/lambda-error', async (req, res) => {
 // QM Automation APIs
 // ========================================
 
-/**
- * 요청 헤더에서 credentials 가져오기 또는 기본 provider 사용
- */
-async function getCredentialsFromRequest(req) {
-  const credentialsHeader = req.headers['x-aws-credentials'];
-
-  if (credentialsHeader) {
-    return parseCredentials(credentialsHeader);
-  } else {
-    const credentialProvider = defaultProvider();
-    const creds = await credentialProvider();
-    // Ensure expiration is a Date object
-    if (creds.expiration && typeof creds.expiration === 'string') {
-      creds.expiration = new Date(creds.expiration);
-    } else if (creds.Expiration && typeof creds.Expiration === 'string') {
-      creds.expiration = new Date(creds.Expiration);
-      delete creds.Expiration;
-    }
-    return creds;
-  }
-}
-
-
-/**
- * QM Automation 요청 (Lambda 호출)
- *
- * POST /api/agent/v1/qm-automation
- * Headers: x-aws-credentials, x-aws-region, x-environment
- */
-app.post('/api/agent/v1/qm-automation', async (req, res) => {
-  try {
-    const requestBody = req.body;
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    // Construct ALB-like event payload
-    const payload = {
-      httpMethod: 'POST',
-      path: '/api/agent/v1/qm-automation',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse', // Synchronous invocation
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-
-    // Lambda (ALB Proxy 타입) 응답 파싱
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      // AlbResponse.success/fail은 body를 JSON string으로 반환함
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-
-      // 에러 응답 처리 (statusCode >= 400)
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      // 성공 응답
-      res.status(statusCode).json(responseData.data || responseData);
-    } else {
-      // 에러 응답 처리 (statusCode >= 400)
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      // 성공 응답
-      res.status(statusCode).json(result.data || result);
-    }
-
-  } catch (error) {
-    console.error('Error invoking QM Automation Lambda:', error);
-    res.status(500).json({ error: 'Failed to invoke QM Automation', message: error.message });
-  }
-});
-
-/**
- * QM Automation 상세 조회 (Lambda 호출)
- *
- * GET /api/agent/v1/qm-automation/status?requestId=xxx
- * Headers: x-aws-credentials, x-aws-region, x-environment
- */
-app.get('/api/agent/v1/qm-automation/status', async (req, res) => {
-  try {
-    const { requestId } = req.query;
-
-    if (!requestId) {
-      return res.status(400).json({ error: 'requestId is required' });
-    }
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    // Construct ALB-like event payload
-    const payload = {
-      httpMethod: 'GET',
-      path: '/api/agent/v1/qm-automation/status',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      queryStringParameters: {
-        requestId: requestId
-      }
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-
-    // Lambda (ALB Proxy 타입) 응답 파싱
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(responseData.data || responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(result.data || result);
-    }
-  } catch (error) {
-    console.error('Error invoking QM Automation Status Lambda:', error);
-    res.status(500).json({ error: 'Failed to fetch QM Automation status', message: error.message });
-  }
-});
-
-/**
- * 오디오 Presigned URL 조회 (Lambda 호출)
- *
- * GET /api/agent/v1/qm-automation/audio-presigned-url?requestId=xxx
- * Headers: x-aws-credentials, x-aws-region, x-environment
- *
- * Response: { requestId, audioPresignedUrl, audioPresignedUrlExpiresAt }
- */
-app.get('/api/agent/v1/qm-automation/audio-presigned-url', async (req, res) => {
-  try {
-    const { requestId } = req.query;
-
-    if (!requestId) {
-      return res.status(400).json({ error: 'requestId is required' });
-    }
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    const payload = {
-      httpMethod: 'GET',
-      path: '/api/agent/v1/qm-automation/audio-presigned-url',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      queryStringParameters: {
-        requestId: requestId
-      }
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(responseData.data || responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(result.data || result);
-    }
-  } catch (error) {
-    console.error('Error invoking Audio Presigned URL Lambda:', error);
-    res.status(500).json({ error: 'Failed to fetch audio presigned URL', message: error.message });
-  }
-});
-
-/**
- * 오디오 파일 프록시 (CORS 우회)
- * 서버에서 presigned URL로 오디오를 다운로드하여 클라이언트에 스트리밍
- *
- * GET /api/agent/v1/qm-automation/audio-stream?requestId=xxx
- * Headers: x-aws-credentials, x-aws-region, x-environment
- *
- * Response: audio binary stream
- */
+// audio-stream: Lambda 호출 후 S3에서 오디오 스트리밍 (특수 처리 필요)
 app.get('/api/agent/v1/qm-automation/audio-stream', async (req, res) => {
   try {
     const { requestId } = req.query;
-
     if (!requestId) {
       return res.status(400).json({ error: 'requestId is required' });
     }
 
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const { region, credentials, prefix } = await getRequestContext(req);
+    const lambdaClient = new LambdaClient({ region, credentials });
     const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
 
-    // 1) Lambda로 presigned URL 조회
-    const payload = {
+    const { statusCode, data } = await invokeLambdaProxy(lambdaClient, functionName, {
       httpMethod: 'GET',
       path: '/api/agent/v1/qm-automation/audio-presigned-url',
       headers: { 'Content-Type': 'application/json' },
-      queryStringParameters: { requestId }
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
+      queryStringParameters: { requestId },
     });
-
-    const lambdaResponse = await lambdaClient.send(command);
-    const lambdaResult = JSON.parse(Buffer.from(lambdaResponse.Payload).toString());
-    const statusCode = lambdaResult.statusCode || 200;
 
     if (statusCode >= 400) {
       return res.status(statusCode).json({ error: 'Failed to get audio presigned URL' });
     }
 
-    const responseData = lambdaResult.body
-      ? (typeof lambdaResult.body === 'string' ? JSON.parse(lambdaResult.body) : lambdaResult.body)
-      : lambdaResult;
-    const audioUrl = (responseData.data || responseData).audioPresignedUrl;
-
+    const audioUrl = data?.audioPresignedUrl;
     if (!audioUrl) {
       return res.status(404).json({ error: 'Audio presigned URL not found' });
     }
 
-    // 2) presigned URL에서 오디오 다운로드 후 클라이언트에 스트리밍
     const audioResponse = await fetch(audioUrl);
-
     if (!audioResponse.ok) {
       return res.status(audioResponse.status).json({ error: 'Failed to fetch audio from S3' });
     }
 
-    const contentType = audioResponse.headers.get('content-type') || 'audio/mpeg';
+    res.setHeader('Content-Type', audioResponse.headers.get('content-type') || 'audio/mpeg');
     const contentLength = audioResponse.headers.get('content-length');
+    if (contentLength) res.setHeader('Content-Length', contentLength);
 
-    res.setHeader('Content-Type', contentType);
-    if (contentLength) {
-      res.setHeader('Content-Length', contentLength);
-    }
-
-    // Node 18+ ReadableStream → Node stream pipe
     const { Readable } = require('node:stream');
-    const nodeStream = Readable.fromWeb(audioResponse.body);
-    nodeStream.pipe(res);
+    Readable.fromWeb(audioResponse.body).pipe(res);
   } catch (error) {
     console.error('Error streaming audio:', error);
     res.status(500).json({ error: 'Failed to stream audio', message: error.message });
   }
 });
 
-/**
- * QM Automation 검색 (다중 필터)
- *
- * GET /api/agent/v1/qm-automation/search
- * Query: startMonth, endMonth, agentId, agentUserName, agentConfirmYN, qaFeedbackYN, qmEvaluationStatus, contactId, limit
- * Headers: x-aws-credentials, x-aws-region, x-environment
- */
-app.get('/api/agent/v1/qm-automation/search', async (req, res) => {
-  try {
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    // Construct ALB-like event payload with all query parameters
-    const queryStringParameters = {};
-    const allowedParams = [
-      'startDate', 'endDate', 'qmStartDate', 'qmEndDate', 'agentId', 'agentUserName', 'agentCenter',
-      'agentConfirmYN', 'qaFeedbackYN', 'qmEvaluationStatus', 'contactId', 'qaAgentUserName',
-      'page', 'pageSize', 'orderBy', 'order'
-    ];
-
-    for (const param of allowedParams) {
-      if (req.query[param]) {
-        queryStringParameters[param] = req.query[param];
-      }
-    }
-
-    const payload = {
-      httpMethod: 'GET',
-      path: '/api/agent/v1/qm-automation/search',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      queryStringParameters
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-
-    // Lambda (ALB Proxy 타입) 응답 파싱
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(responseData.data || responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(result.data || result);
-    }
-  } catch (error) {
-    console.error('Error invoking QM Automation Search Lambda:', error);
-    res.status(500).json({ error: 'Failed to search QM Automation list', message: error.message });
-  }
-});
-
-// ========================================
-// QM Evaluation State APIs (이의제기/확인)
-// ========================================
-
-/**
- * 상담사 확인 (Agent Confirm)
- * 상태: GEMINI_EVAL_COMPLETED → AGENT_CONFIRM_COMPLETED
- *
- * POST /api/agent/v1/qm-automation/confirm
- * Body: { requestId, category, userId, userName? }
- * Headers: x-aws-credentials, x-aws-region, x-environment
- */
-app.post('/api/agent/v1/qm-automation/confirm', async (req, res) => {
-  try {
-    const requestBody = req.body;
-    const { requestId, category, userId } = requestBody;
-
-    // 필수 파라미터 검증
-    if (!requestId) {
-      return res.status(400).json({ error: 'requestId is required' });
-    }
-    if (!category) {
-      return res.status(400).json({ error: 'category is required' });
-    }
-    if (!userId || userId.trim() === '') {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    const payload = {
-      httpMethod: 'POST',
-      path: '/api/agent/v1/qm-automation/confirm',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(responseData.data || responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(result.data || result);
-    }
-  } catch (error) {
-    console.error('Error invoking Agent Confirm Lambda:', error);
-    res.status(500).json({ error: 'Failed to confirm evaluation', message: error.message });
-  }
-});
-
-/**
- * 상담사 이의제기 (Agent Objection)
- * 상태: GEMINI_EVAL_COMPLETED → AGENT_OBJECTION_REQUESTED (FAIL인 경우만)
- *
- * POST /api/agent/v1/qm-automation/objection
- * Body: { requestId, category, reason, userId, userName? }
- * Headers: x-aws-credentials, x-aws-region, x-environment
- */
-app.post('/api/agent/v1/qm-automation/objection', async (req, res) => {
-  try {
-    const requestBody = req.body;
-    const { requestId, category, reason, userId } = requestBody;
-
-    // 필수 파라미터 검증
-    if (!requestId) {
-      return res.status(400).json({ error: 'requestId is required' });
-    }
-    if (!category) {
-      return res.status(400).json({ error: 'category is required' });
-    }
-    if (!reason || reason.trim() === '') {
-      return res.status(400).json({ error: 'reason is required' });
-    }
-    if (!userId || userId.trim() === '') {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    const payload = {
-      httpMethod: 'POST',
-      path: '/api/agent/v1/qm-automation/objection',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(responseData.data || responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(result.data || result);
-    }
-  } catch (error) {
-    console.error('Error invoking Agent Objection Lambda:', error);
-    res.status(500).json({ error: 'Failed to submit objection', message: error.message });
-  }
-});
-
-/**
- * QA 피드백 (이의 승인/거절)
- * 상태: AGENT_OBJECTION_REQUESTED → QA_AGENT_OBJECTION_ACCEPTED 또는 QA_AGENT_OBJECTION_REJECTED
- *
- * POST /api/agent/v1/qm-automation/qa-feedback
- * Body: { requestId, category, action: 'accept'|'reject', reason, userId, userName? }
- * Headers: x-aws-credentials, x-aws-region, x-environment
- */
-app.post('/api/agent/v1/qm-automation/qa-feedback', async (req, res) => {
-  try {
-    const requestBody = req.body;
-    const { requestId, category, action, reason, userId } = requestBody;
-
-    // 필수 파라미터 검증
-    if (!requestId) {
-      return res.status(400).json({ error: 'requestId is required' });
-    }
-    if (!category) {
-      return res.status(400).json({ error: 'category is required' });
-    }
-    if (!action || !['accept', 'reject'].includes(action)) {
-      return res.status(400).json({ error: "action is required and must be 'accept' or 'reject'" });
-    }
-    if (!reason || reason.trim() === '') {
-      return res.status(400).json({ error: 'reason is required' });
-    }
-    if (!userId || userId.trim() === '') {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    const payload = {
-      httpMethod: 'POST',
-      path: '/api/agent/v1/qm-automation/qa-feedback',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(responseData.data || responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(result.data || result);
-    }
-  } catch (error) {
-    console.error('Error invoking QA Feedback Lambda:', error);
-    res.status(500).json({ error: 'Failed to submit QA feedback', message: error.message });
-  }
-});
-
-/**
- * 상담사 평가 요약 (Agent Evaluation Summary)
- * POST /api/agent/v1/qm-automation/agent-evaluation-summary
- * Body: { agentUserName, limit? }
- * Headers: x-aws-credentials, x-aws-region, x-environment
- */
-app.post('/api/agent/v1/qm-automation/agent-evaluation-summary', async (req, res) => {
-  try {
-    const requestBody = req.body;
-    const { agentUserName } = requestBody;
-
-    if (!agentUserName) {
-      return res.status(400).json({ error: 'agentUserName is required' });
-    }
-
-    if (requestBody.limit != null && (requestBody.limit < 1 || requestBody.limit > 100)) {
-      return res.status(400).json({ error: 'limit must be between 1 and 100' });
-    }
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    const payload = {
-      httpMethod: 'POST',
-      path: '/api/agent/v1/qm-automation/agent-evaluation-summary',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(result);
-    }
-  } catch (error) {
-    console.error('Error invoking Agent Evaluation Summary Lambda:', error);
-    res.status(500).json({ error: 'Failed to get agent evaluation summary', message: error.message });
-  }
-});
-
-/**
- * 상담사 평가 요약 목록 조회 (GET)
- * GET /api/agent/v1/qm-automation/agent-evaluation-summary
- * Query: agentUserName (required), limit (optional)
- */
-app.get('/api/agent/v1/qm-automation/agent-evaluation-summary', async (req, res) => {
-  try {
-    const { agentUserName, limit } = req.query;
-
-    if (!agentUserName) {
-      return res.status(400).json({ error: 'agentUserName is required' });
-    }
-
-    if (limit != null && (Number(limit) < 1 || Number(limit) > 100)) {
-      return res.status(400).json({ error: 'limit must be between 1 and 100' });
-    }
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({ region, credentials });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    const queryStringParameters = { agentUserName };
-    if (limit) queryStringParameters.limit = limit;
-
-    const payload = {
-      httpMethod: 'GET',
-      path: '/api/agent/v1/qm-automation/agent-evaluation-summary',
-      headers: { 'Content-Type': 'application/json' },
-      queryStringParameters,
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode,
-        });
-      }
-      res.status(statusCode).json(responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode,
-        });
-      }
-      res.status(statusCode).json(result);
-    }
-  } catch (error) {
-    console.error('Error invoking Agent Evaluation Summary List Lambda:', error);
-    res.status(500).json({ error: 'Failed to get agent evaluation summary list', message: error.message });
-  }
-});
-
-/**
- * 상담사 평가 요약 상세 조회 (GET)
- * GET /api/agent/v1/qm-automation/agent-evaluation-summary/detail
- * Query: agentUserName (required), createdAt (required)
- */
-app.get('/api/agent/v1/qm-automation/agent-evaluation-summary/detail', async (req, res) => {
-  try {
-    const { agentUserName, createdAt } = req.query;
-
-    if (!agentUserName) {
-      return res.status(400).json({ error: 'agentUserName is required' });
-    }
-    if (!createdAt) {
-      return res.status(400).json({ error: 'createdAt is required' });
-    }
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({ region, credentials });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    const payload = {
-      httpMethod: 'GET',
-      path: '/api/agent/v1/qm-automation/agent-evaluation-summary/detail',
-      headers: { 'Content-Type': 'application/json' },
-      queryStringParameters: { agentUserName, createdAt },
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode,
-        });
-      }
-      res.status(statusCode).json(responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode,
-        });
-      }
-      res.status(statusCode).json(result);
-    }
-  } catch (error) {
-    console.error('Error invoking Agent Evaluation Summary Detail Lambda:', error);
-    res.status(500).json({ error: 'Failed to get agent evaluation summary detail', message: error.message });
-  }
-});
-
-/**
- * 벌크 상담사 액션 API (확인/이의제기 일괄 처리)
- * POST /api/agent/v1/qm-automation/bulk-action
- * Body: { requestId, actions: [{ category, action, reason? }], userId, userName? }
- */
-app.post('/api/agent/v1/qm-automation/agent-bulk-action', async (req, res) => {
-  try {
-    const { requestId, actions, userId, userName } = req.body;
-
-    if (!requestId || !actions || !Array.isArray(actions) || actions.length === 0 || !userId) {
-      return res.status(400).json({
-        error: 'requestId, actions (array), userId are required'
-      });
-    }
-
-    const credentials = getCredentialsFromRequest(req);
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials
-    });
-
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-    const payload = {
-      httpMethod: 'POST',
-      path: '/api/agent/v1/qm-automation/agent-bulk-action',
-      body: JSON.stringify({ requestId, actions, userId, userName })
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload)
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(new TextDecoder().decode(response.Payload));
-
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Bulk action failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-      res.status(statusCode).json(responseData.data || responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Bulk action failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-      res.status(statusCode).json(result.data || result);
-    }
-  } catch (error) {
-    console.error('Error invoking Bulk Agent Action Lambda:', error);
-    res.status(500).json({ error: 'Failed to process bulk agent action', message: error.message });
-  }
-});
-
-/**
- * 벌크 QA 피드백 API (이의제기 승인/거절 일괄 처리)
- * POST /api/agent/v1/qm-automation/qa-bulk-feedback
- * Body: { requestId, actions: [{ category, action, reason }], userId, userName? }
- * Lambda expects: { requestId, feedbacks: [{ category, action, reason }], userId, userName? }
- */
-app.post('/api/agent/v1/qm-automation/qa-bulk-feedback', async (req, res) => {
-  try {
-    const { requestId, actions, userId, userName } = req.body;
-
-    if (!requestId || !actions || !Array.isArray(actions) || actions.length === 0 || !userId) {
-      return res.status(400).json({
-        error: 'requestId, actions (array), userId are required'
-      });
-    }
-
-    const credentials = getCredentialsFromRequest(req);
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials
-    });
-
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-    // Lambda expects 'feedbacks' field instead of 'actions'
-    const payload = {
-      httpMethod: 'POST',
-      path: '/api/agent/v1/qm-automation/qa-bulk-feedback',
-      body: JSON.stringify({ requestId, feedbacks: actions, userId, userName })
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload)
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(new TextDecoder().decode(response.Payload));
-
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Bulk QA feedback failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-      res.status(statusCode).json(responseData.data || responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Bulk QA feedback failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-      res.status(statusCode).json(result.data || result);
-    }
-  } catch (error) {
-    console.error('Error invoking Bulk QA Feedback Lambda:', error);
-    res.status(500).json({ error: 'Failed to process bulk QA feedback', message: error.message });
-  }
-});
-
-/**
- * 평가 상태 일괄 초기화 (Reset Evaluation State)
- * categories 배열의 각 항목을 seq=0만 남기고 GEMINI_EVAL_COMPLETED로 초기화
- *
- * POST /api/agent/v1/qm-automation/reset-evaluation-state
- * Body: { requestId, categories: string[], userId, userName? }
- * Headers: x-aws-credentials, x-aws-region, x-environment
- *
- * Response: { requestId, qmEvaluationStatus, qaFeedbackYN, agentConfirmYN, results: [...] }
- */
-app.post('/api/agent/v1/qm-automation/reset-evaluation-state', async (req, res) => {
-  try {
-    const requestBody = req.body;
-    const { requestId, categories, userId } = requestBody;
-
-    if (!requestId) {
-      return res.status(400).json({ error: 'requestId is required' });
-    }
-    if (!categories || !Array.isArray(categories) || categories.length === 0) {
-      return res.status(400).json({ error: 'categories (non-empty array) is required' });
-    }
-    if (!userId || userId.trim() === '') {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    const payload = {
-      httpMethod: 'POST',
-      path: '/api/agent/v1/qm-automation/reset-evaluation-state',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    };
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-    const statusCode = result.statusCode || 200;
-
-    if (result.body) {
-      const responseData = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
-
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(responseData.data || responseData);
-    } else {
-      if (statusCode >= 400) {
-        return res.status(statusCode).json({
-          error: result.error || result.message || 'Request failed',
-          message: result.error || result.message || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-
-      res.status(statusCode).json(result.data || result);
-    }
-  } catch (error) {
-    console.error('Error invoking Reset Evaluation State Lambda:', error);
-    res.status(500).json({ error: 'Failed to reset evaluation state', message: error.message });
-  }
-});
-
-// ========================================
-// QM Evaluation Form APIs
-// ========================================
-
-/**
- * QM Evaluation Form API Proxy (All methods)
- * Routes: /api/agent/v1/qm-evaluation-form*
- * Proxies all requests to QM Automation Lambda
- *
- * Supported endpoints:
- * - GET  /api/agent/v1/qm-evaluation-form                                    - List all forms
- * - POST /api/agent/v1/qm-evaluation-form                                    - Create form
- * - GET  /api/agent/v1/qm-evaluation-form/{formId}                           - Get form details
- * - PUT  /api/agent/v1/qm-evaluation-form/{formId}                           - Update form
- * - DELETE /api/agent/v1/qm-evaluation-form/{formId}                         - Delete form
- * - GET  /api/agent/v1/qm-evaluation-form/{formId}/categories                - List categories
- * - POST /api/agent/v1/qm-evaluation-form/{formId}/categories                - Create/Update category
- * - PUT  /api/agent/v1/qm-evaluation-form/{formId}/categories/bulk           - Bulk update categories
- * - DELETE /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId} - Delete category
- * - GET  /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems - List subitems
- * - POST /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems - Create/Update subitem
- * - DELETE /api/agent/v1/qm-evaluation-form/{formId}/categories/{categoryId}/subitems/{subItemId} - Delete subitem
- * - GET  /api/agent/v1/qm-evaluation-form/{formId}/prompt-preview                               - Get prompt preview
- */
-app.all('/api/agent/v1/qm-evaluation-form*', async (req, res) => {
-  try {
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req); // Reuse existing helper
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
-    // "evalForm도 이쪽으로 이관됐음" -> Use the same Lambda as QM Automation
-    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
-
-    // Construct ALB-like event payload
-    const payload = {
-      httpMethod: req.method,
-      path: req.path,
-      headers: {
-        'content-type': 'application/json',
-        'accept': '*/*'
-      },
-      queryStringParameters: Object.keys(req.query).length > 0 ? req.query : null,
-      body: (req.method === 'GET' || req.method === 'DELETE') ? null : (typeof req.body === 'string' ? req.body : JSON.stringify(req.body)),
-      isBase64Encoded: false,
-      requestContext: {
-        elb: {
-          targetGroupArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/local/1234567890123456'
-        }
-      }
-    };
-
-    // console.log(`[QM Eval Proxy] Invoking ${functionName} for ${req.method} ${req.path}`);
-
-    const command = new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: JSON.stringify(payload),
-    });
-
-    const response = await lambdaClient.send(command);
-    const result = JSON.parse(Buffer.from(response.Payload).toString());
-
-    if (result.errorMessage) {
-      console.error('Lambda Execution Error:', result);
-      return res.status(502).json({ error: 'Lambda Execution Failed', message: result.errorMessage });
-    }
-
-    const statusCode = result.statusCode || 200;
-    let responseData = result.body;
-
-    // Parse body if it is a string (ALB proxy response)
-    if (responseData && typeof responseData === 'string') {
-      try {
-        responseData = JSON.parse(responseData);
-      } catch (e) {
-        console.warn('Failed to parse response body as JSON:', e);
-      }
-    }
-
-    if (statusCode >= 400) {
-      if (typeof responseData === 'object') {
-        return res.status(statusCode).json({
-          error: responseData.error || responseData.message || 'Request failed',
-          message: responseData.error || responseData.message || 'Unknown error',
-          statusCode: statusCode,
-          details: responseData
-        });
-      } else {
-        return res.status(statusCode).json({
-          error: 'Request failed',
-          message: responseData || 'Unknown error',
-          statusCode: statusCode
-        });
-      }
-    }
-
-    // Success Handling
-    // If responseData has a 'data' property, return that (common pattern in this project)
-    if (responseData && typeof responseData === 'object' && responseData.data) {
-      res.status(statusCode).json(responseData.data);
-    } else {
-      res.status(statusCode).json(responseData || {});
-    }
-
-  } catch (error) {
-    console.error(`Error invoking QM Evaluation Form Lambda (${req.path}):`, error);
-    res.status(500).json({ error: 'Failed to invoke QM Evaluation Form API', message: error.message });
-  }
-});
-
-// ========================================
-// Gemini API
-// ========================================
-
-/**
- * Gemini Simple Prompt API
- *
- * POST /api/agent/v1/qm-automation/simple-prompt
- * Body: {
- *   prompt: string,
- *   model: string (e.g., "gemini-2.5-flash"),
- *   files?: [{ mimeType: string, data: string (base64) }]
- * }
- * Headers: x-aws-credentials, x-aws-region, x-environment
- */
+// simple-prompt: 다른 Lambda(gemini-handler)를 사용하므로 별도 처리
 app.post('/api/agent/v1/qm-automation/simple-prompt', async (req, res) => {
   try {
     const { prompt, model, files, requestId, createdAt } = req.body;
+    if (!prompt) return res.status(400).json({ error: 'prompt is required' });
+    if (!model) return res.status(400).json({ error: 'model is required' });
 
-    if (!prompt) {
-      return res.status(400).json({ error: 'prompt is required' });
-    }
-    if (!model) {
-      return res.status(400).json({ error: 'model is required' });
-    }
-
-    const region = req.headers['x-aws-region'] || 'ap-northeast-2';
-    const environment = req.headers['x-environment'] || 'dev';
-    const credentials = await getCredentialsFromRequest(req);
-
-    const lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
-
-    const prefix = environment === 'prd' ? 'prd' : (environment === 'stg' ? 'stg' : 'dev');
+    const { region, credentials, prefix } = await getRequestContext(req);
+    const lambdaClient = new LambdaClient({ region, credentials });
     const functionName = `aicc-${prefix}-lmd-gemini-handler`;
 
-    // Construct Lambda payload
     const lambdaPayload = {
       invocationType: 'RequestResponse',
-      input: {
-        action: 'simple_prompt',
-        prompt: prompt,
-        model: model,
-        pk: requestId,
-        sk: createdAt,
-      }
+      input: { action: 'simple_prompt', prompt, model, pk: requestId, sk: createdAt },
     };
 
-    // Add files if provided
-    if (files && Array.isArray(files) && files.length > 0) {
+    if (files?.length > 0) {
       lambdaPayload.input.files = files;
     }
 
@@ -2244,40 +742,70 @@ app.post('/api/agent/v1/qm-automation/simple-prompt', async (req, res) => {
     const response = await lambdaClient.send(command);
     const result = JSON.parse(Buffer.from(response.Payload).toString());
 
-    // Handle Lambda error
     if (result.errorMessage) {
-      console.error('Lambda Execution Error:', result);
       return res.status(502).json({ error: 'Lambda Execution Failed', message: result.errorMessage });
     }
 
     const statusCode = result.statusCode || 200;
     let responseBody = result.body;
 
-    // Parse body if it's a string
     if (responseBody && typeof responseBody === 'string') {
-      try {
-        responseBody = JSON.parse(responseBody);
-      } catch (e) {
-        // Keep as string if not JSON
-      }
+      try { responseBody = JSON.parse(responseBody); } catch { /* keep as-is */ }
     }
 
     if (statusCode >= 400) {
       return res.status(statusCode).json({
         error: responseBody?.error || 'Request failed',
         message: responseBody?.message || responseBody || 'Unknown error',
-        statusCode: statusCode
+        statusCode,
       });
     }
 
-    // Success - return the parsed response
     res.status(statusCode).json(responseBody || result);
-
   } catch (error) {
     console.error('Error invoking Gemini Lambda:', error);
     res.status(500).json({ error: 'Failed to invoke Gemini API', message: error.message });
   }
 });
+
+// 나머지 QM Automation 엔드포인트는 모두 동일한 Lambda로 ALB Proxy
+app.all('/api/agent/v1/qm-automation*', handleAlbProxyRequest);
+
+// ========================================
+// QM Evaluation Form & SOP APIs (ALB Proxy)
+// ========================================
+
+/**
+ * ALB Proxy 공통 핸들러 - qm-evaluation-form, sop 모두 동일한 Lambda로 프록시
+ */
+async function handleAlbProxyRequest(req, res) {
+  try {
+    const { region, credentials, prefix } = await getRequestContext(req);
+    const lambdaClient = new LambdaClient({ region, credentials });
+    const functionName = `aicc-${prefix}-lmd-alb-agent-qm-automation`;
+
+    const payload = {
+      httpMethod: req.method,
+      path: req.path,
+      headers: { 'content-type': 'application/json', 'accept': '*/*' },
+      queryStringParameters: Object.keys(req.query).length > 0 ? req.query : null,
+      body: (req.method === 'GET' || req.method === 'DELETE') ? null : (typeof req.body === 'string' ? req.body : JSON.stringify(req.body)),
+      isBase64Encoded: false,
+      requestContext: {
+        elb: { targetGroupArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/local/1234567890123456' }
+      }
+    };
+
+    const { statusCode, data } = await invokeLambdaProxy(lambdaClient, functionName, payload);
+    res.status(statusCode).json(data);
+  } catch (error) {
+    console.error(`Error invoking Lambda for ${req.path}:`, error);
+    res.status(500).json({ error: 'Failed to invoke Lambda API', message: error.message });
+  }
+}
+
+app.all('/api/agent/v1/qm-evaluation-form*', handleAlbProxyRequest);
+app.all('/api/agent/v1/sop*', handleAlbProxyRequest);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -2320,17 +848,28 @@ app.listen(PORT, () => {
 - POST /api/agent/v1/qm-automation                              - QM 상담 내용 분석
 - GET  /api/agent/v1/qm-automation/status?requestId=xxx         - QM 상세 조회
 - GET  /api/agent/v1/qm-automation/audio-presigned-url?requestId=xxx - 오디오 Presigned URL 조회
+- GET  /api/agent/v1/qm-automation/audio-stream?requestId=xxx   - 오디오 스트리밍 (CORS 우회)
 - GET  /api/agent/v1/qm-automation/search                       - QM 검색 (다중 필터)
 
 [QM Evaluation State APIs] (이의제기/확인)
-- POST /api/agent/v1/qm-automation/confirm                      - 상담사 확인 (GEMINI_EVAL_COMPLETED → AGENT_CONFIRM_COMPLETED)
-- POST /api/agent/v1/qm-automation/objection                    - 상담사 이의제기 (GEMINI_EVAL_COMPLETED → AGENT_OBJECTION_REQUESTED)
-- POST /api/agent/v1/qm-automation/qa-feedback                  - QA 피드백 (accept: ACCEPTED, reject: REJECTED)
-- POST /api/agent/v1/qm-automation/bulk-action                  - 벌크 상담사/QA 액션 (확인/이의제기 or 승인/거절 일괄 처리)
-- POST /api/agent/v1/qm-automation/reset-evaluation-state       - 평가 상태 초기화 (→ GEMINI_EVAL_COMPLETED)
-- POST /api/agent/v1/qm-automation/agent-evaluation-summary    - 상담사 평가 요약 생성 (분석 요청)
-- GET  /api/agent/v1/qm-automation/agent-evaluation-summary    - 상담사 평가 요약 목록 조회
+- POST /api/agent/v1/qm-automation/confirm                      - 상담사 확인
+- POST /api/agent/v1/qm-automation/objection                    - 상담사 이의제기
+- POST /api/agent/v1/qm-automation/qa-feedback                  - QA 피드백
+- POST /api/agent/v1/qm-automation/agent-bulk-action             - 벌크 상담사 액션
+- POST /api/agent/v1/qm-automation/qa-bulk-feedback              - 벌크 QA 피드백
+- POST /api/agent/v1/qm-automation/reset-evaluation-state       - 평가 상태 초기화
+- POST /api/agent/v1/qm-automation/agent-evaluation-summary     - 상담사 평가 요약 생성
+- GET  /api/agent/v1/qm-automation/agent-evaluation-summary     - 상담사 평가 요약 목록 조회
 - GET  /api/agent/v1/qm-automation/agent-evaluation-summary/detail - 상담사 평가 요약 상세 조회
+
+[QM Evaluation Form APIs] (ALB Proxy)
+- ALL  /api/agent/v1/qm-evaluation-form*                        - 평가 양식 CRUD
+
+[SOP Manager APIs] (ALB Proxy)
+- ALL  /api/agent/v1/sop*                                       - SOP 관리 CRUD
+
+[Gemini API]
+- POST /api/agent/v1/qm-automation/simple-prompt                - Gemini 프롬프트 실행
 
 [Health]
 - GET  /health                   - Health check

@@ -44,6 +44,7 @@ import {
   Search as SearchIcon,
   KeyboardArrowUp as ArrowUpIcon,
   KeyboardArrowDown as ArrowDownIcon,
+  Download as DownloadIcon,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { getAWSConnectService } from '@/services/awsConnectService';
@@ -132,6 +133,17 @@ const QMFlowXRayViewerContent: React.FC = () => {
     });
     return Array.from(ids);
   }, [filteredLogsData]);
+
+  const handleDownloadJSON = () => {
+    if (!lambdaLogsData) return;
+    const blob = new Blob([JSON.stringify(lambdaLogsData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lambda-logs-${requestId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleBack = () => {
     if (requestId) {
@@ -259,6 +271,13 @@ const QMFlowXRayViewerContent: React.FC = () => {
             )}
           </Box>
           <Stack direction="row" spacing={1}>
+            <Tooltip title="JSON 다운로드">
+              <span>
+                <IconButton onClick={handleDownloadJSON} disabled={!lambdaLogsData}>
+                  <DownloadIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
             <Tooltip title="새로고침">
               <IconButton onClick={() => refetchLogs()}>
                 <RefreshIcon />

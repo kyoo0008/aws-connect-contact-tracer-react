@@ -386,7 +386,7 @@ export interface BulkQAFeedbackItem {
  */
 export interface BulkQAFeedbackRequest {
   requestId: string;
-  actions: BulkQAFeedbackItem[];
+  feedbacks: BulkQAFeedbackItem[];
   userId: string;
   userName?: string;
 }

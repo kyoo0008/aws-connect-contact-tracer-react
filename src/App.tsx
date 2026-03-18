@@ -22,6 +22,7 @@ import QMFlowXRayViewer from './pages/QMFlowXRayViewer';
 import QMAgentSummary from './pages/QMAgentSummary';
 import GeminiPlayground from './pages/GeminiPlayground';
 import Help from './pages/Help';
+import SOPManager from './pages/SOPManager';
 
 // Components
 import Layout from './components/Layout/Layout';
@@ -215,6 +216,7 @@ function App() {
                       <Route path="/logs/:contactId?" element={<LogAnalysis />} />
                       <Route path="/qm-flow-xray" element={<QMFlowXRayViewer />} />
                       <Route path="/xray-trace" element={<XRayTraceViewer />} />
+                      <Route path="/sop-manager" element={<SOPManager />} />
                       <Route path="/settings" element={<Settings />} />
                       <Route path="/help" element={<Help />} />
                     </Routes>

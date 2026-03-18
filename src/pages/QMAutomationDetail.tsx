@@ -2833,7 +2833,7 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
       );
     } else {
       response = await submitBulkQAFeedback(
-        { requestId, actions: actions as any, userId, userName },
+        { requestId, feedbacks: actions as any, userId, userName },
         config
       );
     }

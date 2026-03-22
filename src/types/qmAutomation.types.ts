@@ -60,6 +60,8 @@ export interface QMAutomationResult {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  finishReason?: string;
+  geminiRegion?: string;
   functionCalls?: FunctionCall[];
   thinkingText?: string;
   errorDetails?: any; // 에러 상세 정보 (Lambda 에러 응답)
@@ -289,6 +291,8 @@ export interface EvaluationEvent {
   type?: string;
   participant?: string;
   transcript?: string;
+  customerTranscript?: string;
+  agentTranscript?: string;
   reason?: string;
   detectedSentence?: string;
   correction?: string;

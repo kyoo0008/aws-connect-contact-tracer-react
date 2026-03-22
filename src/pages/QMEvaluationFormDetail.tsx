@@ -177,10 +177,10 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                 type: desc,
                 events: [
                     {
-                        timestamp: `**${desc}** 평가 기준 발화된 시점(mm:ss)`,
-                        participant: `**${desc}** 평가 기준 발화 주체(AGENT | CUSTOMER)`,
-                        transcript: `**${desc}** 평가 기준 발화 내용`,
-                        reason: `**${desc}** 평가 기준 이유`,
+                        timestamp: `type 평가 기준 발화된 시점(mm:ss)`,
+                        customerTranscript: `type 평가 기준 고객 발화 내용(생략가능)`,
+                        agentTranscript: `type 평가 기준 상담사 발화 내용(생략가능)`,
+                        reason: `type 평가 기준 이유`,
                     },
                 ],
             };
@@ -331,10 +331,10 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                 type: desc,
                 events: [
                     {
-                        timestamp: `**${desc}** 평가 기준 발화된 시점(mm:ss)`,
-                        participant: `**${desc}** 평가 기준 발화 주체(AGENT | CUSTOMER)`,
-                        transcript: `**${desc}** 평가 기준 발화 내용`,
-                        reason: `**${desc}** 평가 기준 이유`,
+                        timestamp: `type 평가 기준 발화된 시점(mm:ss)`,
+                        customerTranscript: `type 평가 기준 고객 발화 내용`,
+                        agentTranscript: `type 평가 기준 상담사 대응 발화 내용`,
+                        reason: `type 평가 기준 이유`,
                     },
                 ],
             };
@@ -379,10 +379,10 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                     type: desc,
                     events: [
                         {
-                            timestamp: `**${desc}** 평가 기준 발화된 시점(mm:ss)`,
-                            participant: `**${desc}** 평가 기준 발화 주체(AGENT | CUSTOMER)`,
-                            transcript: `**${desc}** 평가 기준 발화 내용`,
-                            reason: `**${desc}** 평가 기준 이유`,
+                            timestamp: `type 평가 기준 발화된 시점(mm:ss)`,
+                            customerTranscript: `type 평가 기준 고객 발화 내용`,
+                            agentTranscript: `type 평가 기준 상담사 대응 발화 내용`,
+                            reason: `type 평가 기준 이유`,
                         },
                     ],
                 };

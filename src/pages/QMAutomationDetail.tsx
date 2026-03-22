@@ -844,6 +844,18 @@ const QMAutomationDetail: React.FC = () => {
                                 {qmDetail.result.outputTokens?.toLocaleString() || '-'}
                               </Typography>
                             </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <Typography variant="caption" color="text.secondary">Finish Reason</Typography>
+                              <Typography variant="body2">
+                                {qmDetail.result.finishReason || '-'}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <Typography variant="caption" color="text.secondary">Gemini Region</Typography>
+                              <Typography variant="body2">
+                                {qmDetail.result.geminiRegion || '-'}
+                              </Typography>
+                            </Grid>
                           </>
                         )}
                         <Grid item xs={6} sm={3}>
@@ -2292,7 +2304,10 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown; label?: strin
                 </Typography>
                 {events.length > 0 ? (
                   <Stack spacing={1}>
-                    {events.map((ev, idx) => (
+                    {events.map((ev, idx) => {
+                      const customerTranscript = ev.customerTranscript as string | undefined;
+                      const agentTranscript = ev.agentTranscript as string | undefined;
+                      return (
                       <Box key={idx} sx={{ pl: 1, borderLeft: '2px solid', borderColor: 'primary.light' }}>
                         {(ev.timestamp || ev.participant) && (
                           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
@@ -2314,13 +2329,34 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown; label?: strin
                             "{ev.transcript}"
                           </Typography>
                         )}
+                        {customerTranscript && (
+                          <Typography variant="body2" sx={{ mb: 0.5 }}>
+                            <Typography component="span" variant="caption" color="secondary.main" fontWeight={600} sx={{ mr: 0.5 }}>
+                              고객:
+                            </Typography>
+                            <Typography component="span" variant="body2" sx={{ fontStyle: 'italic' }}>
+                              "{customerTranscript}"
+                            </Typography>
+                          </Typography>
+                        )}
+                        {agentTranscript && (
+                          <Typography variant="body2" sx={{ mb: 0.5 }}>
+                            <Typography component="span" variant="caption" color="primary.main" fontWeight={600} sx={{ mr: 0.5 }}>
+                              상담사:
+                            </Typography>
+                            <Typography component="span" variant="body2" sx={{ fontStyle: 'italic' }}>
+                              "{agentTranscript}"
+                            </Typography>
+                          </Typography>
+                        )}
                         {ev.reason && (
                           <Typography variant="caption" color="text.secondary">
                             {ev.reason}
                           </Typography>
                         )}
                       </Box>
-                    ))}
+                      );
+                    })}
                   </Stack>
                 ) : (
                   <Typography variant="caption" color="text.secondary">
@@ -3114,6 +3150,8 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
         const subItemKeys = Object.keys(sectionData).filter((key) =>
           key !== 'feedbackMessage' &&
           key !== 'states' &&
+          key !== 'title' &&
+          key !== 'seq' &&
           !key.toLowerCase().endsWith('score')
         ).sort((a, b) => {
           // Form이 있으면 displayOrder 기준 정렬
@@ -3134,7 +3172,8 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
         const isGeminiCompleted = currentState?.status === 'GEMINI_EVAL_COMPLETED';
         const isObjectionRequested = currentState?.status === 'AGENT_OBJECTION_REQUESTED';
         const isFail = currentState?.evaluationStatus === 'FAIL' || currentState?.evaluationStatus === 'WARNING';
-        const categoryLabel = categoryLabelMap?.get(sectionKey) || getLabel(sectionKey);
+        const sectionTitle = sectionData.title as string | undefined;
+        const categoryLabel = categoryLabelMap?.get(sectionKey) || sectionTitle || getLabel(sectionKey);
 
         return (
           <Accordion key={sectionKey} id={`section-${sectionKey}`} defaultExpanded>

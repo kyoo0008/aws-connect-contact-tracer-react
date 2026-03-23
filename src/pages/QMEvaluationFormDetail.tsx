@@ -123,6 +123,7 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                     subItemId: si.subItemId,
                     subItemName: si.subItemName,
                     displayOrder: si.displayOrder,
+                    weight: si.weight,
                     evaluationCriteria: si.evaluationCriteria || [],
                     resultJsonFormat: si.resultJsonFormat || '',
                     instruction: si.instruction || '',
@@ -148,6 +149,7 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                                 subItemId: 'opening',
                                 subItemName: '오프닝 인사',
                                 displayOrder: 1,
+                                weight: 1,
                                 evaluationCriteria: [
                                     {
                                         criteriaId: '1.1.1',
@@ -355,6 +357,7 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
             subItemId: initialData?.subItemId || '',
             subItemName: initialData?.subItemName || '',
             displayOrder: initialData?.displayOrder || defaultDisplayOrder,
+            weight: initialData?.weight ?? 1,
             resultJsonFormat: initialData?.resultJsonFormat || generateDefaultResultJsonFormat(criteria),
             instruction: initialData?.instruction || '',
             evaluationCriteria: criteria,
@@ -462,6 +465,14 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                         fullWidth
                         value={formData.displayOrder}
                         onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) })}
+                    />
+                    <TextField
+                        label="배점 (Weight)"
+                        type="number"
+                        fullWidth
+                        value={formData.weight ?? ''}
+                        onChange={(e) => setFormData({ ...formData, weight: e.target.value ? parseInt(e.target.value) : 1 })}
+                        helperText="소항목 배점"
                     />
                     <TextField
                         label="Instructions (가이드)"
@@ -828,9 +839,14 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                     </IconButton>
                                     <ListItemText
                                         primary={
-                                            <Typography variant="subtitle2" fontWeight="bold">
-                                                {subItem.displayOrder}. {subItem.subItemId} ( {subItem.subItemName} )
-                                            </Typography>
+                                            <Stack direction="row" alignItems="center" spacing={1}>
+                                                <Typography variant="subtitle2" fontWeight="bold">
+                                                    {subItem.displayOrder}. {subItem.subItemId} ( {subItem.subItemName} )
+                                                </Typography>
+                                                {subItem.weight !== undefined && (
+                                                    <Chip label={`Weight: ${subItem.weight}`} size="small" variant="outlined" />
+                                                )}
+                                            </Stack>
                                         }
                                     />
                                 </ListItem>

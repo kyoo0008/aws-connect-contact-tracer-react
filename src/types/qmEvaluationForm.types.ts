@@ -30,6 +30,7 @@ export interface EvaluationSubItem {
     subItemId: string;
     subItemName: string;
     displayOrder: number;
+    weight: number;
     evaluationCriteria: EvaluationCriterion[];
     resultJsonFormat?: string;
     instruction?: string;
@@ -89,6 +90,7 @@ export interface CreateSubItemRequest {
     subItemId?: string;
     subItemName: string;
     displayOrder: number;
+    weight: number;
     evaluationCriteria: EvaluationCriterion[];
     resultJsonFormat?: string;
     instruction?: string;
@@ -97,6 +99,7 @@ export interface CreateSubItemRequest {
 export interface UpdateSubItemRequest {
     subItemName?: string;
     displayOrder?: number;
+    weight?: number;
     evaluationCriteria?: EvaluationCriterion[];
     resultJsonFormat?: string;
     instruction?: string;
@@ -121,6 +124,7 @@ export interface BulkSubItem {
     subItemId: string;
     subItemName: string;
     displayOrder: number;
+    weight: number;
     evaluationCriteria: EvaluationCriterion[];
     resultJsonFormat?: string;
     instruction?: string;

@@ -124,6 +124,17 @@ export interface Recording {
   status: 'AVAILABLE' | 'PROCESSING' | 'DELETED';
 }
 
+export interface AssociatedContact {
+  contactId: string;
+  channel: string;
+  initiationMethod: string;
+  initiationTimestamp: string;
+  disconnectTimestamp?: string;
+  previousContactId?: string;
+  relatedContactId?: string;
+  initialContactId?: string;
+}
+
 export interface FlowModule {
   id: string;
   name: string;
@@ -231,6 +242,19 @@ export interface FlowMetrics {
   customerSatisfaction?: number;
   firstCallResolution?: number;
   agentUtilization?: number;
+}
+
+// History Types
+export interface HistoryEntry {
+  contactId: string;
+  contactFlowName?: string;
+  channel?: string;
+  initiationTimestamp?: string;
+  disconnectTimestamp?: string;
+  viewedAt: string; // ISO timestamp of when the user viewed this contact flow
+  nodeCount?: number;
+  errorCount?: number;
+  duration?: number;
 }
 
 // API Response Types

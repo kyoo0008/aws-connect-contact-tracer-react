@@ -47,6 +47,8 @@ import {
   searchLambdaError,
   detectSearchType,
 } from '@/services/searchService';
+import { historyService } from '@/services/historyService';
+import { HistoryEntry } from '@/types/contact.types';
 
 type SearchType = 'ContactId' | 'Customer' | 'Agent' | 'ContactFlow' | 'DNIS' | 'LambdaError' | 'History';
 
@@ -58,6 +60,7 @@ const Dashboard: React.FC = () => {
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [searchResults, setSearchResults] = useState<ContactDetails[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
 
   // Statistics query
   const { data: stats } = useQuery({
@@ -105,9 +108,23 @@ const Dashboard: React.FC = () => {
       return;
     }
 
-    // For History, show placeholder message
+    // For History, load from localStorage with optional filtering
     if (searchType === 'History') {
-      setSearchError('History feature will be implemented to show previously viewed contact flows.');
+      const allEntries = historyService.getAll();
+      const term = searchValue.trim().toLowerCase();
+      const entries = term
+        ? allEntries.filter(e =>
+            e.contactId.toLowerCase().includes(term) ||
+            (e.contactFlowName || '').toLowerCase().includes(term) ||
+            (e.channel || '').toLowerCase().includes(term)
+          )
+        : allEntries;
+      setHistoryEntries(entries);
+      if (allEntries.length === 0) {
+        setSearchError('No history found. View a contact flow first to build history.');
+      } else if (entries.length === 0) {
+        setSearchError(`No history matching "${searchValue.trim()}"`);
+      }
       return;
     }
 
@@ -196,7 +213,7 @@ const Dashboard: React.FC = () => {
       case 'LambdaError':
         return 'Search for Lambda errors in the last 48 hours';
       case 'History':
-        return 'View saved contact flow history';
+        return 'Search by Contact ID, Flow Name, or Channel';
       default:
         return 'Enter search value';
     }
@@ -217,7 +234,7 @@ const Dashboard: React.FC = () => {
       case 'LambdaError':
         return 'Automatically searches CloudWatch Logs for errors';
       case 'History':
-        return 'Shows previously searched contact flows';
+        return 'Filter history by Contact ID, Flow Name, or Channel (leave empty to show all)';
       default:
         return '';
     }
@@ -243,8 +260,16 @@ const Dashboard: React.FC = () => {
                   value={searchType}
                   label="Search Type"
                   onChange={(e: SelectChangeEvent) => {
-                    setSearchType(e.target.value as SearchType);
+                    const newType = e.target.value as SearchType;
+                    setSearchType(newType);
                     setSearchValue('');
+                    setSearchResults([]);
+                    setSearchError(null);
+                    if (newType === 'History') {
+                      setHistoryEntries(historyService.getAll());
+                    } else {
+                      setHistoryEntries([]);
+                    }
                   }}
                 >
                   <MenuItem value="ContactId">
@@ -298,14 +323,29 @@ const Dashboard: React.FC = () => {
                 variant="outlined"
                 placeholder={getSearchPlaceholder()}
                 value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
+                onChange={(e) => {
+                  setSearchValue(e.target.value);
+                  if (searchType === 'History') {
+                    const allEntries = historyService.getAll();
+                    const term = e.target.value.trim().toLowerCase();
+                    setHistoryEntries(
+                      term
+                        ? allEntries.filter(entry =>
+                            entry.contactId.toLowerCase().includes(term) ||
+                            (entry.contactFlowName || '').toLowerCase().includes(term) ||
+                            (entry.channel || '').toLowerCase().includes(term)
+                          )
+                        : allEntries
+                    );
+                  }
+                }}
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') {
                     handleSearch();
                   }
                 }}
                 helperText={getSearchHelperText()}
-                disabled={searchType === 'LambdaError' || searchType === 'History'}
+                disabled={searchType === 'LambdaError'}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -446,6 +486,65 @@ const Dashboard: React.FC = () => {
                       <strong>Initiation:</strong> {dayjs(contact.initiationTimestamp).format('YYYY-MM-DD HH:mm:ss')}
                     </Typography>
                     <Chip label={contact.channel} size="small" sx={{ mt: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
+      {/* History Results */}
+      {historyEntries.length > 0 && (
+        <Box sx={{ mt: 3 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+            <Typography variant="h6">
+              History ({historyEntries.length})
+            </Typography>
+            <Button
+              size="small"
+              color="error"
+              onClick={() => {
+                historyService.clear();
+                setHistoryEntries([]);
+              }}
+            >
+              Clear All
+            </Button>
+          </Stack>
+          <Grid container spacing={2}>
+            {historyEntries.map((entry) => (
+              <Grid item xs={12} key={entry.contactId + entry.viewedAt}>
+                <Card
+                  sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 } }}
+                  onClick={() => navigate(`/contact-flow/${entry.contactId}`)}
+                >
+                  <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Box>
+                        <Typography variant="body1">
+                          <strong>{entry.contactId}</strong>
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {entry.contactFlowName || 'Unknown Flow'}
+                          {entry.duration != null && ` · ${entry.duration}s`}
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        {entry.errorCount != null && entry.errorCount > 0 && (
+                          <Chip label={`${entry.errorCount} errors`} size="small" color="error" variant="outlined" />
+                        )}
+                        {entry.channel && (
+                          <Chip label={entry.channel} size="small" variant="outlined" />
+                        )}
+                        {entry.nodeCount != null && (
+                          <Chip label={`${entry.nodeCount} nodes`} size="small" variant="outlined" />
+                        )}
+                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                          {dayjs(entry.viewedAt).format('MM-DD HH:mm')}
+                        </Typography>
+                      </Stack>
+                    </Stack>
                   </CardContent>
                 </Card>
               </Grid>

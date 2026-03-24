@@ -25,6 +25,7 @@ import {
   Refresh as RefreshIcon,
   Settings as SettingsIcon,
   Assessment as QMIcon,
+  AccountTree as AssociatedIcon,
 } from '@mui/icons-material';
 import ReactFlow, {
   Node,
@@ -40,7 +41,8 @@ import ReactFlow, {
 import { useQuery } from '@tanstack/react-query';
 import { getAWSConnectService } from '@/services/awsConnectService';
 import { FlowBuilderService } from '@/services/flowBuilderService';
-import { ContactLog } from '@/types/contact.types';
+import { ContactLog, AssociatedContact } from '@/types/contact.types';
+import { historyService } from '@/services/historyService';
 import CustomNode from '@/components/FlowNodes/CustomNode';
 import TranscriptPanel from '@/components/TranscriptPanel/TranscriptPanel';
 import LogDetailsDrawer from '@/components/LogDetailsDrawer/LogDetailsDrawer';
@@ -150,12 +152,10 @@ const ContactFlowViewerContent: React.FC = () => {
         : new Date();
       endTime.setHours(endTime.getHours() + 1);
 
-      // Fetch logs in parallel
-      const [contactLogs, lambdaLogs] = await Promise.all([
-        service.getContactLogs(contactId, startTime, endTime),
-        // service.getTranscript(contactId, startTime),
-        service.getAllLambdaLogs(contactId, startTime, endTime),
-      ]);
+      // Contact 로그 조회 후 동적으로 Lambda 로그 그룹 감지하여 조회
+      const { contactLogs, lambdaLogs } = await service.fetchContactAndLambdaLogs(
+        contactId, startTime, endTime
+      );
 
       // Enrich contact logs with X-Ray trace IDs from Lambda logs
       const enrichedLogs = service.enrichContactLogsWithXRayTraceIds(contactLogs, lambdaLogs);
@@ -176,8 +176,40 @@ const ContactFlowViewerContent: React.FC = () => {
     retry: 2,
   });
 
+  // Associated Contacts 조회
+  const { data: associatedContacts } = useQuery<AssociatedContact[]>({
+    queryKey: ['associated-contacts', contactId, config.credentials?.accessKeyId],
+    queryFn: async () => {
+      if (!contactId) throw new Error('Contact ID is required');
+      const service = getAWSConnectService(config);
+      return service.getAssociatedContacts(contactId);
+    },
+    enabled: !!contactId && isConfigured,
+    retry: 1,
+  });
+
   // Extract flowData for convenience
   const flowData = queryData?.flowData;
+
+  // Save to history when flow data is loaded
+  useEffect(() => {
+    if (flowData && contactId) {
+      const logs = flowData.logs || [];
+      const firstLog = logs[0];
+      const lastLog = logs[logs.length - 1];
+      historyService.save({
+        contactId,
+        contactFlowName: firstLog?.ContactFlowName,
+        channel: firstLog?.Channel,
+        initiationTimestamp: firstLog?.InitiationTimestamp || firstLog?.Timestamp,
+        disconnectTimestamp: lastLog?.DisconnectTimestamp || lastLog?.Timestamp,
+        viewedAt: new Date().toISOString(),
+        nodeCount: flowData.nodes.length,
+        errorCount: flowData.nodes.filter((n: any) => n.data?.error).length,
+        duration: lastLog?.Duration,
+      });
+    }
+  }, [flowData, contactId]);
 
   // Update nodes and edges when flow data changes
   useEffect(() => {
@@ -511,6 +543,49 @@ const ContactFlowViewerContent: React.FC = () => {
           />
         </Stack>
       </Paper>
+
+      {/* Associated Contacts */}
+      {associatedContacts && associatedContacts.length > 1 && (
+        <Paper elevation={0} sx={{ p: 1, borderBottom: 1, borderColor: 'divider' }}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ overflowX: 'auto' }}>
+            <AssociatedIcon fontSize="small" color="action" />
+            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', fontWeight: 500 }}>
+              Associated:
+            </Typography>
+            {associatedContacts.map((ac, index) => (
+              <React.Fragment key={ac.contactId}>
+                {index > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ mx: 0.5 }}>
+                    {ac.relatedContactId && associatedContacts.some(prev => prev.contactId === ac.relatedContactId)
+                      ? '↔ Related'
+                      : `→ ${ac.initiationMethod || ''}`}
+                  </Typography>
+                )}
+                <Tooltip
+                  title={`${ac.contactId}\nChannel: ${ac.channel}\nInitiation: ${ac.initiationMethod}\nTime: ${new Date(ac.initiationTimestamp).toLocaleString()}`}
+                  arrow
+                >
+                  <Chip
+                    label={`${ac.contactId.substring(0, 8)}… · ${ac.channel}`}
+                    size="small"
+                    color={ac.contactId === contactId ? 'primary' : 'default'}
+                    variant={ac.contactId === contactId ? 'filled' : 'outlined'}
+                    onClick={() => {
+                      if (ac.contactId !== contactId) {
+                        navigate(`/contact-flow/${ac.contactId}`);
+                      }
+                    }}
+                    sx={{
+                      cursor: ac.contactId !== contactId ? 'pointer' : 'default',
+                      fontWeight: ac.contactId === contactId ? 600 : 400,
+                    }}
+                  />
+                </Tooltip>
+              </React.Fragment>
+            ))}
+          </Stack>
+        </Paper>
+      )}
 
       {/* React Flow Canvas */}
       <Box sx={{ flex: 1 }}>

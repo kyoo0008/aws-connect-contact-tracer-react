@@ -4,6 +4,7 @@ import {
   SearchContactsCommand,
   GetContactAttributesCommand,
   ListInstancesCommand,
+  ListAssociatedContactsCommand,
 } from '@aws-sdk/client-connect';
 import {
   CloudWatchLogsClient,
@@ -32,7 +33,8 @@ import {
   TranscriptEntry,
   AWSConfig,
   SearchCriteria,
-  ApiResponse
+  ApiResponse,
+  AssociatedContact,
 } from '@/types/contact.types';
 import { createAutoRenewingCredentialProvider } from './credentialService';
 
@@ -128,6 +130,7 @@ export class AWSConnectService {
 
   /**
    * Contact 로그 조회 (CloudWatch Logs)
+   * CloudWatch 조회 실패 시 (MalformedQueryException 등) S3 백업 로그로 폴백
    */
   async getContactLogs(
     contactId: string,
@@ -171,7 +174,23 @@ export class AWSConnectService {
       }
 
       return this.parseCloudWatchLogs(results);
-    } catch (error) {
+    } catch (error: any) {
+      // CloudWatch 조회 실패 시 S3 백업으로 폴백 (24시간 초과 로그 등)
+      const errorStr = String(error?.name || error?.message || error);
+      if (errorStr.includes('MalformedQuery') || errorStr.includes('ResourceNotFoundException')) {
+        console.warn(
+          `[getContactLogs] CloudWatch query failed (${errorStr}), falling back to S3 backup logs...`
+        );
+        try {
+          const { contactLogs } = await this.getDatadogLogs(contactId, startTime, endTime);
+          if (contactLogs.length > 0) {
+            console.log(`[getContactLogs] S3 fallback returned ${contactLogs.length} logs`);
+            return contactLogs;
+          }
+        } catch (s3Error) {
+          console.error('[getContactLogs] S3 fallback also failed:', s3Error);
+        }
+      }
       console.error('Error fetching contact logs:', error);
       throw error;
     }
@@ -302,12 +321,8 @@ export class AWSConnectService {
     startTime: Date,
     endTime: Date
   ): Promise<LambdaLog[]> {
-    const logGroupName = `/aws/lambda/${functionName}`;
-    const query = `
-      fields @timestamp, @message
-      | filter @message like /${contactId}/
-      | sort @timestamp asc
-    `;
+    const logGroupName = this.resolveLogGroupName(functionName);
+    const query = this.buildLambdaLogQuery(contactId, logGroupName);
 
     try {
       const logs = await this.queryCloudWatchLogs(
@@ -325,9 +340,141 @@ export class AWSConnectService {
   }
 
   /**
-   * Contact 관련 Lambda CloudWatch Log 그룹 목록
+   * Contact 로그를 분석하여 실제 호출된 Lambda/Lex 로그 그룹을 동적으로 감지
+   * Python connect-contact-tracer의 fetch_logs 내 동적 감지 로직 참고
    */
-  private readonly CONTACT_LAMBDA_LOG_GROUPS = [
+  detectLambdaLogGroups(contactLogs: ContactLog[]): Set<string> {
+    const logGroups = new Set<string>();
+
+    for (const log of contactLogs) {
+      // Lambda 호출 감지: InvokeExternalResource 모듈에서 FunctionArn 추출
+      if (log.ContactFlowModuleType === 'InvokeExternalResource') {
+        const functionArn = log.Parameters?.FunctionArn
+          || log.Parameters?.Parameters?.FunctionArn;
+
+        if (functionArn) {
+          const logGroup = this.getLambdaLogGroupFromArn(functionArn);
+          logGroups.add(logGroup);
+
+          // idnv-common-if 예외처리: async-if도 함께 조회
+          if (functionArn.includes('idnv-common-if')) {
+            const asyncLogGroup = this.getLambdaLogGroupFromArn(
+              functionArn.replace('common-if', 'async-if')
+            );
+            logGroups.add(asyncLogGroup);
+          }
+
+          // chat keyword 감지 시 chat app 로그 그룹 추가
+          const params = log.Parameters?.Parameters;
+          if (params?.keywords && params.keywords === 'chat') {
+            logGroups.add('/aws/lmd/aicc-chat-app/alb-chat-if');
+          }
+        }
+      }
+
+      // Lex Bot 호출 감지: BotAliasArn이 포함된 로그
+      const logStr = JSON.stringify(log);
+      if (logStr.includes('BotAliasArn')) {
+        const botAliasArn = log.Parameters?.BotAliasArn
+          || log.Parameters?.Parameters?.BotAliasArn;
+
+        if (botAliasArn && this.config.environment !== 'test') {
+          const botName = this.extractBotNameFromAliasArn(botAliasArn);
+          if (botName) {
+            logGroups.add(`/aws/lex/aicc/${botName}`);
+          }
+          logGroups.add('/aws/lmd/aicc-voicebot-app/lex-hook-func');
+        } else if (this.config.environment === 'test') {
+          // test 환경에서는 고정 Lex 로그 그룹 사용
+          logGroups.add('/aws/lex/TMSSWIWT4K');
+        }
+      }
+    }
+
+    return logGroups;
+  }
+
+  /**
+   * Lambda Function ARN에서 CloudWatch Log 그룹 이름 도출
+   * Python의 get_lambda_log_groups_from_arn 참고
+   */
+  private getLambdaLogGroupFromArn(arn: string): string {
+    const funcName = this.getFuncNameFromArn(arn);
+    if (this.config.environment === 'test') {
+      return `/aws/lambda/${funcName}`;
+    }
+    return `/aws/lmd/aicc-connect-flow-base/${funcName}`;
+  }
+
+  /**
+   * Lambda Function ARN에서 함수 이름 추출
+   * Python의 get_func_name 참고
+   */
+  private getFuncNameFromArn(arn: string): string {
+    if (this.config.environment === 'test') {
+      return arn.split(':').pop() || arn;
+    }
+    // arn:aws:lambda:region:account:function:aicc-env-region-flow-xxx
+    // → "flow-xxx" (앞 3개 세그먼트 제거)
+    const funcFullName = arn.split(':')[6] || '';
+    const parts = funcFullName.split('-');
+    return parts.slice(3).join('-');
+  }
+
+  /**
+   * BotAliasArn에서 봇 이름 추출
+   */
+  private extractBotNameFromAliasArn(aliasArn: string): string | null {
+    try {
+      // arn:aws:lex:region:account:bot-alias/BOT_ID/ALIAS_ID
+      const parts = aliasArn.split('/');
+      if (parts.length >= 2) {
+        // 봇 이름은 ARN만으로는 알 수 없지만, 봇 ID에서 유추 가능한 경우 사용
+        // 실제로는 DescribeBotAlias API 호출이 필요하지만, 여기서는 간단히 ID 반환
+        return parts[1] || null;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  /**
+   * 로그 그룹 이름 해석 (단순 함수명이면 전체 경로로 변환)
+   */
+  private resolveLogGroupName(nameOrPath: string): string {
+    if (nameOrPath.startsWith('/')) return nameOrPath;
+    if (this.config.environment === 'test') {
+      return `/aws/lambda/${nameOrPath}`;
+    }
+    return `/aws/lmd/aicc-connect-flow-base/${nameOrPath}`;
+  }
+
+  /**
+   * Lambda 로그 쿼리 생성
+   * Lex 로그는 @message like 사용, 그 외는 ContactId 필터 사용 (Python 참고)
+   */
+  private buildLambdaLogQuery(searchKey: string, logGroupName: string): string {
+    if (logGroupName.includes('/aws/lex/')) {
+      // Lex 로그는 ContactId 필드가 없으므로 메시지 검색
+      return `
+        fields @timestamp, @message, @logStream, @xrayTraceId
+        | filter @message like "${searchKey}"
+        | sort @timestamp asc
+      `;
+    }
+    // Lambda 로그는 ContactId 필드로 정확히 필터링 (더 효율적)
+    return `
+      fields @timestamp, @message, @logStream, @xrayTraceId
+      | filter ContactId = "${searchKey}"
+      | sort @timestamp asc
+    `;
+  }
+
+  /**
+   * Contact 관련 Lambda CloudWatch Log 그룹 목록 (폴백용)
+   */
+  private readonly FALLBACK_CONTACT_LAMBDA_LOG_GROUPS = [
     "/aws/lmd/aicc-connect-flow-base/flow-agent-workspace-handler",
     "/aws/lmd/aicc-connect-flow-base/flow-alms-if",
     "/aws/lmd/aicc-connect-flow-base/flow-chat-app",
@@ -351,35 +498,46 @@ export class AWSConnectService {
   ];
 
   /**
-   * 모든 Lambda 함수의 로그를 병렬로 조회
-   * Contact ID 또는 Request ID와 관련된 로그만 필터링
+   * Lambda 함수의 로그를 병렬로 조회
+   * Contact 로그에서 감지된 로그 그룹만 쿼리하여 효율적으로 동작
+   *
    * @param searchKey - contactId 또는 requestId
    * @param startTime - 시작 시간
    * @param endTime - 종료 시간
-   * @param useQmLogGroups - true이면 QM_LAMBDA_LOG_GROUPS 사용, false이면 CONTACT_LAMBDA_LOG_GROUPS 사용
+   * @param useQmLogGroups - true이면 QM_LAMBDA_LOG_GROUPS 사용
+   * @param detectedLogGroups - contact 로그에서 동적으로 감지된 로그 그룹 (없으면 폴백 목록 사용)
    */
   async getAllLambdaLogs(
     searchKey: string,
     startTime: Date,
     endTime: Date,
-    useQmLogGroups: boolean = false
+    useQmLogGroups: boolean = false,
+    detectedLogGroups?: Set<string>
   ): Promise<Record<string, LambdaLog[]>> {
     const startFetchTime = Date.now();
     const lambdaLogs: Record<string, LambdaLog[]> = {};
-    const logGroups = useQmLogGroups ? this.QM_LAMBDA_LOG_GROUPS : this.CONTACT_LAMBDA_LOG_GROUPS;
-    const logType = useQmLogGroups ? 'QM' : 'Contact';
+
+    let logGroups: string[];
+    let logType: string;
+
+    if (useQmLogGroups) {
+      logGroups = this.QM_LAMBDA_LOG_GROUPS;
+      logType = 'QM';
+    } else if (detectedLogGroups && detectedLogGroups.size > 0) {
+      logGroups = Array.from(detectedLogGroups);
+      logType = 'Detected';
+    } else {
+      logGroups = this.FALLBACK_CONTACT_LAMBDA_LOG_GROUPS;
+      logType = 'Fallback (all)';
+    }
 
     console.log(`[getAllLambdaLogs] Starting ${logType} Lambda log fetch for key ${searchKey}`);
     console.log(`[getAllLambdaLogs] Time range: ${startTime.toISOString()} ~ ${endTime.toISOString()}`);
     console.log(`[getAllLambdaLogs] Querying ${logGroups.length} log groups in parallel...`);
 
-    // 병렬로 모든 Lambda 로그 조회
+    // 병렬로 Lambda 로그 조회
     const logPromises = logGroups.map(async (logGroupName, index) => {
-      const query = `
-        fields @timestamp, @message, @logStream, @xrayTraceId
-        | filter @message like /${searchKey}/
-        | sort @timestamp asc
-      `;
+      const query = this.buildLambdaLogQuery(searchKey, logGroupName);
 
       try {
         console.log(`[getAllLambdaLogs] [${index + 1}/${logGroups.length}] Querying ${logGroupName}...`);
@@ -430,15 +588,51 @@ export class AWSConnectService {
       if (logs.length > 0) {
         lambdaLogs[functionName] = logs;
         totalLogCount += logs.length;
-        console.log(`[getAllLambdaLogs] ✓ ${functionName}: ${logs.length} logs`);
       }
     });
 
+    // idnv-async-if 로그를 idnv-common-if에 합치기 (Python 참고)
+    const asyncLogs = lambdaLogs['flow-idnv-async-if'];
+    if (asyncLogs && asyncLogs.length > 0) {
+      lambdaLogs['flow-idnv-common-if'] = [
+        ...(lambdaLogs['flow-idnv-common-if'] || []),
+        ...asyncLogs,
+      ];
+    }
+
     const fetchDuration = ((Date.now() - startFetchTime) / 1000).toFixed(2);
-    console.log(`[getAllLambdaLogs] ✅ Completed in ${fetchDuration}s`);
-    console.log(`[getAllLambdaLogs] 📊 Summary: ${totalLogCount} total logs from ${Object.keys(lambdaLogs).length} functions`);
+    console.log(`[getAllLambdaLogs] Completed in ${fetchDuration}s - ${totalLogCount} total logs from ${Object.keys(lambdaLogs).length} functions`);
 
     return lambdaLogs;
+  }
+
+  /**
+   * Contact 로그 조회 후 Lambda 로그를 동적으로 감지하여 조회하는 통합 메서드
+   * Python의 fetch_logs와 동일한 플로우: contact 로그 → 동적 감지 → Lambda 로그 병렬 조회
+   */
+  async fetchContactAndLambdaLogs(
+    contactId: string,
+    startTime: Date,
+    endTime: Date
+  ): Promise<{ contactLogs: ContactLog[]; lambdaLogs: Record<string, LambdaLog[]> }> {
+    // 1. Contact 로그 먼저 조회
+    const contactLogs = await this.getContactLogs(contactId, startTime, endTime);
+
+    // 2. Contact 로그에서 Lambda/Lex 로그 그룹 동적 감지
+    const detectedLogGroups = this.detectLambdaLogGroups(contactLogs);
+    console.log(`[fetchContactAndLambdaLogs] Detected ${detectedLogGroups.size} log groups from contact logs:`,
+      Array.from(detectedLogGroups));
+
+    // 3. 감지된 로그 그룹만 병렬 조회
+    const lambdaLogs = await this.getAllLambdaLogs(
+      contactId,
+      startTime,
+      endTime,
+      false,
+      detectedLogGroups
+    );
+
+    return { contactLogs, lambdaLogs };
   }
 
   /**
@@ -996,6 +1190,37 @@ export class AWSConnectService {
     } catch (error) {
       console.error('Error searching contacts:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Associated Contacts 조회
+   * RelatedContactId, InitialContactId, PreviousContactId 체인을 순회하여
+   * 연관된 모든 Contact를 검색합니다.
+   */
+  async getAssociatedContacts(contactId: string): Promise<AssociatedContact[]> {
+    try {
+      const resp = await this.connectClient.send(
+        new ListAssociatedContactsCommand({
+          InstanceId: this.config.instanceId,
+          ContactId: contactId,
+          MaxResults: 100,
+        })
+      );
+
+      return (resp.ContactSummaryList || []).map(c => ({
+        contactId: c.ContactId!,
+        channel: c.Channel || 'VOICE',
+        initiationMethod: c.InitiationMethod || '',
+        initiationTimestamp: c.InitiationTimestamp!.toISOString(),
+        disconnectTimestamp: c.DisconnectTimestamp?.toISOString(),
+        previousContactId: c.PreviousContactId,
+        relatedContactId: c.RelatedContactId,
+        initialContactId: c.InitialContactId,
+      })).sort((a, b) => new Date(a.initiationTimestamp).getTime() - new Date(b.initiationTimestamp).getTime());
+    } catch (error) {
+      console.error('Error fetching associated contacts:', error);
+      return [];
     }
   }
 

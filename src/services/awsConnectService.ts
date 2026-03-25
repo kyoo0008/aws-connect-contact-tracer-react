@@ -25,7 +25,7 @@ import {
   BatchGetTracesCommandInput,
   BatchGetTracesCommandOutput,
 } from '@aws-sdk/client-xray';
-import pako from 'pako';
+
 import {
   ContactLog,
   LambdaLog,
@@ -244,70 +244,41 @@ export class AWSConnectService {
     startTime: Date,
     endTime: Date
   ): Promise<{ contactLogs: ContactLog[], lambdaLogs: Record<string, LambdaLog[]> }> {
-    const bucket = `${this.config.s3BucketPrefix}-s3-adf-datadog-backup`;
-    const dateStr = startTime.toISOString().split('T')[0].replace(/-/g, '/');
-    const prefix = dateStr;
-
     try {
-      const listCommand = new ListObjectsV2Command({
-        Bucket: bucket,
-        Prefix: prefix,
+      // 백엔드 API를 통해 S3 Datadog 백업 로그를 조회 (브라우저 CORS 제한 우회)
+      const response = await fetch('/api/datadog-logs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-aws-credentials': this.config.credentials ? JSON.stringify(this.config.credentials) : '',
+          'x-aws-region': this.config.region,
+          'x-environment': this.config.environment,
+        },
+        body: JSON.stringify({
+          contactId,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          s3BucketPrefix: this.config.s3BucketPrefix,
+        }),
       });
 
-      const listResponse = await this.s3Client.send(listCommand);
-
-      if (!listResponse.Contents) {
-        return { contactLogs: [], lambdaLogs: {} };
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.message || `Backend returned ${response.status}`);
       }
 
-      const contactLogs: ContactLog[] = [];
+      const data = await response.json();
+
+      // 백엔드에서 받은 raw 로그를 프론트엔드 타입으로 변환
+      const contactLogs: ContactLog[] = (data.contactLogs || []).map((log: any) => this.transformToContactLog(log));
       const lambdaLogs: Record<string, LambdaLog[]> = {};
-
-      for (const object of listResponse.Contents) {
-        const key = object.Key!;
-
-        // Check if file is within time range
-        const fileTime = this.extractTimeFromKey(key);
-        if (!fileTime || fileTime < startTime || fileTime > endTime) {
-          continue;
-        }
-
-        const getCommand = new GetObjectCommand({
-          Bucket: bucket,
-          Key: key,
-        });
-
-        const getResponse = await this.s3Client.send(getCommand);
-        const bodyBuffer = await this.streamToBuffer(getResponse.Body);
-
-        // Decompress gzip
-        const decompressed = pako.ungzip(bodyBuffer, { to: 'string' });
-        const lines = decompressed.split('\n').filter(line => line.trim());
-
-        for (const line of lines) {
-          try {
-            const log = JSON.parse(line);
-
-            if (log.ContactId === contactId) {
-              if (log.logGroup?.includes('/aws/connect/')) {
-                contactLogs.push(this.transformToContactLog(log));
-              } else if (log.logGroup?.includes('/aws/lmd/')) {
-                const functionName = this.extractFunctionName(log.logGroup);
-                if (!lambdaLogs[functionName]) {
-                  lambdaLogs[functionName] = [];
-                }
-                lambdaLogs[functionName].push(this.transformToLambdaLog(log));
-              }
-            }
-          } catch (e) {
-            // Skip invalid JSON lines
-          }
-        }
+      for (const [functionName, logs] of Object.entries(data.lambdaLogs || {})) {
+        lambdaLogs[functionName] = (logs as any[]).map((log: any) => this.transformToLambdaLog(log));
       }
 
       return { contactLogs, lambdaLogs };
     } catch (error) {
-      console.error('Error fetching Datadog logs:', error);
+      console.error('Error fetching Datadog logs via backend:', error);
       return { contactLogs: [], lambdaLogs: {} };
     }
   }
@@ -615,24 +586,44 @@ export class AWSConnectService {
     startTime: Date,
     endTime: Date
   ): Promise<{ contactLogs: ContactLog[]; lambdaLogs: Record<string, LambdaLog[]> }> {
-    // 1. Contact 로그 먼저 조회
-    const contactLogs = await this.getContactLogs(contactId, startTime, endTime);
+    try {
+      // 1. Contact 로그 먼저 조회
+      const contactLogs = await this.getContactLogs(contactId, startTime, endTime);
 
-    // 2. Contact 로그에서 Lambda/Lex 로그 그룹 동적 감지
-    const detectedLogGroups = this.detectLambdaLogGroups(contactLogs);
-    console.log(`[fetchContactAndLambdaLogs] Detected ${detectedLogGroups.size} log groups from contact logs:`,
-      Array.from(detectedLogGroups));
+      // 2. Contact 로그에서 Lambda/Lex 로그 그룹 동적 감지
+      const detectedLogGroups = this.detectLambdaLogGroups(contactLogs);
+      console.log(`[fetchContactAndLambdaLogs] Detected ${detectedLogGroups.size} log groups from contact logs:`,
+        Array.from(detectedLogGroups));
 
-    // 3. 감지된 로그 그룹만 병렬 조회
-    const lambdaLogs = await this.getAllLambdaLogs(
-      contactId,
-      startTime,
-      endTime,
-      false,
-      detectedLogGroups
-    );
+      // 3. 감지된 로그 그룹만 병렬 조회
+      const lambdaLogs = await this.getAllLambdaLogs(
+        contactId,
+        startTime,
+        endTime,
+        false,
+        detectedLogGroups
+      );
 
-    return { contactLogs, lambdaLogs };
+      return { contactLogs, lambdaLogs };
+    } catch (error: any) {
+      // CloudWatch 보존 기간 초과 등으로 전체 실패 시 S3 백업으로 fallback
+      const errorStr = String(error?.name || error?.message || error);
+      if (errorStr.includes('MalformedQuery') || errorStr.includes('ResourceNotFoundException')) {
+        console.warn(
+          `[fetchContactAndLambdaLogs] CloudWatch failed (${errorStr}), falling back to S3 backup...`
+        );
+        try {
+          const s3Result = await this.getDatadogLogs(contactId, startTime, endTime);
+          if (s3Result.contactLogs.length > 0) {
+            console.log(`[fetchContactAndLambdaLogs] S3 fallback returned ${s3Result.contactLogs.length} contact logs, ${Object.keys(s3Result.lambdaLogs).length} lambda log groups`);
+            return s3Result;
+          }
+        } catch (s3Error) {
+          console.error('[fetchContactAndLambdaLogs] S3 fallback also failed:', s3Error);
+        }
+      }
+      throw error;
+    }
   }
 
   /**
@@ -1349,22 +1340,6 @@ export class AWSConnectService {
       chunks.push(chunk);
     }
     return Buffer.concat(chunks).toString('utf-8');
-  }
-
-  private async streamToBuffer(stream: any): Promise<Buffer> {
-    const chunks = [];
-    for await (const chunk of stream) {
-      chunks.push(chunk);
-    }
-    return Buffer.concat(chunks);
-  }
-
-  private extractTimeFromKey(key: string): Date | null {
-    const match = key.match(/(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})/);
-    if (match) {
-      return new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}Z`);
-    }
-    return null;
   }
 
   private extractFunctionName(logGroup: string): string {

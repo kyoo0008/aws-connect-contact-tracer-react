@@ -197,7 +197,7 @@ const ContactFlowViewerContent: React.FC = () => {
       const logs = flowData.logs || [];
       const firstLog = logs[0];
       const lastLog = logs[logs.length - 1];
-      historyService.save({
+      historyService.save(config.environment, {
         contactId,
         contactFlowName: firstLog?.ContactFlowName,
         channel: firstLog?.Channel,

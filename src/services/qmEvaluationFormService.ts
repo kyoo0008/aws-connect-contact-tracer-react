@@ -26,7 +26,7 @@ export async function getQmEvaluationForms(
     const apiBaseUrl = getApiBaseUrl(config.environment);
 
     try {
-        const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-evaluation-form`, {
+        const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation/form`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -64,7 +64,7 @@ export async function getQmEvaluationForm(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}`,
             {
                 method: 'GET',
                 headers: {
@@ -99,7 +99,7 @@ export async function createQmEvaluationForm(
     const apiBaseUrl = getApiBaseUrl(config.environment);
 
     try {
-        const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-evaluation-form`, {
+        const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation/form`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -135,7 +135,7 @@ export async function updateQmEvaluationForm(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}`,
             {
                 method: 'PUT',
                 headers: {
@@ -172,7 +172,7 @@ export async function deleteQmEvaluationForm(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}`,
             {
                 method: 'DELETE',
                 headers: {
@@ -206,7 +206,7 @@ export async function getCategories(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/categories`,
             {
                 method: 'GET',
                 headers: {
@@ -251,7 +251,7 @@ export async function createCategory(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/categories`,
             {
                 method: 'POST',
                 headers: {
@@ -291,7 +291,7 @@ export async function updateCategory(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/categories`,
             {
                 method: 'POST',
                 headers: {
@@ -330,7 +330,7 @@ export async function updateCategoryOrder(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/order`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/categories/order`,
             {
                 method: 'POST',
                 headers: {
@@ -368,7 +368,7 @@ export async function deleteCategory(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}`,
             {
                 method: 'DELETE',
                 headers: {
@@ -403,7 +403,7 @@ export async function getSubItems(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}/subitems`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}/subitems`,
             {
                 method: 'GET',
                 headers: {
@@ -447,7 +447,7 @@ export async function createSubItem(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}/subitems`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}/subitems`,
             {
                 method: 'POST',
                 headers: {
@@ -488,7 +488,7 @@ export async function updateSubItem(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}/subitems`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}/subitems`,
             {
                 method: 'POST',
                 headers: {
@@ -528,7 +528,7 @@ export async function deleteSubItem(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}/subitems/${encodeURIComponent(subItemId)}`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/categories/${encodeURIComponent(categoryId)}/subitems/${encodeURIComponent(subItemId)}`,
             {
                 method: 'DELETE',
                 headers: {
@@ -562,7 +562,7 @@ export async function getQmEvaluationFormPromptPreview(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/prompt-preview`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/prompt-preview`,
             {
                 method: 'GET',
                 headers: {
@@ -599,7 +599,7 @@ export async function bulkUpdateCategories(
 
     try {
         const response = await fetch(
-            `${apiBaseUrl}/api/agent/v1/qm-evaluation-form/${encodeURIComponent(formId)}/categories/bulk`,
+            `${apiBaseUrl}/api/agent/v1/qm-automation/form/${encodeURIComponent(formId)}/categories/bulk`,
             {
                 method: 'PUT',
                 headers: {

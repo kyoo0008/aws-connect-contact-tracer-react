@@ -1,12 +1,16 @@
 import { HistoryEntry } from '@/types/contact.types';
 
-const HISTORY_KEY = 'aicc-tracer-history';
+const HISTORY_KEY_PREFIX = 'aicc-tracer-history';
 const MAX_HISTORY = 50;
 
+function getKey(env: string): string {
+  return `${HISTORY_KEY_PREFIX}-${env}`;
+}
+
 export const historyService = {
-  getAll(): HistoryEntry[] {
+  getAll(env: string): HistoryEntry[] {
     try {
-      const raw = localStorage.getItem(HISTORY_KEY);
+      const raw = localStorage.getItem(getKey(env));
       if (!raw) return [];
       return JSON.parse(raw) as HistoryEntry[];
     } catch {
@@ -14,22 +18,20 @@ export const historyService = {
     }
   },
 
-  save(entry: HistoryEntry): void {
-    const history = this.getAll();
-    // Remove existing entry for the same contactId (to move it to top)
+  save(env: string, entry: HistoryEntry): void {
+    const history = this.getAll(env);
     const filtered = history.filter(h => h.contactId !== entry.contactId);
-    // Add new entry at the beginning
     const updated = [entry, ...filtered].slice(0, MAX_HISTORY);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+    localStorage.setItem(getKey(env), JSON.stringify(updated));
   },
 
-  remove(contactId: string): void {
-    const history = this.getAll();
+  remove(env: string, contactId: string): void {
+    const history = this.getAll(env);
     const updated = history.filter(h => h.contactId !== contactId);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+    localStorage.setItem(getKey(env), JSON.stringify(updated));
   },
 
-  clear(): void {
-    localStorage.removeItem(HISTORY_KEY);
+  clear(env: string): void {
+    localStorage.removeItem(getKey(env));
   },
 };

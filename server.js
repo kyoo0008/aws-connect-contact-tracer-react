@@ -17,6 +17,8 @@ const { ConnectClient, DescribeUserCommand, SearchUsersCommand } = require('@aws
 const { CloudWatchLogsClient, StartQueryCommand, GetQueryResultsCommand } = require('@aws-sdk/client-cloudwatch-logs');
 const { DynamoDBClient, QueryCommand } = require('@aws-sdk/client-dynamodb');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
+const { S3Client, ListObjectsV2Command, GetObjectCommand } = require('@aws-sdk/client-s3');
+const pako = require('pako');
 const { fromIni } = require('@aws-sdk/credential-provider-ini');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -366,9 +368,9 @@ app.post('/api/search/customer', async (req, res) => {
     const dynamoClient = new DynamoDBClient({ region, credentials });
 
     const gsiMap = {
-      phone:     { gsi: 'gsi3', keyName: 'gsi3Pk', prefix: 'contact#phoneNumber#' },
+      phone: { gsi: 'gsi3', keyName: 'gsi3Pk', prefix: 'contact#phoneNumber#' },
       profileId: { gsi: 'gsi1', keyName: 'gsi1Pk', prefix: 'contact#profileId#' },
-      skypass:   { gsi: 'gsi9', keyName: 'gsi9Pk', prefix: 'contact#skypassNumber#' },
+      skypass: { gsi: 'gsi9', keyName: 'gsi9Pk', prefix: 'contact#skypassNumber#' },
     };
 
     const gsiConfig = gsiMap[searchType];
@@ -665,6 +667,96 @@ app.post('/api/search/lambda-error', async (req, res) => {
 });
 
 // ========================================
+// S3 Datadog Backup Logs API
+// ========================================
+
+app.post('/api/datadog-logs', async (req, res) => {
+  try {
+    const { contactId, startTime, endTime, s3BucketPrefix } = req.body;
+    if (!contactId || !startTime || !endTime) {
+      return res.status(400).json({ error: 'contactId, startTime, endTime are required' });
+    }
+
+    const { region, credentials } = await getRequestContext(req);
+    const s3Client = new S3Client({ region, credentials });
+    // aicc-{env}-an2-s3-adf-datadog-backup
+    const bucket = `aicc-prd-an2-s3-adf-datadog-backup`;
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const dateStr = start.toISOString().split('T')[0].replace(/-/g, '/');
+
+    console.log(`[datadog-logs] Fetching from s3://${bucket}/${dateStr} for contact ${contactId}`);
+
+    const listResponse = await s3Client.send(new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: dateStr,
+    }));
+
+    if (!listResponse.Contents) {
+      return res.json({ contactLogs: [], lambdaLogs: {} });
+    }
+
+    const contactLogs = [];
+    const lambdaLogs = {};
+
+    for (const object of listResponse.Contents) {
+      const key = object.Key;
+
+      // Check time range from key
+      const match = key.match(/(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})/);
+      if (match) {
+        const fileTime = new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}Z`);
+        if (fileTime < start || fileTime > end) continue;
+      }
+
+      const getResponse = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      const chunks = [];
+      for await (const chunk of getResponse.Body) {
+        chunks.push(chunk);
+      }
+      const bodyBuffer = Buffer.concat(chunks);
+
+      // Decompress gzip
+      let decompressed;
+      try {
+        decompressed = pako.ungzip(bodyBuffer, { to: 'string' });
+      } catch {
+        decompressed = bodyBuffer.toString('utf-8');
+      }
+
+      const lines = decompressed.split('\n').filter(line => line.trim());
+
+      for (const line of lines) {
+        try {
+          const log = JSON.parse(line);
+
+          if (log.ContactId === contactId) {
+            if (log.logGroup && log.logGroup.includes('/aws/connect/')) {
+              contactLogs.push(log);
+            } else if (log.logGroup && log.logGroup.includes('/aws/lmd/')) {
+              const parts = log.logGroup.split('/');
+              const functionName = parts[parts.length - 1];
+              if (!lambdaLogs[functionName]) {
+                lambdaLogs[functionName] = [];
+              }
+              lambdaLogs[functionName].push(log);
+            }
+          }
+        } catch {
+          // Skip invalid JSON lines
+        }
+      }
+    }
+
+    console.log(`[datadog-logs] Found ${contactLogs.length} contact logs, ${Object.keys(lambdaLogs).length} lambda log groups`);
+    res.json({ contactLogs, lambdaLogs });
+  } catch (error) {
+    console.error('Error fetching datadog logs:', error);
+    res.status(500).json({ error: 'Failed to fetch datadog logs', message: error.message });
+  }
+});
+
+// ========================================
 // QM Automation APIs
 // ========================================
 
@@ -804,8 +896,8 @@ async function handleAlbProxyRequest(req, res) {
   }
 }
 
-app.all('/api/agent/v1/qm-evaluation-form*', handleAlbProxyRequest);
-app.all('/api/agent/v1/sop*', handleAlbProxyRequest);
+app.all('/api/agent/v1/qm-automation/form*', handleAlbProxyRequest);
+app.all('/api/agent/v1/qm-automation/sop*', handleAlbProxyRequest);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -863,10 +955,10 @@ app.listen(PORT, () => {
 - GET  /api/agent/v1/qm-automation/agent-evaluation-summary/detail - 상담사 평가 요약 상세 조회
 
 [QM Evaluation Form APIs] (ALB Proxy)
-- ALL  /api/agent/v1/qm-evaluation-form*                        - 평가 양식 CRUD
+- ALL  /api/agent/v1/qm-automation/form*                        - 평가 양식 CRUD
 
 [SOP Manager APIs] (ALB Proxy)
-- ALL  /api/agent/v1/sop*                                       - SOP 관리 CRUD
+- ALL  /api/agent/v1/qm-automation/sop*                                       - SOP 관리 CRUD
 
 [Gemini API]
 - POST /api/agent/v1/qm-automation/simple-prompt                - Gemini 프롬프트 실행

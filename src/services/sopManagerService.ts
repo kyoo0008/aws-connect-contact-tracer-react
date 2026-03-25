@@ -1,6 +1,6 @@
 import type { AWSConfig } from '@/types/contact.types';
 
-const API_BASE = 'http://localhost:8081/api/agent/v1/sop';
+const API_BASE = 'http://localhost:8081/api/agent/v1/qm-automation/sop';
 
 const DEFAULT_LANG = 'KO';
 

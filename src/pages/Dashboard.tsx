@@ -110,7 +110,7 @@ const Dashboard: React.FC = () => {
 
     // For History, load from localStorage with optional filtering
     if (searchType === 'History') {
-      const allEntries = historyService.getAll();
+      const allEntries = historyService.getAll(config.environment);
       const term = searchValue.trim().toLowerCase();
       const entries = term
         ? allEntries.filter(e =>
@@ -266,7 +266,7 @@ const Dashboard: React.FC = () => {
                     setSearchResults([]);
                     setSearchError(null);
                     if (newType === 'History') {
-                      setHistoryEntries(historyService.getAll());
+                      setHistoryEntries(historyService.getAll(config.environment));
                     } else {
                       setHistoryEntries([]);
                     }
@@ -326,7 +326,7 @@ const Dashboard: React.FC = () => {
                 onChange={(e) => {
                   setSearchValue(e.target.value);
                   if (searchType === 'History') {
-                    const allEntries = historyService.getAll();
+                    const allEntries = historyService.getAll(config.environment);
                     const term = e.target.value.trim().toLowerCase();
                     setHistoryEntries(
                       term
@@ -505,7 +505,7 @@ const Dashboard: React.FC = () => {
               size="small"
               color="error"
               onClick={() => {
-                historyService.clear();
+                historyService.clear(config.environment);
                 setHistoryEntries([]);
               }}
             >

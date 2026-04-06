@@ -78,6 +78,13 @@ import { useConfig } from '@/contexts/ConfigContext';
 const LANG_OPTIONS = ['KO', 'EN'];
 const DEFAULT_LANG = 'KO';
 
+// sk 형식: LANG#KO, LANG#EN 등에서 lang 추출
+function extractLangFromSk(sk?: string): string {
+  if (!sk) return DEFAULT_LANG;
+  const match = sk.match(/^LANG#(.+)$/);
+  return match ? match[1] : DEFAULT_LANG;
+}
+
 // ---- 공통 다이얼로그 ----
 
 interface SelectOption {
@@ -93,6 +100,7 @@ interface FieldConfig {
   type?: 'select';
   options?: string[];
   optionItems?: SelectOption[];
+  readonly?: boolean;
 }
 
 interface FormDialogProps {
@@ -131,14 +139,15 @@ const FormDialog: React.FC<FormDialogProps> = ({ open, title, fields, initialVal
                   label={f.label}
                   value={values[f.key] ?? ''}
                   onChange={e => setValues(v => ({ ...v, [f.key]: e.target.value }))}
+                  disabled={f.readonly}
                 >
                   {f.optionItems
                     ? f.optionItems.map(opt => (
-                        <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                      ))
+                      <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                    ))
                     : (f.options ?? []).map(opt => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                      ))}
+                      <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                    ))}
                 </Select>
               </FormControl>
             ) : (
@@ -229,7 +238,7 @@ const CategoryList: React.FC = () => {
 
   const fields: FieldConfig[] = [
     { key: 'categoryName', label: '카테고리명', required: true },
-    { key: 'lang', label: '언어', required: true, type: 'select', options: LANG_OPTIONS },
+    { key: 'lang', label: '언어', required: true, type: 'select', options: LANG_OPTIONS, readonly: true },
   ];
 
   return (
@@ -307,7 +316,7 @@ const CategoryList: React.FC = () => {
         open={!!editTarget}
         title="카테고리 수정"
         fields={fields}
-        initialValues={editTarget ? { categoryName: editTarget.categoryName, lang: DEFAULT_LANG } : {}}
+        initialValues={editTarget ? { categoryName: editTarget.categoryName, lang: extractLangFromSk(editTarget.sk) } : {}}
         onClose={() => setEditTarget(null)}
         onSubmit={v => updateMut.mutate(v)}
         loading={updateMut.isPending}
@@ -349,7 +358,11 @@ const ServiceList: React.FC<ServiceListProps> = ({ onSelect }) => {
   });
 
   const updateMut = useMutation({
-    mutationFn: (v: Record<string, string>) => updateService(config, editTarget!.serviceId, { lang: v.lang, serviceName: v.serviceName }),
+    mutationFn: (v: Record<string, string | undefined>) => updateService(config, editTarget!.serviceId, {
+      lang: v.currentLang as string,
+      newLang: v.newLang as string | undefined,
+      serviceName: v.serviceName as string,
+    }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['sop-services'] }); setEditTarget(null); },
   });
 
@@ -444,9 +457,12 @@ const ServiceList: React.FC<ServiceListProps> = ({ onSelect }) => {
         open={!!editTarget}
         title="서비스 수정"
         fields={serviceFields}
-        initialValues={editTarget ? { serviceName: editTarget.serviceName, lang: DEFAULT_LANG } : {}}
+        initialValues={editTarget ? { serviceName: editTarget.serviceName, lang: extractLangFromSk(editTarget.sk) } : {}}
         onClose={() => setEditTarget(null)}
-        onSubmit={v => updateMut.mutate(v)}
+        onSubmit={v => {
+          const currentLang = extractLangFromSk(editTarget?.sk);
+          updateMut.mutate({ ...v, currentLang, newLang: v.lang !== currentLang ? v.lang : undefined });
+        }}
         loading={updateMut.isPending}
       />
       <ConfirmDialog
@@ -483,7 +499,7 @@ const ChecklistList: React.FC<ChecklistListProps> = ({ service, onSelect }) => {
 
   const { data = [], isLoading, error, refetch } = useQuery({
     queryKey: ['sop-checklists', service.serviceId],
-    queryFn: () => getChecklists(config, service.serviceId),
+    queryFn: () => getChecklists(config, service.serviceId, service.sk ? extractLangFromSk(service.sk) : DEFAULT_LANG),
   });
 
   const categoryMap = React.useMemo(
@@ -496,14 +512,14 @@ const ChecklistList: React.FC<ChecklistListProps> = ({ service, onSelect }) => {
       checklistName: v.checklistName,
       serviceId: service.serviceId,
       categoryId: v.categoryId,
-      lang: v.lang,
+      lang: extractLangFromSk(service.sk),
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['sop-checklists', service.serviceId] }); setFormOpen(false); },
   });
 
   const updateMut = useMutation({
     mutationFn: (v: Record<string, string>) => updateChecklist(config, editTarget!.checklistId, {
-      lang: v.lang,
+      lang: extractLangFromSk(service.sk),
       checklistName: v.checklistName,
       categoryId: v.categoryId,
     }),
@@ -524,7 +540,7 @@ const ChecklistList: React.FC<ChecklistListProps> = ({ service, onSelect }) => {
       type: 'select',
       optionItems: categories.map(c => ({ value: c.categoryId, label: c.categoryName })),
     },
-    { key: 'lang', label: '언어', required: true, type: 'select', options: LANG_OPTIONS },
+    { key: 'lang', label: '언어', required: true, type: 'select', options: LANG_OPTIONS, readonly: true },
   ];
 
   return (
@@ -609,12 +625,13 @@ const ChecklistList: React.FC<ChecklistListProps> = ({ service, onSelect }) => {
         onClose={() => setFormOpen(false)}
         onSubmit={v => createMut.mutate(v)}
         loading={createMut.isPending}
+        initialValues={{ lang: extractLangFromSk(service.sk) }}
       />
       <FormDialog
         open={!!editTarget}
         title="체크리스트 수정"
         fields={checklistFields}
-        initialValues={editTarget ? { checklistName: editTarget.checklistName, categoryId: editTarget.categoryId, lang: DEFAULT_LANG } : {}}
+        initialValues={editTarget ? { checklistName: editTarget.checklistName, categoryId: editTarget.categoryId, lang: extractLangFromSk(editTarget.sk) } : {}}
         onClose={() => setEditTarget(null)}
         onSubmit={v => updateMut.mutate(v)}
         loading={updateMut.isPending}
@@ -653,7 +670,7 @@ const ActionItemList: React.FC<ActionItemListProps> = ({ checklist }) => {
   const createMut = useMutation({
     mutationFn: (v: Record<string, string>) => createActionItem(config, checklist.checklistId, {
       itemName: v.itemName,
-      lang: v.lang,
+      lang: extractLangFromSk(checklist.sk),
       evalOrder: Number(v.evalOrder),
       apiEndpoint: v.apiEndpoint || undefined,
     }),
@@ -662,7 +679,7 @@ const ActionItemList: React.FC<ActionItemListProps> = ({ checklist }) => {
 
   const updateMut = useMutation({
     mutationFn: (v: Record<string, string>) => updateActionItem(config, checklist.checklistId, editTarget!.actionId, {
-      lang: v.lang,
+      lang: extractLangFromSk(checklist.sk),
       evalOrder: Number(v.evalOrder),
       itemName: v.itemName,
       apiEndpoint: v.apiEndpoint || undefined,
@@ -683,7 +700,7 @@ const ActionItemList: React.FC<ActionItemListProps> = ({ checklist }) => {
 
   const actionItemFields: FieldConfig[] = [
     { key: 'itemName', label: '액션 아이템명', required: true },
-    { key: 'lang', label: '언어', required: true, type: 'select', options: LANG_OPTIONS },
+    { key: 'lang', label: '언어', required: true, type: 'select', options: LANG_OPTIONS, readonly: true },
     { key: 'evalOrder', label: '평가 순서 (숫자)', required: true },
     { key: 'apiEndpoint', label: 'API 엔드포인트' },
   ];
@@ -815,7 +832,7 @@ const RequiredEntityList: React.FC<RequiredEntityListProps> = ({ checklist }) =>
   const createMut = useMutation({
     mutationFn: (v: Record<string, string>) => createRequiredEntity(config, checklist.checklistId, {
       entityName: v.entityName,
-      lang: v.lang,
+      lang: extractLangFromSk(checklist.sk),
       inductionPrompt: v.inductionPrompt || undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['sop-required-entities', checklist.checklistId] }); setFormOpen(false); },
@@ -823,7 +840,7 @@ const RequiredEntityList: React.FC<RequiredEntityListProps> = ({ checklist }) =>
 
   const updateMut = useMutation({
     mutationFn: (v: Record<string, string>) => updateRequiredEntity(config, checklist.checklistId, editTarget!.reqId, {
-      lang: v.lang,
+      lang: extractLangFromSk(checklist.sk),
       entityName: v.entityName,
       inductionPrompt: v.inductionPrompt || undefined,
     }),
@@ -842,7 +859,7 @@ const RequiredEntityList: React.FC<RequiredEntityListProps> = ({ checklist }) =>
 
   const entityFields: FieldConfig[] = [
     { key: 'entityName', label: '엔티티명', required: true },
-    { key: 'lang', label: '언어', required: true, type: 'select', options: LANG_OPTIONS },
+    { key: 'lang', label: '언어', required: true, type: 'select', options: LANG_OPTIONS, readonly: true },
     { key: 'inductionPrompt', label: '유도 프롬프트', multiline: true },
   ];
 

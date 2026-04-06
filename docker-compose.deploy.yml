@@ -2,7 +2,7 @@
 
 services:
   frontend:
-    image: xxxhistxxx/ke-aicc-frontend:v1  # QA 권한이 적용된 이미지
+    image: xxxhistxxx/ke-aicc-frontend:v2  # QA 권한이 적용된 이미지
     platform: linux/amd64
     pull_policy: always
     ports:
@@ -12,7 +12,7 @@ services:
     restart: always
 
   backend:
-    image: xxxhistxxx/ke-aicc-backend:v1
+    image: xxxhistxxx/ke-aicc-backend:v2
     platform: linux/amd64
     pull_policy: always
     ports:

@@ -1515,6 +1515,7 @@ const LABEL_MAP: Record<string, string> = {
   customerConfirmation: '고객 확인',
   // 공통
   feedbackMessage: '피드백',
+  criteria: '평가 기준',
 };
 
 // 키 이름을 라벨로 변환 (매핑이 없으면 키 이름을 읽기 쉽게 변환)
@@ -1835,6 +1836,23 @@ const isInefficiencyDetection = (value: unknown): value is {
   return 'repetitionCount' in summary || 'misunderstandingCount' in summary;
 };
 
+// criteria 배열 형태 (새 포맷: criteria: [{ type, status, events }])
+interface CriteriaArrayItem {
+  type: string;
+  status: string;
+  events: Array<Record<string, unknown>>;
+}
+
+const isCriteriaArray = (value: unknown): value is CriteriaArrayItem[] => {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every(item =>
+    typeof item === 'object' && item !== null &&
+    'type' in item && typeof (item as Record<string, unknown>).type === 'string' &&
+    'status' in item && typeof (item as Record<string, unknown>).status === 'string' &&
+    'events' in item && Array.isArray((item as Record<string, unknown>).events)
+  );
+};
+
 // 소항목 criteria 구조 (새 포맷: { status, criteria1, criteria2, ... })
 interface CriteriaItem {
   type: string;
@@ -2084,6 +2102,85 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown; label?: strin
       <Alert severity="info" sx={{ mt: 2 }}>
         <Typography variant="body2">{value}</Typography>
       </Alert>
+    );
+  }
+
+  // criteria 배열 형태 (새 포맷: [{ type, status, events }])
+  if (isCriteriaArray(value)) {
+    return (
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>
+          {label}
+        </Typography>
+        <Stack spacing={1.5}>
+          {value.map((criteria, idx) => {
+            const events = criteria.events || [];
+            const hasFail = criteria.status === 'FAIL';
+            return (
+              <Paper key={idx} variant="outlined" sx={{
+                p: 1.5,
+                bgcolor: 'background.paper',
+                borderColor: hasFail ? 'error.light' : 'divider',
+                borderWidth: hasFail ? 2 : 1,
+              }}>
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: events.length > 0 ? 1 : 0 }}>
+                  <Typography variant="body2" fontWeight={500}>
+                    {criteria.type}
+                  </Typography>
+                  <StatusChip status={criteria.status} />
+                </Stack>
+                {events.length > 0 && (
+                  <Stack spacing={1}>
+                    {events.map((ev, evIdx) => {
+                      const customerTranscript = ev.customerTranscript as string | undefined;
+                      const agentTranscript = ev.agentTranscript as string | undefined;
+                      const timestamp = ev.timestamp as string | undefined;
+                      const reason = ev.reason as string | undefined;
+                      return (
+                        <Box key={evIdx} sx={{ pl: 1, borderLeft: '2px solid', borderColor: hasFail ? 'error.light' : 'primary.light' }}>
+                          {timestamp && (
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                              <Typography variant="caption" fontWeight={600} color="text.secondary">
+                                {timestamp}
+                              </Typography>
+                              <PlayAtButton time={timestamp} onPlayAt={onPlayAt} />
+                            </Stack>
+                          )}
+                          {customerTranscript && (
+                            <Typography variant="body2" sx={{ mb: 0.5 }}>
+                              <Typography component="span" variant="caption" color="secondary.main" fontWeight={600} sx={{ mr: 0.5 }}>
+                                고객:
+                              </Typography>
+                              <Typography component="span" variant="body2" sx={{ fontStyle: 'italic' }}>
+                                &ldquo;{customerTranscript}&rdquo;
+                              </Typography>
+                            </Typography>
+                          )}
+                          {agentTranscript && (
+                            <Typography variant="body2" sx={{ mb: 0.5 }}>
+                              <Typography component="span" variant="caption" color="primary.main" fontWeight={600} sx={{ mr: 0.5 }}>
+                                상담사:
+                              </Typography>
+                              <Typography component="span" variant="body2" sx={{ fontStyle: 'italic' }}>
+                                &ldquo;{agentTranscript}&rdquo;
+                              </Typography>
+                            </Typography>
+                          )}
+                          {reason && (
+                            <Typography variant="caption" color="text.secondary">
+                              {reason}
+                            </Typography>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                )}
+              </Paper>
+            );
+          })}
+        </Stack>
+      </Box>
     );
   }
 

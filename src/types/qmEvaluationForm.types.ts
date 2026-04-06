@@ -19,9 +19,6 @@ export interface EvaluationCategory {
     enabled: boolean;
     weight: number;
     instructions?: string[];
-    passCondition?: string;
-    warningCondition?: string;
-    failCondition?: string;
     feedbackMessageTemplate?: string;
     subItems?: EvaluationSubItem[];
 }
@@ -30,18 +27,9 @@ export interface EvaluationSubItem {
     subItemId: string;
     subItemName: string;
     displayOrder: number;
-    weight: number;
-    evaluationCriteria: EvaluationCriterion[];
-    resultJsonFormat?: string;
+    weight?: number;
     instruction?: string;
-}
-
-export interface EvaluationCriterion {
-    criteriaId: string;
-    description: string;
-    details?: string;
-    passCondition: string;
-    failCondition: string;
+    description?: string;
 }
 
 // DTOs for Create/Update
@@ -68,9 +56,6 @@ export interface CreateCategoryRequest {
     enabled?: boolean;
     weight?: number;
     instructions?: string[];
-    passCondition?: string;
-    warningCondition?: string;
-    failCondition?: string;
     feedbackMessageTemplate?: string;
 }
 
@@ -80,9 +65,6 @@ export interface UpdateCategoryRequest {
     enabled?: boolean;
     weight?: number;
     instructions?: string[];
-    passCondition?: string;
-    warningCondition?: string;
-    failCondition?: string;
     feedbackMessageTemplate?: string;
 }
 
@@ -90,19 +72,17 @@ export interface CreateSubItemRequest {
     subItemId?: string;
     subItemName: string;
     displayOrder: number;
-    weight: number;
-    evaluationCriteria: EvaluationCriterion[];
-    resultJsonFormat?: string;
+    weight?: number;
     instruction?: string;
+    description?: string;
 }
 
 export interface UpdateSubItemRequest {
     subItemName?: string;
     displayOrder?: number;
     weight?: number;
-    evaluationCriteria?: EvaluationCriterion[];
-    resultJsonFormat?: string;
     instruction?: string;
+    description?: string;
 }
 
 // Bulk Update Category Request
@@ -113,9 +93,6 @@ export interface BulkCategoryItem {
     enabled: boolean;
     weight: number;
     instructions?: string[];
-    passCondition?: string;
-    warningCondition?: string;
-    failCondition?: string;
     feedbackMessageTemplate?: string;
     subItems?: BulkSubItem[];
 }
@@ -124,10 +101,9 @@ export interface BulkSubItem {
     subItemId: string;
     subItemName: string;
     displayOrder: number;
-    weight: number;
-    evaluationCriteria: EvaluationCriterion[];
-    resultJsonFormat?: string;
+    weight?: number;
     instruction?: string;
+    description?: string;
 }
 
 export interface BulkUpdateCategoriesRequest {

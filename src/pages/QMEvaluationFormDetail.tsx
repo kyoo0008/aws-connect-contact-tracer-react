@@ -52,6 +52,10 @@ import {
     useSensor,
     useSensors,
     DragEndEvent,
+    DragStartEvent,
+    useDroppable,
+    useDraggable,
+    DragOverlay,
 } from '@dnd-kit/core';
 import {
     arrayMove,
@@ -79,7 +83,6 @@ import {
 import {
     EvaluationCategory,
     EvaluationSubItem,
-    EvaluationCriterion,
     UpdateQmEvaluationFormRequest,
     CreateCategoryRequest,
     CreateSubItemRequest,
@@ -115,18 +118,14 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                 enabled: cat.enabled,
                 weight: cat.weight,
                 instructions: cat.instructions || [],
-                passCondition: cat.passCondition || '',
-                warningCondition: cat.warningCondition || '',
-                failCondition: cat.failCondition || '',
                 feedbackMessageTemplate: cat.feedbackMessageTemplate || '',
                 subItems: (cat.subItems || []).map(si => ({
                     subItemId: si.subItemId,
                     subItemName: si.subItemName,
                     displayOrder: si.displayOrder,
                     weight: si.weight,
-                    evaluationCriteria: si.evaluationCriteria || [],
-                    resultJsonFormat: si.resultJsonFormat || '',
                     instruction: si.instruction || '',
+                    description: si.description || '',
                 })),
             }));
             const sampleData: BulkUpdateCategoriesRequest = {
@@ -150,15 +149,6 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                                 subItemName: '오프닝 인사',
                                 displayOrder: 1,
                                 weight: 1,
-                                evaluationCriteria: [
-                                    {
-                                        criteriaId: '1.1.1',
-                                        description: '표준 인사말 준수',
-                                        passCondition: 'PASS 조건',
-                                        failCondition: 'FAIL 조건',
-                                    },
-                                ],
-                                resultJsonFormat: '포맷',
                                 instruction: '지시사항',
                             },
                         ],
@@ -168,27 +158,6 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
             setJsonInput(JSON.stringify(sampleData, null, 2));
         }
         setJsonError(null);
-    };
-
-    const generateDefaultJsonFormat = (criteria: EvaluationCriterion[]) => {
-        const descriptions = criteria.length > 0
-            ? criteria.map((c: EvaluationCriterion) => c.description).filter(Boolean)
-            : ['평가 기준'];
-        const criteriaEntries = descriptions.reduce((acc: Record<string, object>, desc: string, i: number) => {
-            acc[`criteria${i + 1}`] = {
-                type: desc,
-                events: [
-                    {
-                        timestamp: `type 평가 기준 발화된 시점(mm:ss)`,
-                        customerTranscript: `type 평가 기준 고객 발화 내용(생략가능)`,
-                        agentTranscript: `type 평가 기준 상담사 발화 내용(생략가능)`,
-                        reason: `type 평가 기준 이유`,
-                    },
-                ],
-            };
-            return acc;
-        }, {});
-        return JSON.stringify({ status: 'PASS | FAIL', ...criteriaEntries }, null, 2);
     };
 
     const handleSubmit = () => {
@@ -203,14 +172,6 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                 if (!cat.categoryId || !cat.categoryName) {
                     setJsonError('Each category must have "categoryId" and "categoryName"');
                     return;
-                }
-                // Fill in default resultJsonFormat for subItems with empty value
-                if (Array.isArray(cat.subItems)) {
-                    for (const si of cat.subItems) {
-                        if (!si.resultJsonFormat?.trim()) {
-                            si.resultJsonFormat = generateDefaultJsonFormat(si.evaluationCriteria || []);
-                        }
-                    }
                 }
             }
             setJsonError(null);
@@ -292,6 +253,7 @@ const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
                     />
                 </Stack>
             </DialogContent>
+
             <DialogActions>
                 <Button onClick={onClose}>Cancel</Button>
                 <Button
@@ -314,6 +276,8 @@ interface SubItemDialogProps {
     initialData?: EvaluationSubItem;
     isLoading: boolean;
     defaultDisplayOrder?: number;
+    categoryId?: string;
+    existingSubItems?: EvaluationSubItem[];
 }
 
 const SubItemDialog: React.FC<SubItemDialogProps> = ({
@@ -323,117 +287,34 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
     initialData,
     isLoading,
     defaultDisplayOrder = 1,
+    categoryId,
+    existingSubItems,
 }) => {
-    const generateDefaultResultJsonFormat = (criteria: EvaluationCriterion[]) => {
-        const descriptions = criteria.length > 0
-            ? criteria.map(c => c.description).filter(Boolean)
-            : ['평가 기준'];
-        const criteriaEntries = descriptions.reduce((acc, desc, i) => {
-            acc[`criteria${i + 1}`] = {
-                type: desc,
-                events: [
-                    {
-                        timestamp: `type 평가 기준 발화된 시점(mm:ss)`,
-                        customerTranscript: `type 평가 기준 고객 발화 내용`,
-                        agentTranscript: `type 평가 기준 상담사 대응 발화 내용`,
-                        reason: `type 평가 기준 이유`,
-                    },
-                ],
-            };
-            return acc;
-        }, {} as Record<string, object>);
-        return JSON.stringify({
-            status: 'PASS | FAIL',
-            ...criteriaEntries,
-        }, null, 2);
+    const generateSubItemId = () => {
+        if (!categoryId || initialData) return initialData?.subItemId || '';
+        const existing = existingSubItems || [];
+        const prefix = `${categoryId}_`;
+        let maxSeq = 0;
+        existing.forEach(si => {
+            if (si.subItemId.startsWith(prefix)) {
+                const num = parseInt(si.subItemId.slice(prefix.length), 10);
+                if (!isNaN(num) && num > maxSeq) maxSeq = num;
+            }
+        });
+        return `${prefix}${String(maxSeq + 1).padStart(2, '0')}`;
     };
 
     const [formData, setFormData] = useState<CreateSubItemRequest>(() => {
-        const criteria = (initialData?.evaluationCriteria || []).map((crit, i) => ({
-            ...crit,
-            criteriaId: `${i + 1}`,
-        }));
         return {
-            subItemId: initialData?.subItemId || '',
+            subItemId: generateSubItemId(),
             subItemName: initialData?.subItemName || '',
             displayOrder: initialData?.displayOrder || defaultDisplayOrder,
             weight: initialData?.weight ?? 1,
-            resultJsonFormat: initialData?.resultJsonFormat || generateDefaultResultJsonFormat(criteria),
             instruction: initialData?.instruction || '',
-            evaluationCriteria: criteria,
+            description: initialData?.description || '',
         };
     });
     const [jsonError, setJsonError] = useState<string | null>(null);
-
-    const syncResultJsonFormatType = (criteria: EvaluationCriterion[], currentFormat: string) => {
-        try {
-            const parsed = JSON.parse(currentFormat);
-            const descriptions = criteria.length > 0
-                ? criteria.map(c => c.description).filter(Boolean)
-                : ['평가 기준'];
-            // Remove old criteria keys
-            Object.keys(parsed).forEach(key => {
-                if (/^criteria\d+$/.test(key)) delete parsed[key];
-            });
-            // Add new criteria keys
-            descriptions.forEach((desc, i) => {
-                const key = `criteria${i + 1}`;
-                parsed[key] = {
-                    type: desc,
-                    events: [
-                        {
-                            timestamp: `type 평가 기준 발화된 시점(mm:ss)`,
-                            customerTranscript: `type 평가 기준 고객 발화 내용`,
-                            agentTranscript: `type 평가 기준 상담사 대응 발화 내용`,
-                            reason: `type 평가 기준 이유`,
-                        },
-                    ],
-                };
-            });
-            return JSON.stringify(parsed, null, 2);
-        } catch {
-            // ignore parse errors, return unchanged
-        }
-        return currentFormat;
-    };
-
-    // Criteria state management
-    const handleAddCriteria = () => {
-        setFormData((prev) => {
-            const newCriteria = [
-                ...prev.evaluationCriteria,
-                { criteriaId: `${prev.evaluationCriteria.length + 1}`, description: '', passCondition: '', failCondition: '' },
-            ];
-            return {
-                ...prev,
-                evaluationCriteria: newCriteria,
-                resultJsonFormat: syncResultJsonFormatType(newCriteria, prev.resultJsonFormat || ''),
-            };
-        });
-    };
-
-    const handleCriteriaChange = (index: number, field: keyof EvaluationCriterion, value: string) => {
-        const newCriteria = [...formData.evaluationCriteria];
-        newCriteria[index] = { ...newCriteria[index], [field]: value };
-        setFormData((prev) => ({
-            ...prev,
-            evaluationCriteria: newCriteria,
-            resultJsonFormat: field === 'description'
-                ? syncResultJsonFormatType(newCriteria, prev.resultJsonFormat || '')
-                : prev.resultJsonFormat,
-        }));
-    };
-
-    const handleDeleteCriteria = (index: number) => {
-        const newCriteria = formData.evaluationCriteria
-            .filter((_, i) => i !== index)
-            .map((crit, i) => ({ ...crit, criteriaId: `${i + 1}` }));
-        setFormData((prev) => ({
-            ...prev,
-            evaluationCriteria: newCriteria,
-            resultJsonFormat: syncResultJsonFormatType(newCriteria, prev.resultJsonFormat || ''),
-        }));
-    };
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -444,11 +325,11 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                         label="소항목 ID (Key)"
                         fullWidth
                         required
-                        disabled={!!initialData}
+                        disabled
                         value={formData.subItemId}
                         onChange={(e) => setFormData({ ...formData, subItemId: e.target.value })}
                         error={!formData.subItemId?.trim()}
-                        helperText={!formData.subItemId?.trim() ? "소항목 ID는 필수 항목입니다." : (initialData ? "ID는 변경할 수 없습니다." : "고유 식별자 (예: greeting_check)")}
+                        helperText={!formData.subItemId?.trim() ? "소항목 ID는 필수 항목입니다." : (initialData ? "ID는 변경할 수 없습니다." : "카테고리 내 자동 할당")}
                     />
                     <TextField
                         label="소항목 명"
@@ -470,7 +351,7 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                         label="배점 (Weight)"
                         type="number"
                         fullWidth
-                        value={formData.weight ?? ''}
+                        value={formData.weight ?? 3}
                         onChange={(e) => setFormData({ ...formData, weight: e.target.value ? parseInt(e.target.value) : 1 })}
                         helperText="소항목 배점"
                     />
@@ -483,123 +364,176 @@ const SubItemDialog: React.FC<SubItemDialogProps> = ({
                         onChange={(e) => setFormData({ ...formData, instruction: e.target.value })}
                         helperText="AI를 위한 평가 가이드라인입니다."
                     />
-
-                    {/* 평가 기준 (Evaluation Criteria) */}
-                    <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2 }}>
-                        평가 기준 (evaluationCriteria)
-                    </Typography>
-
-                    {formData.evaluationCriteria.map((criterion, index) => (
-                        <Paper key={index} variant="outlined" sx={{ p: 2 }}>
-                            <Stack spacing={2}>
-                                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                    <Chip label={`#${criterion.criteriaId}`} size="small" color="primary" />
-                                    <IconButton color="error" size="small" onClick={() => handleDeleteCriteria(index)}>
-                                        <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                </Stack>
-                                <TextField
-                                    label="설명 (description)"
-                                    size="small"
-                                    fullWidth
-                                    multiline
-                                    value={criterion.description}
-                                    onChange={(e) => handleCriteriaChange(index, 'description', e.target.value)}
-                                />
-                                <TextField
-                                    label="상세 설명 (details)"
-                                    size="small"
-                                    fullWidth
-                                    multiline
-                                    rows={3}
-                                    value={criterion.details || ''}
-                                    onChange={(e) => handleCriteriaChange(index, 'details', e.target.value)}
-                                    helperText="평가 기준에 대한 상세 설명 및 예외 사항 등을 입력하세요."
-                                />
-                                <Chip label="PASS 조건" size="small" color="success" sx={{ mb: 0.5 }} />
-                                <TextField
-
-                                    size="small"
-                                    fullWidth
-                                    multiline
-                                    rows={2}
-                                    value={criterion.passCondition}
-                                    onChange={(e) => handleCriteriaChange(index, 'passCondition', e.target.value)}
-
-                                />
-                                <Chip label="FAIL 조건" size="small" color="error" sx={{ mb: 0.5 }} />
-                                <TextField
-
-                                    size="small"
-                                    fullWidth
-                                    multiline
-                                    rows={2}
-                                    value={criterion.failCondition}
-                                    onChange={(e) => handleCriteriaChange(index, 'failCondition', e.target.value)}
-
-                                />
-                            </Stack>
-                        </Paper>
-                    ))}
-
-                    <Button startIcon={<AddIcon />} onClick={handleAddCriteria} variant="outlined">
-                        평가 기준 추가
-                    </Button>
-
-                    {/* Result JSON Format */}
-                    {/* <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2 }}>
-                        Result JSON Format
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                        status는 PASS / FAIL 중 하나가 들어갑니다.
-                    </Typography>
-
                     <TextField
-                        label="Result JSON Format"
+                        label="설명 (Description)"
                         fullWidth
                         multiline
-                        rows={4}
-                        value={formData.resultJsonFormat}
-                        onChange={(e) => {
-                            setFormData({ ...formData, resultJsonFormat: e.target.value });
-                            setJsonError(null);
-                        }}
-                        error={!!jsonError}
-                        helperText={jsonError || "JSON 포맷을 직접 입력하세요."}
-                        sx={{
-                            '& .MuiInputBase-input': {
-                                fontFamily: 'monospace',
-                                fontSize: '0.85rem',
-                            },
-                        }}
-                    /> */}
+                        rows={3}
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        helperText="소항목에 대한 설명입니다."
+                    />
+
 
                 </Stack>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose}>취소</Button>
-                <Button
-                    variant="contained"
-                    onClick={() => {
-                        let finalData = { ...formData };
+                <DialogActions>
+                    <Button onClick={onClose}>취소</Button>
+                    <Button
+                        variant="contained"
+                        onClick={() => {
+                            let finalData = { ...formData };
 
-                        if (formData.resultJsonFormat?.trim()) {
-                            try {
-                                const parsed = JSON.parse(formData.resultJsonFormat);
-                                finalData.resultJsonFormat = JSON.stringify(parsed, null, 2);
-                            } catch (e) {
-                                setJsonError('유효하지 않은 JSON 형식입니다.');
-                                return;
-                            }
-                        }
-                        onSubmit(finalData);
-                    }}
-                    disabled={!formData.subItemName || !formData.subItemId || isLoading}
-                >
-                    {isLoading ? '저장 중...' : '저장'}
-                </Button>
-            </DialogActions>
+
+                            onSubmit(finalData);
+                        }}
+                        disabled={!formData.subItemName || !formData.subItemId || isLoading}
+                    >
+                        {isLoading ? '저장 중...' : '저장'}
+                    </Button>
+                </DialogActions>
+
+            </DialogContent>
         </Dialog>
+    );
+};
+
+// --- Helper ---
+const truncateText = (text: string, maxLen: number) =>
+    text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
+
+const WEIGHT_CONFIG = [
+    { weight: 5, label: '가중치 5 (가장 중요)', color: '#d32f2f' },
+    { weight: 4, label: '가중치 4 (고려 필요)', color: '#f9a825' },
+    { weight: 3, label: '가중치 3 (보통)', color: '#7cb342' },
+    { weight: 2, label: '가중치 2 (덜 중요)', color: '#2e7d32' },
+    { weight: 1, label: '가중치 1 (미미함)', color: '#1b5e20' },
+];
+
+// --- Droppable Weight Column ---
+const DroppableWeightColumn: React.FC<{
+    weight: number;
+    label: string;
+    color: string;
+    children: React.ReactNode;
+}> = ({ weight, label, color, children }) => {
+    const { setNodeRef, isOver } = useDroppable({
+        id: `weight-${weight}`,
+        data: { weight },
+    });
+
+    return (
+        <Box
+            ref={setNodeRef}
+            sx={{
+                flex: '1 1 0',
+                minWidth: 180,
+                borderTop: `3px solid ${color}`,
+                bgcolor: isOver ? 'action.hover' : 'grey.50',
+                borderRadius: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                transition: 'background-color 0.2s',
+            }}
+        >
+            <Typography variant="caption" fontWeight={600} sx={{ p: 1, pb: 0.5, color: 'text.secondary' }}>
+                {label}
+            </Typography>
+            <Box sx={{ p: 1, pt: 0.5, display: 'flex', flexDirection: 'column', gap: 1, minHeight: 80 }}>
+                {children}
+            </Box>
+        </Box>
+    );
+};
+
+// --- Draggable SubItem Card ---
+const DraggableSubItemCard: React.FC<{
+    subItem: EvaluationSubItem;
+    weightColor: string;
+    bgColor: string;
+    categoryName: string;
+    onEdit: (subItem: EvaluationSubItem) => void;
+    onDelete: (subItemId: string) => void;
+}> = ({ subItem, weightColor, bgColor, categoryName, onEdit, onDelete }) => {
+    const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+        id: subItem.subItemId,
+        data: { subItem },
+    });
+    const { setNodeRef: setDropRef, isOver } = useDroppable({
+        id: `card-${subItem.subItemId}`,
+        data: { subItem },
+    });
+    const setNodeRef = (node: HTMLElement | null) => {
+        setDragRef(node);
+        setDropRef(node);
+    };
+    const pointerStart = React.useRef<{ x: number; y: number } | null>(null);
+
+    return (
+        <Paper
+            ref={setNodeRef}
+            {...attributes}
+            {...listeners}
+            onPointerDown={(e) => {
+                pointerStart.current = { x: e.clientX, y: e.clientY };
+                listeners?.onPointerDown?.(e as any);
+            }}
+            onPointerUp={(e) => {
+                if (pointerStart.current) {
+                    const dx = Math.abs(e.clientX - pointerStart.current.x);
+                    const dy = Math.abs(e.clientY - pointerStart.current.y);
+                    if (dx < 5 && dy < 5) {
+                        onEdit(subItem);
+                    }
+                }
+                pointerStart.current = null;
+            }}
+            variant="outlined"
+            sx={{
+                p: 1.5,
+                bgcolor: bgColor,
+                cursor: 'grab',
+                '&:hover': { boxShadow: 1 },
+                position: 'relative',
+                opacity: isDragging ? 0.3 : 1,
+                borderTop: isOver && !isDragging ? '2px solid #1976d2' : undefined,
+            }}
+        >
+            <IconButton
+                size="small"
+                sx={{ position: 'absolute', top: 2, right: 22, opacity: 0.6, '&:hover': { opacity: 1 } }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onEdit(subItem); }}
+            >
+                <EditIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+            <IconButton
+                size="small"
+                sx={{ position: 'absolute', top: 2, right: 2, opacity: 0.6, '&:hover': { opacity: 1 } }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm('Delete this subitem?')) onDelete(subItem.subItemId);
+                }}
+            >
+                <DeleteIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+            <Typography variant="body2" fontWeight={600} sx={{ color: weightColor, pr: 5 }}>
+                {subItem.subItemName}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+                [{categoryName}]
+            </Typography>
+            {subItem.instruction && (
+                <Typography variant="caption" fontWeight={700} display="block" sx={{ mt: 0.5 }}>
+                    {truncateText(subItem.instruction, 10)}
+                </Typography>
+            )}
+            {subItem.description && (
+                <Typography variant="caption" display="block" color="text.secondary">
+                    {truncateText(subItem.description, 10)}
+                </Typography>
+            )}
+        </Paper>
     );
 };
 
@@ -614,7 +548,6 @@ interface CategoryItemProps {
     onDelete: (categoryId: string) => void;
     config: any;
     allExpanded?: boolean;
-    allSubExpanded?: boolean;
 }
 
 const SortableCategoryItem: React.FC<CategoryItemProps> = ({
@@ -625,7 +558,6 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
     onDelete,
     config,
     allExpanded,
-    allSubExpanded
 }) => {
     const {
         attributes,
@@ -640,10 +572,13 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
         transition,
     };
     const [expanded, setExpanded] = useState(false);
-    const [subItemsExpanded, setSubItemsExpanded] = useState(false);
-    const [expandedSubItemIds, setExpandedSubItemIds] = useState<Record<string, boolean>>({});
     const [openSubItemDialog, setOpenSubItemDialog] = useState(false); // Create SubItem
     const [editingSubItem, setEditingSubItem] = useState<EvaluationSubItem | null>(null); // Edit SubItem
+    const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+    const subItemSensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    );
 
     useEffect(() => {
         if (allExpanded !== undefined) setExpanded(allExpanded);
@@ -654,36 +589,22 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
     // Use subItems from the form response (passed via props)
     const subItems = categorySubItems;
 
-    useEffect(() => {
-        if (allSubExpanded !== undefined) {
-            setSubItemsExpanded(allSubExpanded);
-            if (subItems) {
-                const newStates: Record<string, boolean> = {};
-                subItems.forEach(item => {
-                    newStates[item.subItemId] = allSubExpanded;
-                });
-                setExpandedSubItemIds(newStates);
-            }
-        }
-    }, [allSubExpanded, subItems]);
-
-    const handleToggleAllSubItems = () => {
-        const nextState = !subItemsExpanded;
-        setSubItemsExpanded(nextState);
-        if (subItems) {
-            const newStates: Record<string, boolean> = {};
-            subItems.forEach(item => {
-                newStates[item.subItemId] = nextState;
-            });
-            setExpandedSubItemIds(newStates);
-        }
-    };
-
-    const toggleSubItem = (subItemId: string) => {
-        setExpandedSubItemIds(prev => ({
-            ...prev,
-            [subItemId]: !prev[subItemId]
-        }));
+    // Helper: reorder displayOrder (1-based) for items in a weight group
+    const reorderWeightGroup = async (weight: number, items: EvaluationSubItem[]) => {
+        const group = items
+            .filter(si => (si.weight ?? 1) === weight)
+            .sort((a, b) => a.displayOrder - b.displayOrder);
+        await Promise.all(group.map((item, idx) =>
+            item.displayOrder !== idx + 1
+                ? updateSubItem(formId, category.categoryId, item.subItemId, {
+                    subItemName: item.subItemName,
+                    displayOrder: idx + 1,
+                    weight: item.weight,
+                    instruction: item.instruction,
+                    description: item.description,
+                }, config)
+                : Promise.resolve()
+        ));
     };
 
     // Create/Update SubItem Mutation
@@ -703,16 +624,131 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
 
     const deleteSubItemMutation = useMutation({
         mutationFn: async (subItemId: string) => {
+            const deletedItem = subItems?.find(si => si.subItemId === subItemId);
             await deleteSubItem(formId, category.categoryId, subItemId, config);
+            // Reorder remaining items in the same weight group
+            if (deletedItem) {
+                const remaining = (subItems || []).filter(si => si.subItemId !== subItemId);
+                await reorderWeightGroup(deletedItem.weight ?? 1, remaining);
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['qm-evaluation-form', formId] });
         },
     });
 
-    const handleSaveSubItem = (data: CreateSubItemRequest) => {
-        subItemMutation.mutate({ data, subItemId: editingSubItem?.subItemId });
+    const handleSaveSubItem = async (data: CreateSubItemRequest) => {
+        const allItems = subItems || [];
+        const newWeight = data.weight ?? 1;
+
+        if (!editingSubItem) {
+            // Add: auto-set displayOrder to end of target weight group
+            const count = allItems.filter(si => (si.weight ?? 1) === newWeight).length;
+            data = { ...data, displayOrder: count + 1 };
+            subItemMutation.mutate({ data });
+        } else {
+            const oldWeight = editingSubItem.weight ?? 1;
+            if (oldWeight !== newWeight) {
+                // Weight changed: place at end of new group
+                const newGroupCount = allItems.filter(si => (si.weight ?? 1) === newWeight).length;
+                data = { ...data, displayOrder: newGroupCount + 1 };
+            }
+            subItemMutation.mutate({ data, subItemId: editingSubItem.subItemId });
+
+            if (oldWeight !== newWeight) {
+                // Reorder old weight group (excluding moved item)
+                const remaining = allItems.filter(si => si.subItemId !== editingSubItem.subItemId);
+                await reorderWeightGroup(oldWeight, remaining);
+            }
+        }
     };
+
+    const handleSubItemDragEnd = async (event: DragEndEvent) => {
+        setActiveDragId(null);
+        const { active, over } = event;
+        if (!over) return;
+
+        const draggedSubItem = (active.data.current as any)?.subItem as EvaluationSubItem | undefined;
+        if (!draggedSubItem) return;
+
+        const overId = over.id as string;
+        const allItems = subItems || [];
+        const sourceWeight = draggedSubItem.weight ?? 1;
+
+        try {
+            if (overId.startsWith('card-')) {
+                // Dropped on another card
+                const targetSubItem = (over.data.current as any)?.subItem as EvaluationSubItem;
+                if (!targetSubItem || targetSubItem.subItemId === draggedSubItem.subItemId) return;
+
+                const targetWeight = targetSubItem.weight ?? 1;
+
+                if (sourceWeight === targetWeight) {
+                    // Same weight: reorder within group
+                    const group = allItems
+                        .filter(si => (si.weight ?? 1) === targetWeight)
+                        .sort((a, b) => a.displayOrder - b.displayOrder);
+                    const oldIndex = group.findIndex(si => si.subItemId === draggedSubItem.subItemId);
+                    const newIndex = group.findIndex(si => si.subItemId === targetSubItem.subItemId);
+                    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+                    const reordered = arrayMove(group, oldIndex, newIndex);
+                    await Promise.all(reordered.map((item, idx) =>
+                        item.displayOrder !== idx + 1
+                            ? updateSubItem(formId, category.categoryId, item.subItemId, {
+                                subItemName: item.subItemName,
+                                displayOrder: idx + 1,
+                                weight: item.weight,
+                                instruction: item.instruction,
+                                description: item.description,
+                            }, config)
+                            : Promise.resolve()
+                    ));
+                } else {
+                    // Different weight: move to target weight, insert at target position
+                    const targetGroup = allItems
+                        .filter(si => (si.weight ?? 1) === targetWeight)
+                        .sort((a, b) => a.displayOrder - b.displayOrder);
+                    const targetIndex = targetGroup.findIndex(si => si.subItemId === targetSubItem.subItemId);
+                    targetGroup.splice(targetIndex, 0, { ...draggedSubItem, weight: targetWeight });
+
+                    // Update dragged item + reorder target group
+                    await Promise.all(targetGroup.map((item, idx) =>
+                        updateSubItem(formId, category.categoryId, item.subItemId, {
+                            subItemName: item.subItemName,
+                            displayOrder: idx + 1,
+                            weight: targetWeight,
+                            instruction: item.instruction,
+                            description: item.description,
+                        }, config)
+                    ));
+                    // Reorder source group
+                    const remaining = allItems.filter(si => si.subItemId !== draggedSubItem.subItemId);
+                    await reorderWeightGroup(sourceWeight, remaining);
+                }
+            } else {
+                // Dropped on a weight column → move to end
+                const newWeight = (over.data.current as any)?.weight as number | undefined;
+                if (newWeight === undefined || newWeight === sourceWeight) return;
+
+                const newGroupCount = allItems.filter(si => (si.weight ?? 1) === newWeight).length;
+                await updateSubItem(formId, category.categoryId, draggedSubItem.subItemId, {
+                    subItemName: draggedSubItem.subItemName,
+                    weight: newWeight,
+                    displayOrder: newGroupCount + 1,
+                    instruction: draggedSubItem.instruction,
+                    description: draggedSubItem.description,
+                }, config);
+
+                const remaining = allItems.filter(si => si.subItemId !== draggedSubItem.subItemId);
+                await reorderWeightGroup(sourceWeight, remaining);
+            }
+        } finally {
+            queryClient.invalidateQueries({ queryKey: ['qm-evaluation-form', formId] });
+        }
+    };
+
+    const activeDragItem = subItems?.find(si => si.subItemId === activeDragId);
 
     return (
         <Card variant="outlined" sx={{ mb: 2, ...style }} ref={setNodeRef}>
@@ -744,30 +780,10 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
             />
             <Collapse in={expanded} timeout="auto" unmountOnExit>
                 <CardContent>
-                    {/* 판정 기준 */}
+                    {/* Instructions */}
                     <Box mb={2}>
-                        <Typography variant="subtitle2" gutterBottom>판정 기준</Typography>
+                        <Typography variant="subtitle2" gutterBottom>Instructions</Typography>
                         <Stack spacing={1}>
-                            {category.passCondition && (
-                                <Box>
-                                    <Chip label="PASS 조건" size="small" color="success" sx={{ mb: 0.5 }} />
-                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{category.passCondition}</Typography>
-                                </Box>
-                            )}
-                            {category.warningCondition && (
-                                <Box>
-                                    <Chip label="WARNING 조건" size="small" color="warning" sx={{ mb: 0.5 }} />
-                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{category.warningCondition}</Typography>
-                                </Box>
-                            )}
-                            {category.failCondition && (
-                                <Box>
-                                    <Chip label="FAIL 조건" size="small" color="error" sx={{ mb: 0.5 }} />
-                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{category.failCondition}</Typography>
-                                </Box>
-                            )}
-
-
                             {(category.instructions && category.instructions.length > 0) ? (
                                 <List dense sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
                                     {category.instructions.map((inst, idx) => (
@@ -777,10 +793,8 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                                     ))}
                                 </List>
                             ) : (
-                                <Typography variant="body2" color="text.secondary">판정 기준이 설정되지 않았습니다.</Typography>
+                                <Typography variant="body2" color="text.secondary">Instructions이 설정되지 않았습니다.</Typography>
                             )}
-
-
                         </Stack>
                     </Box>
 
@@ -806,126 +820,50 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                     </Box>
 
                     <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                        <Stack direction="row" spacing={2} alignItems="center">
-                            <Typography variant="subtitle1" fontWeight={600}>SubItems</Typography>
-                            <Button size="small" onClick={handleToggleAllSubItems}>
-                                {subItemsExpanded ? 'Collapse All Details' : 'Expand All Details'}
-                            </Button>
-                        </Stack>
+                        <Typography variant="subtitle1" fontWeight={600}>SubItems</Typography>
                         <Button startIcon={<AddIcon />} size="small" onClick={() => { setEditingSubItem(null); setOpenSubItemDialog(true); }}>
                             Add SubItem
                         </Button>
                     </Stack>
 
-                    <List dense>
-                        {subItems?.sort((a, b) => a.displayOrder - b.displayOrder).map((subItem) => (
-                            <React.Fragment key={subItem.subItemId}>
-                                <ListItem
-                                    secondaryAction={
-                                        <>
-                                            <IconButton edge="end" aria-label="edit" onClick={() => { setEditingSubItem(subItem); setOpenSubItemDialog(true); }}>
-                                                <EditIcon />
-                                            </IconButton>
-                                            <IconButton edge="end" aria-label="delete" onClick={() => {
-                                                if (window.confirm('Delete this subitem?')) deleteSubItemMutation.mutate(subItem.subItemId);
-                                            }}>
-                                                <DeleteIcon />
-                                            </IconButton>
-                                        </>
-                                    }
-                                >
-                                    <IconButton size="small" onClick={() => toggleSubItem(subItem.subItemId)} sx={{ mr: 1 }}>
-                                        {expandedSubItemIds[subItem.subItemId] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                                    </IconButton>
-                                    <ListItemText
-                                        primary={
-                                            <Stack direction="row" alignItems="center" spacing={1}>
-                                                <Typography variant="subtitle2" fontWeight="bold">
-                                                    {subItem.displayOrder}. {subItem.subItemId} ( {subItem.subItemName} )
-                                                </Typography>
-                                                {subItem.weight !== undefined && (
-                                                    <Chip label={`Weight: ${subItem.weight}`} size="small" variant="outlined" />
-                                                )}
-                                            </Stack>
-                                        }
-                                    />
-                                </ListItem>
-
-                                <Collapse in={expandedSubItemIds[subItem.subItemId] || false}>
-                                    {/* Instruction Display */}
-                                    {subItem.instruction && (
-                                        <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
-                                            <Typography variant="caption" fontWeight={600} display="block">Instructions (가이드):</Typography>
-                                            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', display: 'block' }}>
-                                                {subItem.instruction}
-                                            </Typography>
-                                        </Box>
-                                    )}
-
-                                    {/* 평가 기준 (evaluationCriteria) */}
-                                    {subItem.evaluationCriteria && subItem.evaluationCriteria.length > 0 && (
-                                        <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
-                                            <Typography variant="caption" fontWeight={600} display="block" gutterBottom>평가 기준:</Typography>
-                                            <Stack spacing={1}>
-                                                {subItem.evaluationCriteria.map((crit) => (
-                                                    <Paper key={crit.criteriaId} variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
-                                                        <Stack spacing={0.5}>
-                                                            <Stack direction="row" spacing={1} alignItems="center">
-                                                                <Chip label={`#${crit.criteriaId}`} size="small" sx={{ height: 20, fontSize: '0.7rem' }} />
-                                                                <Typography variant="body2" fontWeight={500}>{crit.description}</Typography>
-                                                            </Stack>
-                                                            {crit.details && (
-                                                                <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', display: 'block', pl: 0.5 }}>
-                                                                    {crit.details}
-                                                                </Typography>
-                                                            )}
-                                                            {crit.passCondition && (
-                                                                <Box>
-                                                                    <Chip label="PASS" size="small" color="success" sx={{ height: 18, fontSize: '0.7rem', mb: 0.5 }} />
-                                                                    <Typography variant="caption" sx={{ whiteSpace: 'pre-wrap', display: 'block' }}>{crit.passCondition}</Typography>
-                                                                </Box>
-                                                            )}
-                                                            {crit.failCondition && (
-                                                                <Box>
-                                                                    <Chip label="FAIL" size="small" color="error" sx={{ height: 18, fontSize: '0.7rem', mb: 0.5 }} />
-                                                                    <Typography variant="caption" sx={{ whiteSpace: 'pre-wrap', display: 'block' }}>{crit.failCondition}</Typography>
-                                                                </Box>
-                                                            )}
-                                                        </Stack>
-                                                    </Paper>
-                                                ))}
-                                            </Stack>
-                                        </Box>
-                                    )}
-
-                                    {/* Result JSON Format Display */}
-                                    {/* <Box sx={{ pl: 4, pr: 8, mb: 1 }}>
-                                        <Typography variant="caption" color="primary" fontWeight={600} display="block">
-                                            Result JSON Format:
-                                        </Typography>
-                                        {subItem.resultJsonFormat && (
-                                            <Paper
-                                                variant="outlined"
-                                                sx={{
-                                                    p: 1,
-                                                    bgcolor: 'grey.100',
-                                                    fontFamily: 'monospace',
-                                                    fontSize: '0.75rem',
-                                                    whiteSpace: 'pre-wrap',
-                                                    borderStyle: 'dashed'
-                                                }}
-                                            >
-                                                {subItem.resultJsonFormat}
-                                            </Paper>
-                                        )}
-                                    </Box> */}
-
-                                </Collapse>
-                                <Divider />
-                            </React.Fragment>
-                        ))}
-                        {subItems?.length === 0 && <Typography variant="body2" color="text.secondary">No subitems.</Typography>}
-                    </List>
+                    {/* Weight-based Kanban Columns with Drag & Drop */}
+                    <DndContext
+                        sensors={subItemSensors}
+                        collisionDetection={closestCenter}
+                        onDragStart={(event: DragStartEvent) => setActiveDragId(event.active.id as string)}
+                        onDragEnd={handleSubItemDragEnd}
+                    >
+                        <Box sx={{ display: 'flex', gap: 1.5, overflowX: 'auto', pb: 1 }}>
+                            {WEIGHT_CONFIG.map(({ weight, label, color }) => {
+                                const items = (subItems?.slice().sort((a, b) => a.displayOrder - b.displayOrder) || [])
+                                    .filter(si => (si.weight ?? 1) === weight);
+                                return (
+                                    <DroppableWeightColumn key={weight} weight={weight} label={label} color={color}>
+                                        {items.map((subItem) => (
+                                            <DraggableSubItemCard
+                                                key={subItem.subItemId}
+                                                subItem={subItem}
+                                                weightColor={color}
+                                                bgColor={weight >= 4 ? '#e3f2fd' : 'background.paper'}
+                                                categoryName={category.categoryName}
+                                                onEdit={(si) => { setEditingSubItem(si); setOpenSubItemDialog(true); }}
+                                                onDelete={(id) => deleteSubItemMutation.mutate(id)}
+                                            />
+                                        ))}
+                                    </DroppableWeightColumn>
+                                );
+                            })}
+                        </Box>
+                        <DragOverlay dropAnimation={null}>
+                            {activeDragItem ? (
+                                <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#e3f2fd', boxShadow: 3, width: 180 }}>
+                                    <Typography variant="body2" fontWeight={600}>{activeDragItem.subItemName}</Typography>
+                                    <Typography variant="caption" color="text.secondary">[{category.categoryName}]</Typography>
+                                </Paper>
+                            ) : null}
+                        </DragOverlay>
+                    </DndContext>
+                    {subItems?.length === 0 && <Typography variant="body2" color="text.secondary">No subitems.</Typography>}
                 </CardContent>
             </Collapse>
 
@@ -939,6 +877,8 @@ const SortableCategoryItem: React.FC<CategoryItemProps> = ({
                         initialData={editingSubItem || undefined}
                         isLoading={subItemMutation.isPending}
                         defaultDisplayOrder={(subItems?.length || 0) + 1}
+                        categoryId={category.categoryId}
+                        existingSubItems={subItems}
                     />
                 )
             }
@@ -972,9 +912,6 @@ const QMEvaluationFormDetail: React.FC = () => {
         enabled: true,
         weight: 0,
         instructions: [],
-        passCondition: '',
-        warningCondition: '',
-        failCondition: '',
         feedbackMessageTemplate: '',
     });
 
@@ -1094,9 +1031,6 @@ const QMEvaluationFormDetail: React.FC = () => {
                 enabled: category.enabled,
                 weight: category.weight,
                 instructions: category.instructions || [],
-                passCondition: category.passCondition || '',
-                warningCondition: category.warningCondition || '',
-                failCondition: category.failCondition || '',
                 feedbackMessageTemplate: category.feedbackMessageTemplate,
             });
         } else {
@@ -1108,9 +1042,6 @@ const QMEvaluationFormDetail: React.FC = () => {
                 enabled: true,
                 weight: 10,
                 instructions: [],
-                passCondition: '',
-                warningCondition: '',
-                failCondition: '',
                 feedbackMessageTemplate: '',
             });
         }
@@ -1119,7 +1050,6 @@ const QMEvaluationFormDetail: React.FC = () => {
 
     // Bulk Expansion States
     const [bulkExpandCategories, setBulkExpandCategories] = useState<boolean | undefined>(undefined);
-    const [bulkExpandSubItems, setBulkExpandSubItems] = useState<boolean | undefined>(undefined);
 
     // Prompt Preview
     const [openPromptPreview, setOpenPromptPreview] = useState(false);
@@ -1216,9 +1146,6 @@ const QMEvaluationFormDetail: React.FC = () => {
                                 <Button size="small" variant="outlined" onClick={() => setBulkExpandCategories(!bulkExpandCategories)}>
                                     {bulkExpandCategories ? 'Collapse All Categories' : 'Expand All Categories'}
                                 </Button>
-                                <Button size="small" variant="outlined" onClick={() => setBulkExpandSubItems(!bulkExpandSubItems)}>
-                                    {bulkExpandSubItems ? 'Collapse All SubItems' : 'Expand All SubItems'}
-                                </Button>
                             </Stack>
                         </Stack>
                         <Stack direction="row" spacing={1}>
@@ -1247,7 +1174,7 @@ const QMEvaluationFormDetail: React.FC = () => {
                                     onDelete={(id) => { if (window.confirm('Delete category?')) deleteCategoryMutation.mutate(id); }}
                                     config={config}
                                     allExpanded={bulkExpandCategories}
-                                    allSubExpanded={bulkExpandSubItems}
+
                                 />
                             ))}
                         </SortableContext>
@@ -1326,37 +1253,6 @@ const QMEvaluationFormDetail: React.FC = () => {
                         >
                             Add Instruction
                         </Button>
-
-                        {/* 판정 기준 (Judgment Criteria) */}
-                        <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 2 }}>판정 기준</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                            각 조건은 개별 키값(passCondition, warningCondition, failCondition)으로 저장됩니다.
-                        </Typography>
-                        <Chip label="PASS 조건" size="small" color="success" sx={{ mb: 0.5 }} />
-                        <TextField
-                            fullWidth
-                            multiline
-                            rows={2}
-                            value={categoryFormData.passCondition || ''}
-                            onChange={(e) => setCategoryFormData({ ...categoryFormData, passCondition: e.target.value })}
-                        />
-                        <Chip label="WARNING 조건" size="small" color="warning" sx={{ mb: 0.5 }} />
-                        <TextField
-                            fullWidth
-                            multiline
-                            rows={2}
-                            value={categoryFormData.warningCondition || ''}
-                            onChange={(e) => setCategoryFormData({ ...categoryFormData, warningCondition: e.target.value })}
-                        />
-
-                        <Chip label="FAIL 조건" size="small" color="error" sx={{ mb: 0.5 }} />
-                        <TextField
-                            fullWidth
-                            multiline
-                            rows={2}
-                            value={categoryFormData.failCondition || ''}
-                            onChange={(e) => setCategoryFormData({ ...categoryFormData, failCondition: e.target.value })}
-                        />
 
                         {/* Feedback Message Template */}
                         <TextField

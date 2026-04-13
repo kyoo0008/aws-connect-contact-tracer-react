@@ -2405,53 +2405,53 @@ const SubItemRenderer: React.FC<{ itemKey: string; value: unknown; label?: strin
                       const customerTranscript = ev.customerTranscript as string | undefined;
                       const agentTranscript = ev.agentTranscript as string | undefined;
                       return (
-                      <Box key={idx} sx={{ pl: 1, borderLeft: '2px solid', borderColor: 'primary.light' }}>
-                        {(ev.timestamp || ev.participant) && (
-                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                            {ev.timestamp && (
-                              <>
-                                <Typography variant="caption" fontWeight={600} color="text.secondary">
-                                  {ev.timestamp}
-                                </Typography>
-                                <PlayAtButton time={ev.timestamp} onPlayAt={onPlayAt} />
-                              </>
-                            )}
-                            {ev.participant && (
-                              <Chip size="small" label={ev.participant} variant="outlined" sx={{ height: 18, fontSize: '0.7rem' }} />
-                            )}
-                          </Stack>
-                        )}
-                        {ev.transcript && (
-                          <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 0.5 }}>
-                            "{ev.transcript}"
-                          </Typography>
-                        )}
-                        {customerTranscript && (
-                          <Typography variant="body2" sx={{ mb: 0.5 }}>
-                            <Typography component="span" variant="caption" color="secondary.main" fontWeight={600} sx={{ mr: 0.5 }}>
-                              고객:
+                        <Box key={idx} sx={{ pl: 1, borderLeft: '2px solid', borderColor: 'primary.light' }}>
+                          {(ev.timestamp || ev.participant) && (
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                              {ev.timestamp && (
+                                <>
+                                  <Typography variant="caption" fontWeight={600} color="text.secondary">
+                                    {ev.timestamp}
+                                  </Typography>
+                                  <PlayAtButton time={ev.timestamp} onPlayAt={onPlayAt} />
+                                </>
+                              )}
+                              {ev.participant && (
+                                <Chip size="small" label={ev.participant} variant="outlined" sx={{ height: 18, fontSize: '0.7rem' }} />
+                              )}
+                            </Stack>
+                          )}
+                          {ev.transcript && (
+                            <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 0.5 }}>
+                              "{ev.transcript}"
                             </Typography>
-                            <Typography component="span" variant="body2" sx={{ fontStyle: 'italic' }}>
-                              "{customerTranscript}"
+                          )}
+                          {customerTranscript && (
+                            <Typography variant="body2" sx={{ mb: 0.5 }}>
+                              <Typography component="span" variant="caption" color="secondary.main" fontWeight={600} sx={{ mr: 0.5 }}>
+                                고객:
+                              </Typography>
+                              <Typography component="span" variant="body2" sx={{ fontStyle: 'italic' }}>
+                                "{customerTranscript}"
+                              </Typography>
                             </Typography>
-                          </Typography>
-                        )}
-                        {agentTranscript && (
-                          <Typography variant="body2" sx={{ mb: 0.5 }}>
-                            <Typography component="span" variant="caption" color="primary.main" fontWeight={600} sx={{ mr: 0.5 }}>
-                              상담사:
+                          )}
+                          {agentTranscript && (
+                            <Typography variant="body2" sx={{ mb: 0.5 }}>
+                              <Typography component="span" variant="caption" color="primary.main" fontWeight={600} sx={{ mr: 0.5 }}>
+                                상담사:
+                              </Typography>
+                              <Typography component="span" variant="body2" sx={{ fontStyle: 'italic' }}>
+                                "{agentTranscript}"
+                              </Typography>
                             </Typography>
-                            <Typography component="span" variant="body2" sx={{ fontStyle: 'italic' }}>
-                              "{agentTranscript}"
+                          )}
+                          {ev.reason && (
+                            <Typography variant="caption" color="text.secondary">
+                              {ev.reason}
                             </Typography>
-                          </Typography>
-                        )}
-                        {ev.reason && (
-                          <Typography variant="caption" color="text.secondary">
-                            {ev.reason}
-                          </Typography>
-                        )}
-                      </Box>
+                          )}
+                        </Box>
                       );
                     })}
                   </Stack>
@@ -2836,7 +2836,7 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
   onPlayAt,
 }) => {
   const { config } = useConfig();
-  const { details, summary } = evaluationResult;
+  const { details, summary, comment } = evaluationResult;
 
   // 단건 모달 상태 관리
   const [modalOpen, setModalOpen] = useState(false);
@@ -3146,13 +3146,13 @@ const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
             </Typography>
           </Box>
         )}
-        {summary['scoreComment'] && (
+        {comment && (
           <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
             <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
               종합 의견
             </Typography>
             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-              {summary['scoreComment']}
+              {comment}
             </Typography>
           </Box>
         )}

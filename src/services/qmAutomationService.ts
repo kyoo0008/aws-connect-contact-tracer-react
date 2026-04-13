@@ -140,7 +140,11 @@ export async function requestQMAutomation(
   //   }
   // }
 
-  const response = await fetch(`${apiBaseUrl}/api/agent/v1/qm-automation`, {
+  const endpoint = requestBody.useMock
+    ? `${apiBaseUrl}/api/agent/v1/qm-automation/mock`
+    : `${apiBaseUrl}/api/agent/v1/qm-automation`;
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

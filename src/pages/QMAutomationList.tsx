@@ -149,6 +149,7 @@ const QMAutomationList: React.FC = () => {
     useTransferSanitizing: true,
     temperature: 0,
     maxOutputTokens: 15000,
+    useMock: false,
   });
   const [toolDefinitionsJson, setToolDefinitionsJson] = useState(DEFAULT_TOOL_DEFINITIONS_JSON);
 
@@ -1023,6 +1024,18 @@ const QMAutomationList: React.FC = () => {
                 />
               }
               label="Context Caching 사용"
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={requestOptions.useMock}
+                  onChange={(e) =>
+                    setRequestOptions({ ...requestOptions, useMock: e.target.checked })
+                  }
+                />
+              }
+              label="Mock 사용"
             />
           </Stack>
         </DialogContent>

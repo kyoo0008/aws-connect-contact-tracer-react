@@ -125,6 +125,7 @@ export interface QMAutomationRequestBody {
   useEvaluationFormPrompt?: boolean;
   evaluationFormId?: string;
   useTransferSanitizing?: boolean;
+  useMock?: boolean;
 }
 
 export interface QMAutomationResponse {
@@ -316,6 +317,7 @@ export interface EvaluationSectionData {
 export interface EvaluationResult {
   details: Record<string, EvaluationSectionData>; // 대항목 > 소항목 + states 동적 구조
   summary: Record<string, string>; // 요약 정보 (점수, 결과 등)
+  comment?: string;
 }
 
 // ============================================

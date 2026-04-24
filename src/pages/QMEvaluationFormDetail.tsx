@@ -898,6 +898,8 @@ const QMEvaluationFormDetail: React.FC = () => {
     const [formName, setFormName] = useState('');
     const [description, setDescription] = useState('');
     const [systemPrompt, setSystemPrompt] = useState('');
+    const [mockCsvPath, setMockCsvPath] = useState('');
+    const [sopKnowledgePath, setSopKnowledgePath] = useState('');
     const [version, setVersion] = useState('');
     const [status, setStatus] = useState<any>('DRAFT');
 
@@ -966,6 +968,8 @@ const QMEvaluationFormDetail: React.FC = () => {
             setFormName(form.formName);
             setDescription(form.description || '');
             setSystemPrompt(form.systemPrompt || '');
+            setMockCsvPath(form.mockCsvPath || '');
+            setSopKnowledgePath(form.sopKnowledgePath || '');
             setVersion(form.version);
             setStatus(form.status);
         }
@@ -1107,6 +1111,16 @@ const QMEvaluationFormDetail: React.FC = () => {
                                 helperText="AI 평가 모델에 전달될 시스템 프롬프트입니다."
                             />
                             <TextField
+                                label="Mock CSV Path" fullWidth
+                                value={mockCsvPath} onChange={(e) => setMockCsvPath(e.target.value)}
+                                helperText="Mock CSV 파일 경로"
+                            />
+                            <TextField
+                                label="SOP Knowledge Path" fullWidth
+                                value={sopKnowledgePath} onChange={(e) => setSopKnowledgePath(e.target.value)}
+                                helperText="SOP Knowledge 파일 경로"
+                            />
+                            <TextField
                                 label="Version" fullWidth required
                                 value={version} onChange={(e) => setVersion(e.target.value)}
                                 error={!version.trim()}
@@ -1122,7 +1136,7 @@ const QMEvaluationFormDetail: React.FC = () => {
                             </FormControl>
                             <Button
                                 variant="contained" startIcon={<SaveIcon />}
-                                onClick={() => updateFormMutation.mutate({ formName, description, systemPrompt, version, status })}
+                                onClick={() => updateFormMutation.mutate({ formName, description, systemPrompt, mockCsvPath, sopKnowledgePath, version, status })}
                                 disabled={!formName.trim() || !version.trim() || updateFormMutation.isPending}
                             >
                                 Save Changes

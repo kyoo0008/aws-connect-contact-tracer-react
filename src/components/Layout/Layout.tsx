@@ -38,6 +38,7 @@ import {
   SmartToy as GeminiIcon,
   Summarize as SummarizeIcon,
   LibraryBooks as SOPIcon,
+  Chat as ChatIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -93,11 +94,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Agent Summary', icon: <SummarizeIcon />, path: '/qm-agent-summary' },
     { text: 'QM Forms', icon: <FormIcon />, path: '/qm-evaluation-form' },
     { text: 'SOP Manager', icon: <SOPIcon />, path: '/sop-manager' },
+    { text: 'QM Chat', icon: <ChatIcon />, path: '/qm-chat' },
     { text: 'Gemini Playground', icon: <GeminiIcon />, path: '/gemini-playground' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
   ].filter(item => {
     if (role === 'QA_DEV') {
-      return ['QM Evaluation', 'QM Forms', 'SOP Manager', 'Agent Summary', 'Settings'].includes(item.text);
+      return ['QM Evaluation', 'QM Forms', 'SOP Manager', 'Agent Summary', 'QM Chat', 'Settings'].includes(item.text);
     }
     return true;
   });

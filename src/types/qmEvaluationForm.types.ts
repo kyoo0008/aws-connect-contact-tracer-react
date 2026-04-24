@@ -5,6 +5,8 @@ export interface QmEvaluationForm {
     formName: string;
     description?: string;
     systemPrompt?: string;
+    mockCsvPath?: string;
+    sopKnowledgePath?: string;
     version: string;
     status: 'ACTIVE' | 'INACTIVE' | 'DRAFT';
     createdAt: string;
@@ -37,6 +39,8 @@ export interface CreateQmEvaluationFormRequest {
     formName: string;
     description?: string;
     systemPrompt?: string;
+    mockCsvPath?: string;
+    sopKnowledgePath?: string;
     version: string;
     status: 'ACTIVE' | 'INACTIVE' | 'DRAFT';
 }
@@ -45,6 +49,8 @@ export interface UpdateQmEvaluationFormRequest {
     formName?: string;
     description?: string;
     systemPrompt?: string;
+    mockCsvPath?: string;
+    sopKnowledgePath?: string;
     version?: string;
     status?: 'ACTIVE' | 'INACTIVE' | 'DRAFT';
 }

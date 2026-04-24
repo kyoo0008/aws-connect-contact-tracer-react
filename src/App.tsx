@@ -21,6 +21,7 @@ import QMEvaluationFormDetail from './pages/QMEvaluationFormDetail';
 import QMFlowXRayViewer from './pages/QMFlowXRayViewer';
 import QMAgentSummary from './pages/QMAgentSummary';
 import GeminiPlayground from './pages/GeminiPlayground';
+import QMChat from './pages/QMChat';
 import Help from './pages/Help';
 import SOPManager from './pages/SOPManager';
 
@@ -213,6 +214,7 @@ function App() {
                       <Route path="/qm-evaluation-form" element={<QMEvaluationFormList />} />
                       <Route path="/qm-evaluation-form/:formId" element={<QMEvaluationFormDetail />} />
                       <Route path="/gemini-playground" element={<GeminiPlayground />} />
+                      <Route path="/qm-chat" element={<QMChat />} />
                       <Route path="/logs/:contactId?" element={<LogAnalysis />} />
                       <Route path="/qm-flow-xray" element={<QMFlowXRayViewer />} />
                       <Route path="/xray-trace" element={<XRayTraceViewer />} />

@@ -63,6 +63,8 @@ const QMEvaluationFormList: React.FC = () => {
         formName: '',
         description: '',
         systemPrompt: '',
+        mockCsvPath: '',
+        sopKnowledgePath: '',
         version: '1.0.0',
         status: 'DRAFT',
     });
@@ -107,6 +109,8 @@ const QMEvaluationFormList: React.FC = () => {
                 formName: '',
                 description: '',
                 systemPrompt: '',
+                mockCsvPath: '',
+                sopKnowledgePath: '',
                 version: '1.0.0',
                 status: 'DRAFT',
             });
@@ -376,6 +380,20 @@ const QMEvaluationFormList: React.FC = () => {
                             value={newForm.systemPrompt || ''}
                             onChange={(e) => setNewForm({ ...newForm, systemPrompt: e.target.value })}
                             helperText="AI 평가 모델에 전달될 기본 시스템 프롬프트입니다."
+                        />
+                        <TextField
+                            label="Mock CSV Path"
+                            fullWidth
+                            value={newForm.mockCsvPath || ''}
+                            onChange={(e) => setNewForm({ ...newForm, mockCsvPath: e.target.value })}
+                            helperText="Mock CSV 파일 경로"
+                        />
+                        <TextField
+                            label="SOP Knowledge Path"
+                            fullWidth
+                            value={newForm.sopKnowledgePath || ''}
+                            onChange={(e) => setNewForm({ ...newForm, sopKnowledgePath: e.target.value })}
+                            helperText="SOP Knowledge 파일 경로"
                         />
                         <TextField
                             label="버전"
